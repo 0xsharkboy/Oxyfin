@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: Rust (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: No em dash in tracked files
+        run: |
+          if git grep -n $'\xe2\x80\x94'; then
+            echo "The em dash character (U+2014) is not allowed." >&2
+            exit 1
+          fi
+      - name: No working documents in tracked files
+        run: |
+          if git ls-files | grep -E '^(docs/superpowers/|\.superpowers/)'; then
+            echo "Files under docs/superpowers/ and .superpowers/ must not be committed." >&2
+            exit 1
+          fi
+
+  commits:
+    name: Commit messages
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check every commit of the pull request
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          status=0
+          msg_file=$(mktemp)
+          for sha in $(git rev-list "origin/${BASE_REF}..HEAD"); do
+            git log -1 --format=%B "$sha" > "$msg_file"
+            if ! .githooks/commit-msg "$msg_file"; then
+              echo "Invalid message in commit $sha" >&2
+              status=1
+            fi
+          done
+          exit "$status"
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  nix:
+    name: Nix flake
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - run: nix flake check
