@@ -24,16 +24,19 @@ Space toggles pause, F toggles fullscreen.
 
 Verdict: **GO**, with the limitations below.
 
+Test files: `sample-1080p.mkv` (H.264 1080p59.94, 4.1 Mbit/s) and `sample-2160p.mkv` (VP9 2160p59.94, 21.6 Mbit/s).
+
 | | Wayland | X11 (XWayland) |
 |---|---|---|
 | Hardware decoding | `vaapi` (direct) | `vaapi-copy` |
-| 1080p60 H.264 | smooth | smooth |
-| 4K60 VP9, fullscreen | 0 to 1 dropped frame per 10 s | about 22 dropped frames per second |
+| 1080p, windowed and fullscreen | `vaapi`, 0 to 1 dropped frame per 2 s | 0 dropped frames at a fixed size |
+| 4K, fullscreen (1920x1080) | 0 to 1 dropped frame per 10 s | not measured |
+| 4K, windowed | about 1 dropped frame per second (844x992, 945x992) | about 22 dropped frames per second (1900x992) |
 | Overlaid controls, resize, fullscreen, pause | correct | correct |
 
 Limitations:
 
-- Wayland, windowed: about one dropped frame per second in 4K60, none in fullscreen.
+- 4K windowed drops frames on both backends (see the table); fullscreen on X11 was not measured.
 - Frames drop while the window is being resized; this stops once the size is stable.
 - X11: Slint's winit backend asks glutin for GLX first (`ApiPreference::FallbackEgl`), and mpv's direct VAAPI interop needs EGL. `oxyfin-player` needs a way to force EGL on X11.
 - A scale factor other than 1 was not tested.
@@ -42,3 +45,6 @@ Limitations:
 
 - The prototype leaks `Mpv` as `&'static Mpv` because `RenderContext` borrows it and the notifier callback must be `'static`. The real player needs a proper owning structure that drops the render context before the `Mpv` instance, with the GL context current.
 - The position slider must not be updated by the playback timer while it is dragged, nor right after a seek until mpv reaches the target, otherwise it snaps back.
+- Load the media independently of the render context. The prototype calls `loadfile` in `RenderingSetup`, which runs again if Slint tears down and re-creates rendering (for example on hide and show).
+- Report unreadable or non-video files. The prototype only checks that the file exists, so an unplayable file gives an empty window with no message.
+- Drive the slider "scrubbing" state from the slider's pressed state rather than from the changed and released callbacks, when the widget allows it.
