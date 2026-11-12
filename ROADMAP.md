@@ -5,7 +5,7 @@ This file is the single source of truth for planned work. An item is checked onl
 ## Milestone 0: Foundations
 
 - [x] Workspace and Nix dev shell
-- [ ] CI on Linux, Windows and macOS
+- [x] CI on Linux, Windows and macOS
 - [x] Video rendering prototype (Slint + mpv) validated (Wayland; HiDPI untested, X11 in copy mode: see spikes/video-underlay/README.md)
 
 ## Milestone 1: Core experience (movies and shows)
