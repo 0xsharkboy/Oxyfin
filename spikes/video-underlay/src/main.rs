@@ -71,6 +71,51 @@ fn run(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    let weak = window.as_weak();
+    window.on_toggle_pause(move || {
+        let Some(window) = weak.upgrade() else { return };
+        let paused = mpv.get_property::<bool>("pause").unwrap_or(false);
+        match mpv.set_property("pause", !paused) {
+            Ok(()) => window.set_paused(!paused),
+            Err(err) => eprintln!("error: pause: {err}"),
+        }
+    });
+    window.on_seek(move |value| {
+        let percent = (value * 100.0).to_string();
+        if let Err(err) = mpv.command("seek", &[&percent, "absolute-percent"]) {
+            eprintln!("error: seek: {err}");
+        }
+    });
+
+    let weak = window.as_weak();
+    let sync_timer = slint::Timer::default();
+    sync_timer.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_millis(250),
+        move || {
+            let Some(window) = weak.upgrade() else { return };
+            if let Ok(percent) = mpv.get_property::<f64>("percent-pos") {
+                window.set_position((percent / 100.0) as f32);
+            }
+            if let Ok(paused) = mpv.get_property::<bool>("pause") {
+                window.set_paused(paused);
+            }
+        },
+    );
+
+    let weak = window.as_weak();
+    let stats_timer = slint::Timer::default();
+    stats_timer.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_secs(2),
+        move || {
+            let Some(window) = weak.upgrade() else { return };
+            let line = stats_line(mpv, &window);
+            println!("{line}");
+            window.set_stats(line.into());
+        },
+    );
+
     let path = path
         .to_str()
         .ok_or("the video path is not valid UTF-8")?
@@ -114,6 +159,40 @@ fn run(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
 
     window.run()?;
     Ok(())
+}
+
+fn stats_line(mpv: &Mpv, window: &MainWindow) -> String {
+    fn show<T: std::fmt::Display>(value: Option<T>) -> String {
+        value.map_or_else(|| "-".to_owned(), |v| v.to_string())
+    }
+    let hwdec = mpv
+        .get_property::<String>("hwdec-current")
+        .ok()
+        .filter(|h| !h.is_empty());
+    let video = match (
+        mpv.get_property::<i64>("video-params/w").ok(),
+        mpv.get_property::<i64>("video-params/h").ok(),
+    ) {
+        (Some(w), Some(h)) => format!("{w}x{h}"),
+        _ => "-".to_owned(),
+    };
+    let drop = mpv.get_property::<i64>("frame-drop-count").ok();
+    let delayed = mpv.get_property::<i64>("vo-delayed-frame-count").ok();
+    let fps = mpv
+        .get_property::<f64>("estimated-vf-fps")
+        .ok()
+        .map(|f| format!("{f:.2}"));
+    let size = window.window().size();
+    let scale = window.window().scale_factor();
+    format!(
+        "hwdec={} video={video} drop={} delayed={} fps={} window={}x{} scale={scale:.2}",
+        show(hwdec),
+        show(drop),
+        show(delayed),
+        show(fps),
+        size.width,
+        size.height,
+    )
 }
 
 fn setup(
