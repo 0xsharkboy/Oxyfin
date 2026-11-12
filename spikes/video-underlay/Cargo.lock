@@ -3755,6 +3755,7 @@ dependencies = [
  "num-traits",
  "once_cell",
  "pin-weak",
+ "raw-window-handle",
  "slint-macros",
  "unicode-segmentation",
  "vtable",
@@ -4466,6 +4467,7 @@ version = "0.0.0"
 dependencies = [
  "glow",
  "libmpv2",
+ "raw-window-handle",
  "slint",
  "slint-build",
 ]

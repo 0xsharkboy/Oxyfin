@@ -7,6 +7,7 @@ use std::process::ExitCode;
 use glow::HasContext;
 use libmpv2::Mpv;
 use libmpv2::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
+use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 use slint::{GraphicsAPI, RenderingState};
 
 slint::include_modules!();
@@ -213,13 +214,18 @@ fn setup(
     let gl = unsafe { glow::Context::from_loader_function_cstr(|name| slint_gpa(name)) };
 
     let loader = GlLoader(&slint_gpa as *const SlintGetProcAddress<'_> as *const c_void);
-    let mut ctx = mpv.create_render_context([
+    let mut params = vec![
         RenderParam::ApiType(RenderParamApiType::OpenGl),
         RenderParam::InitParams(OpenGLInitParams {
             get_proc_address,
             ctx: loader,
         }),
-    ])?;
+    ];
+    match weak.upgrade().and_then(|window| native_display(&window)) {
+        Some(display) => params.push(display),
+        None => eprintln!("warning: no Wayland or Xlib display, direct hwdec is unavailable"),
+    }
+    let mut ctx = mpv.create_render_context(params)?;
 
     let weak = weak.clone();
     ctx.set_update_callback(move || {
@@ -228,6 +234,19 @@ fn setup(
 
     mpv.command("loadfile", &[path])?;
     Ok((gl, ctx))
+}
+
+fn native_display(window: &MainWindow) -> Option<RenderParam<GlLoader>> {
+    let handle = window.window().window_handle();
+    match handle.display_handle().ok()?.as_raw() {
+        RawDisplayHandle::Wayland(h) => Some(RenderParam::WaylandDisplay(
+            h.display.as_ptr() as *const c_void
+        )),
+        RawDisplayHandle::Xlib(h) => h
+            .display
+            .map(|d| RenderParam::X11Display(d.as_ptr() as *const c_void)),
+        _ => None,
+    }
 }
 
 fn draw(
