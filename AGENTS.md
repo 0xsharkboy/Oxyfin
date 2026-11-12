@@ -12,7 +12,7 @@ Oxyfin is a native Jellyfin desktop client written in Rust, with a Slint UI and 
 | `crates/oxyfin-player` | Safe libmpv wrapper and OpenGL video rendering. The only crate allowed to use `unsafe`. |
 | `crates/oxyfin-core` | Application logic: session, use cases, progress sync, caching. |
 | `crates/oxyfin` | Binary: Slint UI wired to `oxyfin-core`. |
-| `spikes/` | Throwaway prototypes, outside the workspace. Reference only. |
+| `spikes/` | Throwaway prototypes, outside the workspace. Reference only. Exempt from the `unsafe`, `println!` and test rules. |
 | `ROADMAP.md` | Planned work and progress. |
 
 The UI never talks to HTTP or mpv directly: it goes through `oxyfin-core`.

@@ -75,6 +75,7 @@ The hooks in `.githooks/` run the fast checks locally. CI runs the same checks, 
 - Libraries (`oxyfin-api`, `oxyfin-player`, `oxyfin-core`) return typed errors built with `thiserror`. Only the `oxyfin` binary uses `anyhow`.
 - Logging goes through `tracing`. No `println!` outside the binary's entry point.
 - `unsafe` is only allowed in `oxyfin-player`, around libmpv. Every `unsafe` block has a `// SAFETY:` comment explaining why it is sound.
+- Prototypes under `spikes/` are exempt from the `unsafe`, `println!` and test rules.
 - Every user-facing string goes through Slint translations (`@tr(...)`).
 - The UI follows the [reference design](https://www.figma.com/design/KjhDn8ypMS0CP6UQNP5Lbv). Colors, spacing and radii come from the `Theme` global, never from literal values.
 
