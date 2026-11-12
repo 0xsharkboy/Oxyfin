@@ -4,6 +4,7 @@ export component MainWindow inherits Window {
     in-out property <bool> paused: false;
     in-out property <float> position: 0;
     in-out property <string> stats: "";
+    out property <bool> scrubbing: false;
 
     callback toggle-pause();
     callback seek(float);
@@ -49,7 +50,11 @@ export component MainWindow inherits Window {
                         minimum: 0;
                         maximum: 1;
                         value <=> root.position;
-                        released(value) => { root.seek(value); }
+                        changed(value) => { root.scrubbing = true; }
+                        released(value) => {
+                            root.scrubbing = false;
+                            root.seek(value);
+                        }
                     }
 
                     Button {

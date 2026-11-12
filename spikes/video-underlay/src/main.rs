@@ -1,8 +1,11 @@
 //! Throwaway prototype: mpv renders video underneath a Slint scene.
 
+use std::cell::Cell;
 use std::ffi::{CStr, CString, c_void};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use glow::HasContext;
 use libmpv2::Mpv;
@@ -11,6 +14,9 @@ use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 use slint::{GraphicsAPI, RenderingState};
 
 slint::include_modules!();
+
+const SEEK_SETTLE: Duration = Duration::from_secs(1);
+const SEEK_TOLERANCE: f32 = 0.01;
 
 type SlintGetProcAddress<'a> = &'a dyn Fn(&CStr) -> *const c_void;
 
@@ -81,7 +87,10 @@ fn run(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             Err(err) => eprintln!("error: pause: {err}"),
         }
     });
+    let pending_seek: Rc<Cell<Option<(f32, Instant)>>> = Rc::new(Cell::new(None));
+    let seek_state = Rc::clone(&pending_seek);
     window.on_seek(move |value| {
+        seek_state.set(Some((value, Instant::now())));
         let percent = (value * 100.0).to_string();
         if let Err(err) = mpv.command("seek", &[&percent, "absolute-percent"]) {
             eprintln!("error: seek: {err}");
@@ -92,11 +101,29 @@ fn run(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     let sync_timer = slint::Timer::default();
     sync_timer.start(
         slint::TimerMode::Repeated,
-        std::time::Duration::from_millis(250),
+        Duration::from_millis(250),
         move || {
             let Some(window) = weak.upgrade() else { return };
-            if let Ok(percent) = mpv.get_property::<f64>("percent-pos") {
-                window.set_position((percent / 100.0) as f32);
+            if !window.get_scrubbing()
+                && let Ok(percent) = mpv.get_property::<f64>("percent-pos")
+            {
+                let position = (percent / 100.0) as f32;
+                let settled = match pending_seek.get() {
+                    None => true,
+                    Some((target, at)) => {
+                        // mpv may not have set `seeking` yet right after the command.
+                        let seeking = mpv.get_property::<bool>("seeking").unwrap_or(false);
+                        let done = at.elapsed() >= SEEK_SETTLE
+                            || (!seeking && (position - target).abs() <= SEEK_TOLERANCE);
+                        if done {
+                            pending_seek.set(None);
+                        }
+                        done
+                    }
+                };
+                if settled {
+                    window.set_position(position);
+                }
             }
             if let Ok(paused) = mpv.get_property::<bool>("pause") {
                 window.set_paused(paused);
@@ -108,7 +135,7 @@ fn run(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     let stats_timer = slint::Timer::default();
     stats_timer.start(
         slint::TimerMode::Repeated,
-        std::time::Duration::from_secs(2),
+        Duration::from_secs(2),
         move || {
             let Some(window) = weak.upgrade() else { return };
             let line = stats_line(mpv, &window);
