@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cargo fmt --all --check
+
+em_dash=$'\xe2\x80\x94'
+offenders=$(git diff --cached --name-only -z --diff-filter=ACM | xargs -0 -r grep -l "$em_dash" || true)
+if [ -n "$offenders" ]; then
+    echo "pre-commit: the em dash character (U+2014) is not allowed. Found in:" >&2
+    echo "$offenders" >&2
+    exit 1
+fi
+
+forbidden=$(git diff --cached --name-only | grep -E '^(docs/superpowers/|\.superpowers/)' || true)
+if [ -n "$forbidden" ]; then
+    echo "pre-commit: files under docs/superpowers/ and .superpowers/ must not be committed:" >&2
+    echo "$forbidden" >&2
+    exit 1
+fi

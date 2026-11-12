@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+msg_file=$1
+first_line=$(head -n 1 "$msg_file")
+
+fail() {
+    echo "commit-msg: $1" >&2
+    echo "Expected: <type>(<scope>): <summary>, at most 72 characters." >&2
+    echo "Types: feat fix refactor perf test docs build ci chore revert" >&2
+    echo "Scopes: api player core ui nix ci docs deps repo spike" >&2
+    echo "Example: feat(api): add quick connect" >&2
+    exit 1
+}
+
+if grep -q $'\xe2\x80\x94' "$msg_file"; then
+    fail "the em dash character (U+2014) is not allowed."
+fi
+
+case "$first_line" in
+    "fixup! "* | "squash! "* | "Merge "*) exit 0 ;;
+esac
+
+pattern='^(feat|fix|refactor|perf|test|docs|build|ci|chore|revert)\((api|player|core|ui|nix|ci|docs|deps|repo|spike)\)!?: [a-z].{0,70}[^.]$'
+if ! printf '%s\n' "$first_line" | grep -Eq "$pattern"; then
+    fail "the first line does not follow Conventional Commits with a scope."
+fi
+
+if [ "${#first_line}" -gt 72 ]; then
+    fail "the first line is longer than 72 characters."
+fi
