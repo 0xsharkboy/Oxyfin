@@ -6,7 +6,7 @@ This file is the single source of truth for planned work. An item is checked onl
 
 - [x] Workspace and Nix dev shell
 - [ ] CI on Linux, Windows and macOS
-- [ ] Video rendering prototype (Slint + mpv) validated
+- [x] Video rendering prototype (Slint + mpv) validated
 
 ## Milestone 1: Core experience (movies and shows)
 
