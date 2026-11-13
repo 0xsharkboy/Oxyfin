@@ -2,6 +2,7 @@
 
 use libmpv2::Mpv;
 
+use crate::error::describe;
 use crate::{PlayerError, Track, TrackId, TrackKind};
 
 /// Reads the tracks of the loaded media.
@@ -13,7 +14,7 @@ pub(crate) fn read(mpv: &Mpv) -> Result<Vec<Track>, PlayerError> {
         .get_property("track-list/count")
         .map_err(|e| PlayerError::Property {
             name: "track-list/count".to_owned(),
-            message: e.to_string(),
+            message: describe(&e),
         })?;
     Ok((0..count)
         .filter_map(|index| read_track(mpv, index))

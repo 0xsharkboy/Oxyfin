@@ -6,6 +6,7 @@ use std::time::Duration;
 use libmpv2::events::{Event, PropertyData};
 use libmpv2::{Format, Mpv, mpv_end_file_reason};
 
+use crate::error::describe;
 use crate::{PlayerEvent, UnloadReason, tracks};
 
 /// Name of the observed property that signals the end of the media.
@@ -156,9 +157,7 @@ pub(crate) fn run(mpv: &Mpv, shared: &Shared, on_event: &(impl Fn(PlayerEvent) +
             Err(error) => {
                 shared.loaded.store(false, Ordering::SeqCst);
                 shared.stopping.store(false, Ordering::SeqCst);
-                on_event(PlayerEvent::Unloaded(UnloadReason::Error(
-                    error.to_string(),
-                )));
+                on_event(PlayerEvent::Unloaded(UnloadReason::Error(describe(&error))));
             }
             Ok(_) => {}
         }

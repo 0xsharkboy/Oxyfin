@@ -9,6 +9,7 @@ use libmpv2::Mpv;
 use libmpv2::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
 use raw_window_handle::{DisplayHandle, RawDisplayHandle};
 
+use crate::error::describe;
 use crate::{Player, PlayerError, VideoOutput};
 
 type GetProcAddress<'a> = &'a dyn Fn(&CStr) -> *const c_void;
@@ -112,7 +113,7 @@ impl VideoRenderer {
         let core: &'static Mpv = unsafe { &*Arc::as_ptr(&mpv) };
         let ctx = core
             .create_render_context(params)
-            .map_err(|e| PlayerError::Render(e.to_string()))?;
+            .map_err(|e| PlayerError::Render(describe(&e)))?;
 
         let renderer = Self {
             ctx,
@@ -134,14 +135,14 @@ impl VideoRenderer {
         let height = i32::try_from(height).map_err(|e| PlayerError::Render(e.to_string()))?;
         self.ctx
             .update()
-            .map_err(|e| PlayerError::Render(e.to_string()))?;
+            .map_err(|e| PlayerError::Render(describe(&e)))?;
         // SAFETY: the OpenGL context `gl` was loaded from is current on this
         // thread (type contract), and reading an integer state has no other
         // requirement.
         let fbo = unsafe { self.gl.get_parameter_i32(glow::DRAW_FRAMEBUFFER_BINDING) };
         self.ctx
             .render::<()>(fbo, width, height, true)
-            .map_err(|e| PlayerError::Render(e.to_string()))
+            .map_err(|e| PlayerError::Render(describe(&e)))
     }
 
     /// Tells mpv that the frame was presented. Call it after the buffers are

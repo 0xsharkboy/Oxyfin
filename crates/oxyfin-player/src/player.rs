@@ -6,6 +6,7 @@ use std::thread::{self, JoinHandle};
 
 use libmpv2::Mpv;
 
+use crate::error::describe;
 use crate::events::{self, Shared};
 use crate::tracks;
 use crate::{MediaSource, PlayerError, PlayerEvent, SeekTarget, Track, TrackId, TrackKind};
@@ -62,8 +63,8 @@ impl Player {
             init.set_option("keep-open-pause", "no")?;
             Ok(())
         })
-        .map_err(|e| PlayerError::Create(e.to_string()))?;
-        events::observe(&mpv).map_err(|e| PlayerError::Create(e.to_string()))?;
+        .map_err(|e| PlayerError::Create(describe(&e)))?;
+        events::observe(&mpv).map_err(|e| PlayerError::Create(describe(&e)))?;
 
         let mpv = Arc::new(mpv);
         let shared = Arc::new(Shared::default());
@@ -96,7 +97,7 @@ impl Player {
             .set_property("start", start)
             .map_err(|e| PlayerError::Property {
                 name: "start".to_owned(),
-                message: e.to_string(),
+                message: describe(&e),
             })?;
         // A renderer may have pinned a video track id for the previous media.
         self.set_property("vid", "auto")?;
@@ -280,7 +281,7 @@ impl Player {
             .set_property(name, value)
             .map_err(|e| PlayerError::Property {
                 name: name.to_owned(),
-                message: e.to_string(),
+                message: describe(&e),
             })
     }
 
@@ -289,7 +290,7 @@ impl Player {
             .command(name, args)
             .map_err(|e| PlayerError::Command {
                 name: name.to_owned(),
-                message: e.to_string(),
+                message: describe(&e),
             })
     }
 }
