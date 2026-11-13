@@ -147,9 +147,14 @@ pub enum PlayerEvent {
     Muted(bool),
     /// A seek started.
     Seeking,
-    /// A seek finished.
+    /// A seek finished. mpv also reports it when playback first starts, so it
+    /// can arrive without a preceding [`PlayerEvent::Seeking`].
     Seeked,
     /// Playback reached the end of the media.
+    ///
+    /// The media stays loaded, and seeking backward resumes playback. A stream
+    /// that drops mid-file may also end this way, so compare the last position
+    /// with the duration before treating the media as fully watched.
     Ended,
     /// The media was unloaded.
     Unloaded(UnloadReason),
