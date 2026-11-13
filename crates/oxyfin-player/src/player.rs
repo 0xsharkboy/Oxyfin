@@ -250,6 +250,10 @@ impl Player {
     /// Selects the default (or first) video track when the loaded media has
     /// video but none is selected, then seeks exactly to the current position
     /// so that video does not wait for the decoder to catch up with audio.
+    ///
+    /// The seek is skipped at the end of the media and before the event thread
+    /// has seen the file load (video then recovers more slowly), and its
+    /// failure is ignored.
     pub(crate) fn restore_video(&self) -> Result<(), PlayerError> {
         // Setting `vid=auto` during playback does not select a track again.
         let tracks = tracks::read(&self.mpv)?;
@@ -266,12 +270,17 @@ impl Player {
             .or(video.first())
         {
             Some(track) => {
+                // Read before `vid` is set: selecting the track resets it.
+                let ended = self
+                    .mpv
+                    .get_property::<bool>(events::EOF_REACHED)
+                    .unwrap_or(false);
                 self.set_property("vid", track_value(Some(track.id)))?;
-                if !self.is_loaded() {
-                    return Ok(());
+                if self.is_loaded() && !ended {
+                    // Best effort: a failed refresh only means a slower recovery.
+                    let _ = self.command("seek", &["0", "relative+exact"]);
                 }
-                // Otherwise video stays black until decoding catches up with audio.
-                self.command("seek", &["0", "relative+exact"])
+                Ok(())
             }
             None => Ok(()),
         }
