@@ -1,0 +1,40 @@
+{
+  "Items": [
+    {
+      "Name": "Test Movie (2020)",
+      "ServerId": "15325ee9b8e047fcac0f390d0b2715ac",
+      "Id": "76282b1c408f374beeee50519e9157a4",
+      "HasSubtitles": true,
+      "Container": "mkv",
+      "ChannelId": null,
+      "RunTimeTicks": 100230000,
+      "ProductionYear": 2020,
+      "IsFolder": false,
+      "Type": "Movie",
+      "UserData": {
+        "PlayedPercentage": 29.931158335827597,
+        "PlaybackPositionTicks": 30000000,
+        "PlayCount": 1,
+        "IsFavorite": true,
+        "LastPlayedDate": "2026-11-13T00:32:08.6169263Z",
+        "Played": false,
+        "Key": "76282b1c-408f-374b-eeee-50519e9157a4",
+        "ItemId": "76282b1c408f374beeee50519e9157a4"
+      },
+      "VideoType": "VideoFile",
+      "ImageTags": {
+        "Primary": "658622afba25fe48336dd198f982bba3"
+      },
+      "BackdropImageTags": [],
+      "ImageBlurHashes": {
+        "Primary": {
+          "658622afba25fe48336dd198f982bba3": "duLETkx^w4yMs:V~OqXeayManhMBofawnjaPoLVsS|Vz"
+        }
+      },
+      "LocationType": "FileSystem",
+      "MediaType": "Video"
+    }
+  ],
+  "TotalRecordCount": 1,
+  "StartIndex": 0
+}

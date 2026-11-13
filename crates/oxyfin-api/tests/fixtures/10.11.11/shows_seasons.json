@@ -1,0 +1,56 @@
+{
+  "Items": [
+    {
+      "Name": "Season 1",
+      "ServerId": "15325ee9b8e047fcac0f390d0b2715ac",
+      "Id": "0407e3d02b7d70abe4a2d37241b02fea",
+      "ChannelId": null,
+      "IndexNumber": 1,
+      "IsFolder": true,
+      "Type": "Season",
+      "UserData": {
+        "UnplayedItemCount": 1,
+        "PlaybackPositionTicks": 0,
+        "PlayCount": 0,
+        "IsFavorite": false,
+        "Played": false,
+        "Key": "9ea196e7-ccc3-ae17-d2c3-f75c3ab34406001",
+        "ItemId": "0407e3d02b7d70abe4a2d37241b02fea"
+      },
+      "SeriesName": "Test Show",
+      "SeriesId": "9ea196e7ccc3ae17d2c3f75c3ab34406",
+      "ImageTags": {},
+      "BackdropImageTags": [],
+      "ImageBlurHashes": {},
+      "LocationType": "FileSystem",
+      "MediaType": "Unknown"
+    },
+    {
+      "Name": "Season 2",
+      "ServerId": "15325ee9b8e047fcac0f390d0b2715ac",
+      "Id": "289ab632fed38765d76343af0dc78f5b",
+      "ChannelId": null,
+      "IndexNumber": 2,
+      "IsFolder": true,
+      "Type": "Season",
+      "UserData": {
+        "UnplayedItemCount": 2,
+        "PlaybackPositionTicks": 0,
+        "PlayCount": 0,
+        "IsFavorite": false,
+        "Played": false,
+        "Key": "9ea196e7-ccc3-ae17-d2c3-f75c3ab34406002",
+        "ItemId": "289ab632fed38765d76343af0dc78f5b"
+      },
+      "SeriesName": "Test Show",
+      "SeriesId": "9ea196e7ccc3ae17d2c3f75c3ab34406",
+      "ImageTags": {},
+      "BackdropImageTags": [],
+      "ImageBlurHashes": {},
+      "LocationType": "FileSystem",
+      "MediaType": "Unknown"
+    }
+  ],
+  "TotalRecordCount": 2,
+  "StartIndex": 0
+}

@@ -1,0 +1,54 @@
+{
+  "Items": [
+    {
+      "Name": "Animation",
+      "ServerId": "15325ee9b8e047fcac0f390d0b2715ac",
+      "Id": "074229225b7254292f131f9f49f8dcd6",
+      "ChannelId": null,
+      "Type": "Genre",
+      "ImageTags": {},
+      "BackdropImageTags": [],
+      "ImageBlurHashes": {},
+      "LocationType": "FileSystem",
+      "MediaType": "Unknown"
+    },
+    {
+      "Name": "Comedy",
+      "ServerId": "15325ee9b8e047fcac0f390d0b2715ac",
+      "Id": "08d31605d366d63a7a924f944b4417f1",
+      "ChannelId": null,
+      "Type": "Genre",
+      "ImageTags": {
+        "Primary": "0d833e4f48b73d369229b2d32387b24e"
+      },
+      "BackdropImageTags": [],
+      "ImageBlurHashes": {
+        "Primary": {
+          "0d833e4f48b73d369229b2d32387b24e": "ehLEWrtRfQtT#BofaifQWGSzfQfQfQfQfQs:WGfQV~OqaeR3fQR1r="
+        }
+      },
+      "LocationType": "FileSystem",
+      "MediaType": "Unknown"
+    },
+    {
+      "Name": "Drama",
+      "ServerId": "15325ee9b8e047fcac0f390d0b2715ac",
+      "Id": "090eac6e9de4fe1fbc194e5b96691277",
+      "ChannelId": null,
+      "Type": "Genre",
+      "ImageTags": {
+        "Primary": "81f4d8ef11c79de7436911d131814690"
+      },
+      "BackdropImageTags": [],
+      "ImageBlurHashes": {
+        "Primary": {
+          "81f4d8ef11c79de7436911d131814690": "ehLEWrtRfQtT#BofaifQWGSzfQfQfQfQfQs:WGfQV~OqaeR3fQR1r="
+        }
+      },
+      "LocationType": "FileSystem",
+      "MediaType": "Unknown"
+    }
+  ],
+  "TotalRecordCount": 0,
+  "StartIndex": 0
+}
