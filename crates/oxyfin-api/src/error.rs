@@ -3,7 +3,6 @@
 use crate::ServerVersion;
 
 /// Largest response body, in bytes, kept in [`Error::Status`].
-#[allow(dead_code)]
 const MAX_BODY_BYTES: usize = 1024;
 
 /// Errors returned by the Jellyfin client.
@@ -58,7 +57,6 @@ impl Error {
     }
 
     /// Builds an [`Error::Status`], truncating `body` to 1024 bytes on a char boundary.
-    #[allow(dead_code)]
     pub(crate) fn status(route: &str, status: u16, body: &str) -> Self {
         let mut end = body.len().min(MAX_BODY_BYTES);
         while !body.is_char_boundary(end) {
