@@ -1,4 +1,22 @@
-//! Typed HTTP client for the Jellyfin API.
+//! Typed HTTP client for the Jellyfin API, with no UI code.
+//!
+//! A [`Server`] makes unauthenticated calls and signs in. A [`Session`] carries the
+//! access token and makes the calls that need one. Supported servers start at
+//! Jellyfin 10.10 ([`MINIMUM_SERVER_VERSION`]).
+//!
+//! ```no_run
+//! use oxyfin_api::{ClientInfo, Server};
+//!
+//! async fn example() -> oxyfin_api::Result<()> {
+//!     let info = ClientInfo::new("Oxyfin desktop", "persisted-device-id");
+//!     let server = Server::new("https://jellyfin.example.com", info)?;
+//!     server.check_version().await?;
+//!
+//!     let session = server.authenticate_by_name("alice", "secret").await?;
+//!     let resume = session.resume(12).await?;
+//!     Ok(())
+//! }
+//! ```
 
 mod client_info;
 mod error;
