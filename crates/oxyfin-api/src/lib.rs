@@ -4,6 +4,7 @@ mod client_info;
 mod error;
 mod http;
 mod ids;
+mod items;
 mod json;
 mod models;
 mod quick_connect;
@@ -15,7 +16,10 @@ mod version;
 pub use client_info::ClientInfo;
 pub use error::{Error, Result};
 pub use ids::{ItemId, MediaSourceId, PlaySessionId, UserId};
-pub use models::{PublicSystemInfo, UserDto};
+pub use models::{
+    BaseItemDto, BaseItemKind, BaseItemPerson, ImageType, ItemFields, ItemSortBy, ItemsQuery,
+    PublicSystemInfo, QueryResult, SortOrder, UserDto, UserItemDataDto,
+};
 pub use quick_connect::{QuickConnectSecret, QuickConnectState};
 pub use server::Server;
 pub use session::Session;
