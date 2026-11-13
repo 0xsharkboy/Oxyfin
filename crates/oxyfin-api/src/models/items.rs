@@ -66,12 +66,10 @@ pub struct BaseItemPerson {
 #[serde(rename_all = "PascalCase", default)]
 pub struct BaseItemDto {
     /// Identifier of the item.
-    #[serde(default = "missing_id")]
     pub id: ItemId,
     /// Display name.
     pub name: Option<String>,
     /// Kind of item.
-    #[serde(default = "missing_kind")]
     pub r#type: BaseItemKind,
     /// Synopsis.
     pub overview: Option<String>,
@@ -119,20 +117,12 @@ pub struct BaseItemDto {
     pub people: Vec<BaseItemPerson>,
 }
 
-fn missing_id() -> ItemId {
-    ItemId::from("")
-}
-
-fn missing_kind() -> BaseItemKind {
-    BaseItemKind::Other(String::new())
-}
-
 impl Default for BaseItemDto {
     fn default() -> Self {
         Self {
-            id: missing_id(),
+            id: ItemId::from(""),
             name: None,
-            r#type: missing_kind(),
+            r#type: BaseItemKind::Other(String::new()),
             overview: None,
             production_year: None,
             premiere_date: None,
