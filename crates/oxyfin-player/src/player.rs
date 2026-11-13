@@ -248,7 +248,8 @@ impl Player {
     }
 
     /// Selects the default (or first) video track when the loaded media has
-    /// video but none is selected.
+    /// video but none is selected, then seeks exactly to the current position
+    /// so that video does not wait for the decoder to catch up with audio.
     pub(crate) fn restore_video(&self) -> Result<(), PlayerError> {
         // Setting `vid=auto` during playback does not select a track again.
         let tracks = tracks::read(&self.mpv)?;
@@ -264,7 +265,14 @@ impl Player {
             .find(|track| track.is_default)
             .or(video.first())
         {
-            Some(track) => self.set_property("vid", track_value(Some(track.id))),
+            Some(track) => {
+                self.set_property("vid", track_value(Some(track.id)))?;
+                if !self.is_loaded() {
+                    return Ok(());
+                }
+                // Otherwise video stays black until decoding catches up with audio.
+                self.command("seek", &["0", "relative+exact"])
+            }
             None => Ok(()),
         }
     }
