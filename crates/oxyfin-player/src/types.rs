@@ -155,6 +155,9 @@ pub enum PlayerEvent {
     /// The media stays loaded, and seeking backward resumes playback. A stream
     /// that drops mid-file may also end this way, so compare the last position
     /// with the duration before treating the media as fully watched.
+    ///
+    /// May be reported again after a renderer is created once playback has
+    /// ended; de-duplicate per media.
     Ended,
     /// The media was unloaded.
     Unloaded(UnloadReason),

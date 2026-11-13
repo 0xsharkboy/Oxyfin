@@ -78,11 +78,13 @@ impl VideoRenderer {
     /// (or first) video track is selected again: mpv disables video when it
     /// has no render context, while loading or when the previous renderer was
     /// dropped during playback. The selection lasts for that media only. When
-    /// the media is loaded, the player then seeks exactly to its current
-    /// position: video comes back once the frame there is decoded, instead of
-    /// once the decoder has caught up with audio that kept playing. That seek
-    /// reports [`Seeking`](crate::PlayerEvent::Seeking) and
+    /// the media is loaded and has not ended, the player then seeks exactly to
+    /// its current position: video comes back once the frame there is decoded,
+    /// instead of once the decoder has caught up with audio that kept playing.
+    /// That seek reports [`Seeking`](crate::PlayerEvent::Seeking) and
     /// [`Seeked`](crate::PlayerEvent::Seeked), and audio waits for the frame.
+    /// It is best effort: when it fails (for example on a stream that cannot
+    /// seek), the renderer is still returned and video comes back later.
     ///
     /// Fails with [`PlayerError::Render`] when the player was created with
     /// [`VideoOutput::None`] or when mpv cannot create the render context, and
