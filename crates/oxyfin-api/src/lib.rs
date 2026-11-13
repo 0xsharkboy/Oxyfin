@@ -2,16 +2,21 @@
 
 mod client_info;
 mod error;
+mod http;
 mod ids;
-// Unused until the HTTP layer lands.
-#[allow(dead_code)]
 mod json;
+mod models;
+mod server;
+mod session;
 mod ticks;
 mod version;
 
 pub use client_info::ClientInfo;
 pub use error::{Error, Result};
 pub use ids::{ItemId, MediaSourceId, PlaySessionId, UserId};
+pub use models::{PublicSystemInfo, UserDto};
+pub use server::Server;
+pub use session::Session;
 pub use ticks::{TICKS_PER_SECOND, Ticks};
 pub use version::{MINIMUM_SERVER_VERSION, ServerVersion};
 

@@ -36,10 +36,6 @@ fn percent_encode(value: &str) -> String {
 }
 
 /// Builds the `Authorization` header value, with the token once the user is signed in.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "first used by the HTTP transport")
-)]
 pub(crate) fn authorization_header(info: &ClientInfo, token: Option<&str>) -> String {
     let mut header = format!(
         r#"MediaBrowser Client="{}", Device="{}", DeviceId="{}", Version="{}""#,
