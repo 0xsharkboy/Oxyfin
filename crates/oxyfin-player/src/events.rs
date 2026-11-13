@@ -171,8 +171,7 @@ fn file_loaded(mpv: &Mpv) -> PlayerEvent {
     let duration = mpv
         .get_property::<f64>("duration")
         .ok()
-        .filter(|secs| secs.is_finite() && *secs >= 0.0)
-        .map(Duration::from_secs_f64);
+        .and_then(to_duration);
     let tracks = tracks::read(mpv).unwrap_or_default();
     PlayerEvent::FileLoaded { duration, tracks }
 }
