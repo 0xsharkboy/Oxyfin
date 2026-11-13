@@ -153,10 +153,12 @@ mod app {
         player.load(&MediaSource::new(location))?;
         window.show()?;
         // Hiding the window must not end the loop, so it runs until an explicit quit.
-        slint::run_event_loop_until_quit()?;
+        let result = slint::run_event_loop_until_quit();
         // Tears rendering down while the GL context exists, before the player goes.
-        window.hide()?;
+        let hidden = window.hide();
         drop(stats_timer);
+        result?;
+        hidden?;
         Ok(())
     }
 
@@ -297,10 +299,9 @@ mod app {
         let GraphicsAPI::NativeOpenGL { get_proc_address } = graphics_api else {
             return Err("the Slint renderer does not use OpenGL".into());
         };
-        let display = weak.upgrade().and_then(|window| {
-            let handle = window.window().window_handle();
-            handle.display_handle().ok().map(|display| display.as_raw())
-        });
+        let window = weak.upgrade().ok_or("the window is gone")?;
+        let handle = window.window().window_handle();
+        let display = handle.display_handle().ok();
         if display.is_none() {
             eprintln!("warning: no native display, direct hardware decoding is unavailable");
         }
