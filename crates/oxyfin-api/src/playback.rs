@@ -118,7 +118,7 @@ impl Session {
         ];
         StreamSource {
             url: http.url(&format!("Videos/{id}/stream"), &query),
-            authorization: http.authorization(Some(self.token())),
+            authorization: self.authorization_header(),
         }
     }
 
