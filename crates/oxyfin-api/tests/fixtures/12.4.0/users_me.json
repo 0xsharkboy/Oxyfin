@@ -1,13 +1,13 @@
 {
   "Name": "oxyfin",
-  "ServerId": "16aae0f8ee22491aad6bfaa1c0d77cee",
-  "Id": "7082e2bffa774eb8ae6df4219945f48a",
+  "ServerId": "87fcca6823684ae692e5c60378bf931d",
+  "Id": "28dd79b9f3564a398568f3d0ca90f9de",
   "HasPassword": true,
   "HasConfiguredPassword": true,
   "HasConfiguredEasyPassword": false,
   "EnableAutoLogin": false,
-  "LastLoginDate": "2026-11-13T00:29:55.5291781Z",
-  "LastActivityDate": "2026-11-13T00:29:55.5291781Z",
+  "LastLoginDate": "2026-11-13T00:37:05.9238004Z",
+  "LastActivityDate": "2026-11-13T00:37:05.9238004Z",
   "Configuration": {
     "PlayDefaultAudioTrack": true,
     "SubtitleLanguagePreference": "",

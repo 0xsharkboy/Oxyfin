@@ -1,14 +1,14 @@
 {
   "User": {
     "Name": "oxyfin",
-    "ServerId": "408fabdc2d4e429e924956d219f4314b",
-    "Id": "fcf09c15b90440cb9a9f846618ed0813",
+    "ServerId": "5ec1506196554148af5557c8b1ef951b",
+    "Id": "09e5ee283b694c27836c2bf079a10b2a",
     "HasPassword": true,
     "HasConfiguredPassword": true,
     "HasConfiguredEasyPassword": false,
     "EnableAutoLogin": false,
-    "LastLoginDate": "2026-11-13T00:31:45.6371676Z",
-    "LastActivityDate": "2026-11-13T00:31:45.6371676Z",
+    "LastLoginDate": "2026-11-13T00:36:03.1487423Z",
+    "LastActivityDate": "2026-11-13T00:36:03.1487423Z",
     "Configuration": {
       "PlayDefaultAudioTrack": true,
       "SubtitleLanguagePreference": "",
@@ -89,10 +89,10 @@
     "RemoteEndPoint": "172.17.0.1",
     "PlayableMediaTypes": [],
     "Id": "d4c3bb3eaf5f9599760b58ce1c43aadf",
-    "UserId": "fcf09c15b90440cb9a9f846618ed0813",
+    "UserId": "09e5ee283b694c27836c2bf079a10b2a",
     "UserName": "oxyfin",
     "Client": "Oxyfin",
-    "LastActivityDate": "2026-11-13T00:31:45.6622241Z",
+    "LastActivityDate": "2026-11-13T00:36:03.1845531Z",
     "LastPlaybackCheckIn": "0001-01-01T00:00:00.0000000Z",
     "DeviceName": "Fixture Capture",
     "DeviceId": "oxyfin-fixture-capture",
@@ -103,9 +103,9 @@
     "NowPlayingQueue": [],
     "NowPlayingQueueFullItems": [],
     "HasCustomDeviceName": false,
-    "ServerId": "408fabdc2d4e429e924956d219f4314b",
+    "ServerId": "5ec1506196554148af5557c8b1ef951b",
     "SupportedCommands": []
   },
-  "AccessToken": "84dfa6fab2bd40809e2e02e7f172225a",
-  "ServerId": "408fabdc2d4e429e924956d219f4314b"
+  "AccessToken": "d8cfdd2818f04b858f92dba3119cf96a",
+  "ServerId": "5ec1506196554148af5557c8b1ef951b"
 }

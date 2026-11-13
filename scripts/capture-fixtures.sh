@@ -36,6 +36,12 @@ cap() {
 TOKEN=
 public=$(req GET /System/Info/Public)
 VERSION=$(jq -r '.Version // .version' <<<"$public")
+case $VERSION in
+  "" | null)
+    echo "could not read the server version" >&2
+    exit 1
+    ;;
+esac
 OUT=$ROOT/crates/oxyfin-api/tests/fixtures/$VERSION
 rm -rf "$OUT"
 mkdir -p "$OUT"
@@ -46,9 +52,6 @@ login=$(cap authenticate_by_name POST /Users/AuthenticateByName \
   "$(jq -nc --arg u "$OXYFIN_TEST_USER" --arg p "$OXYFIN_TEST_PASSWORD" '{Username: $u, Pw: $p}')")
 TOKEN=$(jq -r '.AccessToken // .accessToken' <<<"$login")
 UID_=$(jq -r '(.User // .user) | .Id // .id' <<<"$login")
-
-req GET /System/Configuration | jq -c '.QuickConnectAvailable = true' |
-  curl -sf -X POST -H "$JSON" -H "$AUTH, Token=\"$TOKEN\"" "$BASE/System/Configuration" --data-binary @-
 
 items() { jq -r "(.Items // .items)[] | select($1) | (.Id // .id)" <<<"$2" | head -n1; }
 all=$(req GET "/Items?userId=$UID_&recursive=true&includeItemTypes=Movie,Series,Episode")
