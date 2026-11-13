@@ -2,7 +2,11 @@
 
 mod error;
 #[cfg(feature = "mpv")]
+mod events;
+#[cfg(feature = "mpv")]
 mod player;
+#[cfg(feature = "mpv")]
+mod tracks;
 mod types;
 
 pub use error::PlayerError;
