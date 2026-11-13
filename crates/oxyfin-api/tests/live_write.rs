@@ -7,7 +7,7 @@
 mod live_common;
 
 use live_common::{config, login, media_source, movie, require_disposable, server};
-use oxyfin_api::{MediaStreamType, PlaybackReport, Ticks};
+use oxyfin_api::{ItemsQuery, MediaStreamType, PlaybackReport, Ticks};
 use std::time::Duration;
 
 #[tokio::test]
@@ -162,5 +162,23 @@ async fn audio_streams_are_listed() {
         .iter()
         .any(|stream| matches!(stream.language.as_deref(), Some("fre" | "fra")));
     assert!(french, "no French audio track: {audio:?}");
+    session.logout().await.expect("logout");
+}
+
+#[tokio::test]
+#[ignore = "writes to the server, see CONTRIBUTING.md"]
+async fn genres_filter_accepts_pipe_delimited_values() {
+    require_disposable();
+    let session = login(&config()).await;
+    let movie = movie(&session).await;
+    let page = session
+        .items(&ItemsQuery {
+            recursive: true,
+            genres: vec!["Drama".into(), "Comedy".into()],
+            ..ItemsQuery::default()
+        })
+        .await
+        .expect("items");
+    assert!(page.items.iter().any(|item| item.id == movie.id));
     session.logout().await.expect("logout");
 }
