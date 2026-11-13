@@ -1,0 +1,36 @@
+{
+  "Items": [
+    {
+      "Name": "Test Show S01E02",
+      "ServerId": "15325ee9b8e047fcac0f390d0b2715ac",
+      "Id": "50d3822a34079d70485f1bf36c274c35",
+      "Container": "mkv",
+      "ChannelId": null,
+      "RunTimeTicks": 100230000,
+      "IndexNumber": 2,
+      "ParentIndexNumber": 1,
+      "IsFolder": false,
+      "Type": "Episode",
+      "UserData": {
+        "PlaybackPositionTicks": 0,
+        "PlayCount": 0,
+        "IsFavorite": false,
+        "Played": false,
+        "Key": "9ea196e7-ccc3-ae17-d2c3-f75c3ab34406001002",
+        "ItemId": "50d3822a34079d70485f1bf36c274c35"
+      },
+      "SeriesName": "Test Show",
+      "SeriesId": "9ea196e7ccc3ae17d2c3f75c3ab34406",
+      "SeasonId": "0407e3d02b7d70abe4a2d37241b02fea",
+      "SeasonName": "Season 1",
+      "VideoType": "VideoFile",
+      "ImageTags": {},
+      "BackdropImageTags": [],
+      "ImageBlurHashes": {},
+      "LocationType": "FileSystem",
+      "MediaType": "Video"
+    }
+  ],
+  "TotalRecordCount": 1,
+  "StartIndex": 0
+}

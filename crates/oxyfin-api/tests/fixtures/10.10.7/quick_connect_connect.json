@@ -1,0 +1,10 @@
+{
+  "Authenticated": false,
+  "Secret": "89354E29BAD863CA90FE390B12176C9240950953C86EE8F4BA18A669A60BA486",
+  "Code": "555557",
+  "DeviceId": "oxyfin-fixture-capture",
+  "DeviceName": "Fixture Capture",
+  "AppName": "Oxyfin",
+  "AppVersion": "0.1.0",
+  "DateAdded": "2026-11-13T00:31:46.1260434Z"
+}
