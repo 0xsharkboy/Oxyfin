@@ -23,4 +23,5 @@ pub struct UserDto {
 pub(crate) struct AuthenticationResult {
     pub(crate) user: UserDto,
     pub(crate) access_token: String,
+    pub(crate) server_id: Option<String>,
 }

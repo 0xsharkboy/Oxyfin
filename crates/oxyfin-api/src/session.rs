@@ -17,15 +17,22 @@ struct Inner {
     server: Server,
     token: String,
     user_id: UserId,
+    server_id: Option<String>,
 }
 
 impl Session {
-    pub(crate) fn new(server: Server, token: String, user_id: UserId) -> Self {
+    pub(crate) fn new(
+        server: Server,
+        token: String,
+        user_id: UserId,
+        server_id: Option<String>,
+    ) -> Self {
         Self {
             inner: Arc::new(Inner {
                 server,
                 token,
                 user_id,
+                server_id,
             }),
         }
     }
@@ -38,6 +45,11 @@ impl Session {
     /// Identifier of the signed-in user.
     pub fn user_id(&self) -> &UserId {
         &self.inner.user_id
+    }
+
+    /// Identifier of the server, as reported at sign-in or given to [`Server::restore_session`].
+    pub fn server_id(&self) -> Option<&str> {
+        self.inner.server_id.as_deref()
     }
 
     /// Server this session belongs to.
@@ -69,6 +81,7 @@ impl fmt::Debug for Session {
         f.debug_struct("Session")
             .field("server", &self.inner.server)
             .field("user_id", &self.inner.user_id)
+            .field("server_id", &self.inner.server_id)
             .field("token", &"<redacted>")
             .finish()
     }
