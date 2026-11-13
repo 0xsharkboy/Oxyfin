@@ -98,6 +98,8 @@ impl Player {
                 name: "start".to_owned(),
                 message: e.to_string(),
             })?;
+        // A renderer may have pinned a video track id for the previous media.
+        self.set_property("vid", "auto")?;
         self.command("change-list", &["http-header-fields", "clr", ""])?;
         for (name, value) in &source.headers {
             let header = format!("{name}: {value}");

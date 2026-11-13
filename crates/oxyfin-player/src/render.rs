@@ -7,7 +7,7 @@ use std::sync::Arc;
 use glow::HasContext;
 use libmpv2::Mpv;
 use libmpv2::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
-use raw_window_handle::RawDisplayHandle;
+use raw_window_handle::{DisplayHandle, RawDisplayHandle};
 
 use crate::{Player, PlayerError, VideoOutput};
 
@@ -58,23 +58,29 @@ pub struct VideoRenderer {
 impl VideoRenderer {
     /// Creates a renderer for `player`.
     ///
+    /// Must be called on the thread where the OpenGL context is current,
+    /// while it is current (see the type documentation).
+    ///
     /// `get_proc_address` resolves OpenGL symbols of the current context; it
     /// is only used during this call. `display` is the native display of the
     /// window: a Wayland or Xlib display lets mpv decode straight into GPU
-    /// memory, any other value is ignored. When given, it must outlive the
-    /// renderer.
+    /// memory, any other display is ignored. mpv keeps using it after this
+    /// call, so the display must outlive the renderer, which holds for the
+    /// display of the window being rendered to.
     ///
     /// If a media is already loaded with no video track selected, its default
     /// (or first) video track is selected again: mpv disables video when it
     /// has no render context, while loading or when the previous renderer was
-    /// dropped during playback.
+    /// dropped during playback. The selection lasts for that media only.
     ///
     /// Fails with [`PlayerError::Render`] when the player was created with
-    /// [`VideoOutput::None`] or when mpv cannot create the render context.
+    /// [`VideoOutput::None`] or when mpv cannot create the render context, and
+    /// with the error of the track list or of the `vid` property when the
+    /// video track cannot be selected again; the renderer is then dropped.
     pub fn new(
         player: &Player,
         get_proc_address: &dyn Fn(&CStr) -> *const c_void,
-        display: Option<RawDisplayHandle>,
+        display: Option<DisplayHandle<'_>>,
     ) -> Result<Self, PlayerError> {
         if player.video_output() == VideoOutput::None {
             return Err(PlayerError::Render(
@@ -95,7 +101,7 @@ impl VideoRenderer {
                 ctx: loader,
             }),
         ];
-        if let Some(display) = display.and_then(native_display) {
+        if let Some(display) = display.and_then(|display| native_display(display.as_raw())) {
             params.push(display);
         }
 
