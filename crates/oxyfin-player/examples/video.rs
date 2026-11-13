@@ -16,6 +16,7 @@ fn main() {}
 mod app {
     use std::process::ExitCode;
     use std::rc::Rc;
+    use std::sync::{Arc, OnceLock};
     use std::time::Duration;
 
     use oxyfin_player::{
@@ -138,8 +139,12 @@ mod app {
 
         let window = MainWindow::new()?;
         let weak = window.as_weak();
+        let failure = Arc::new(OnceLock::new());
+        let failed = Arc::clone(&failure);
         let player = Rc::new(Player::new(PlayerOptions::default(), move |event| {
-            let _ = weak.upgrade_in_event_loop(move |window| on_player_event(&window, event));
+            let failed = Arc::clone(&failed);
+            let _ =
+                weak.upgrade_in_event_loop(move |window| on_player_event(&window, event, &failed));
         })?);
 
         connect_controls(&window, &player);
@@ -159,10 +164,13 @@ mod app {
         drop(stats_timer);
         result?;
         hidden?;
-        Ok(())
+        match failure.get() {
+            Some(err) => Err(format!("playback failed: {err}").into()),
+            None => Ok(()),
+        }
     }
 
-    fn on_player_event(window: &MainWindow, event: PlayerEvent) {
+    fn on_player_event(window: &MainWindow, event: PlayerEvent, failure: &OnceLock<String>) {
         match event {
             PlayerEvent::FileLoaded { duration, .. } => {
                 window.set_duration(duration.map_or(0.0, |d| d.as_secs_f32()));
@@ -175,7 +183,8 @@ mod app {
             PlayerEvent::Seeked => window.set_seek_pending(false),
             PlayerEvent::Paused(paused) => window.set_paused(paused),
             PlayerEvent::Unloaded(UnloadReason::Error(err)) => {
-                eprintln!("error: playback failed: {err}");
+                let _ = failure.set(err);
+                let _ = slint::quit_event_loop();
             }
             _ => {}
         }
