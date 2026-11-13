@@ -49,6 +49,9 @@
                   rust-analyzer
                   pkg-config
                   mpv-unwrapped
+                  jq
+                  ffmpeg-headless
+                  cargo-deny
                 ]
                 ++ lib.optionals stdenv.hostPlatform.isLinux linuxRuntimeLibs;
 
