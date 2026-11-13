@@ -7,7 +7,8 @@ use std::thread::{self, JoinHandle};
 use libmpv2::Mpv;
 
 use crate::events::{self, Shared};
-use crate::{MediaSource, PlayerError, PlayerEvent, SeekTarget};
+use crate::tracks;
+use crate::{MediaSource, PlayerError, PlayerEvent, SeekTarget, TrackId};
 
 /// Where mpv sends decoded video.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -146,6 +147,42 @@ impl Player {
         self.set_property("mute", muted)
     }
 
+    /// Selects the audio track `track`, or disables audio with `None`.
+    pub fn select_audio(&self, track: Option<TrackId>) -> Result<(), PlayerError> {
+        self.require_loaded()?;
+        self.set_property("aid", track_value(track))
+    }
+
+    /// Selects the subtitle track `track`, or disables subtitles with `None`.
+    pub fn select_subtitle(&self, track: Option<TrackId>) -> Result<(), PlayerError> {
+        self.require_loaded()?;
+        self.set_property("sid", track_value(track))
+    }
+
+    /// Adds the subtitle file at `url` as an external track and returns its
+    /// identifier. mpv may select it when no subtitle is selected yet.
+    pub fn add_external_subtitle(
+        &self,
+        url: &str,
+        title: Option<&str>,
+        language: Option<&str>,
+    ) -> Result<TrackId, PlayerError> {
+        self.require_loaded()?;
+        self.command(
+            "sub-add",
+            &[url, "auto", title.unwrap_or(""), language.unwrap_or("")],
+        )?;
+        tracks::read(&self.mpv)?
+            .into_iter()
+            .filter(|track| track.external_url.as_deref() == Some(url))
+            .map(|track| track.id)
+            .max_by_key(|id| id.0)
+            .ok_or_else(|| PlayerError::Command {
+                name: "sub-add".to_owned(),
+                message: "the added subtitle is not in the track list".to_owned(),
+            })
+    }
+
     /// Fails with [`PlayerError::NoMediaLoaded`] unless a media is loaded.
     pub(crate) fn require_loaded(&self) -> Result<(), PlayerError> {
         if self.shared.loaded.load(Ordering::SeqCst) {
@@ -182,4 +219,8 @@ impl Drop for Player {
             let _ = event_thread.join();
         }
     }
+}
+
+fn track_value(track: Option<TrackId>) -> String {
+    track.map_or_else(|| "no".to_owned(), |id| id.0.to_string())
 }

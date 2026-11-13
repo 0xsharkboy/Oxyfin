@@ -7,7 +7,9 @@ mod support;
 
 use std::time::{Duration, Instant};
 
-use oxyfin_player::{MediaSource, PlayerError, PlayerEvent, SeekTarget, UnloadReason};
+use oxyfin_player::{
+    MediaSource, PlayerError, PlayerEvent, SeekTarget, Track, TrackId, TrackKind, UnloadReason,
+};
 use support::{Events, fixture, headless};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -271,4 +273,154 @@ fn stop_then_load_reports_stopped_then_loads() {
     });
     player.load(&sample()).unwrap();
     events.wait_for(TIMEOUT, is_file_loaded);
+}
+
+fn tracks_of(event: &PlayerEvent) -> Option<&Vec<Track>> {
+    match event {
+        PlayerEvent::FileLoaded { tracks, .. } | PlayerEvent::Tracks(tracks) => Some(tracks),
+        _ => None,
+    }
+}
+
+fn audio(tracks: &[Track], language: &str) -> Track {
+    tracks
+        .iter()
+        .find(|t| t.kind == TrackKind::Audio && t.language.as_deref() == Some(language))
+        .unwrap()
+        .clone()
+}
+
+fn subtitle(tracks: &[Track]) -> Track {
+    tracks
+        .iter()
+        .find(|t| t.kind == TrackKind::Subtitle && !t.is_external)
+        .unwrap()
+        .clone()
+}
+
+fn loaded_tracks(events: &Events) -> Vec<Track> {
+    let event = events.wait_for(TIMEOUT, is_file_loaded);
+    tracks_of(&event).unwrap().clone()
+}
+
+#[test]
+fn file_loaded_lists_tracks_with_stream_indexes() {
+    let (events, on_event) = Events::new();
+    let player = headless(on_event);
+    player.load(&sample()).unwrap();
+    let tracks = loaded_tracks(&events);
+
+    assert_eq!(tracks.len(), 4, "tracks {tracks:#?}");
+    let video = &tracks[0];
+    assert_eq!(video.kind, TrackKind::Video);
+    assert_eq!(video.stream_index, Some(0));
+
+    let english = audio(&tracks, "eng");
+    assert_eq!(english.title.as_deref(), Some("English"));
+    assert!(english.is_default && english.is_selected);
+    assert_eq!(english.channels, Some(1));
+    assert_eq!(english.stream_index, Some(1));
+    assert!(!english.is_external && english.external_url.is_none());
+
+    let french = audio(&tracks, "fra");
+    assert_eq!(french.title.as_deref(), Some("French"));
+    assert!(!french.is_selected);
+    assert_eq!(french.stream_index, Some(2));
+
+    let sub = subtitle(&tracks);
+    assert_eq!(sub.language.as_deref(), Some("eng"));
+    assert!(!sub.is_selected);
+    assert_eq!(sub.stream_index, Some(3));
+}
+
+#[test]
+fn selecting_tracks_is_reported() {
+    let (events, on_event) = Events::new();
+    let player = headless(on_event);
+    player.load(&sample()).unwrap();
+    let tracks = loaded_tracks(&events);
+    let (english, french, sub) = (
+        audio(&tracks, "eng"),
+        audio(&tracks, "fra"),
+        subtitle(&tracks),
+    );
+
+    player.select_audio(Some(french.id)).unwrap();
+    events.wait_for(TIMEOUT, |e| {
+        tracks_of(e).is_some_and(|t| {
+            t.iter()
+                .any(|x| x.kind == TrackKind::Audio && x.id == french.id && x.is_selected)
+                && t.iter()
+                    .any(|x| x.kind == TrackKind::Audio && x.id == english.id && !x.is_selected)
+        })
+    });
+
+    player.select_subtitle(Some(sub.id)).unwrap();
+    events.wait_for(TIMEOUT, |e| {
+        tracks_of(e).is_some_and(|t| {
+            t.iter()
+                .any(|x| x.kind == TrackKind::Subtitle && x.id == sub.id && x.is_selected)
+        })
+    });
+    player.select_subtitle(None).unwrap();
+    events.wait_for(TIMEOUT, |e| {
+        tracks_of(e).is_some_and(|t| {
+            t.iter()
+                .any(|x| x.kind == TrackKind::Subtitle && x.id == sub.id && !x.is_selected)
+        })
+    });
+}
+
+#[test]
+fn external_subtitle_is_added_and_selectable() {
+    let (events, on_event) = Events::new();
+    let player = headless(on_event);
+    player.load(&sample()).unwrap();
+    loaded_tracks(&events);
+
+    let url = fixture("external.srt").to_string_lossy().into_owned();
+    let id = player
+        .add_external_subtitle(&url, Some("External"), Some("fra"))
+        .unwrap();
+    let event = events.wait_for(TIMEOUT, |e| {
+        tracks_of(e).is_some_and(|t| {
+            t.iter()
+                .any(|x| x.kind == TrackKind::Subtitle && x.id == id && x.is_external)
+        })
+    });
+    let track = tracks_of(&event)
+        .unwrap()
+        .iter()
+        .find(|t| t.kind == TrackKind::Subtitle && t.id == id)
+        .unwrap();
+    assert_eq!(track.kind, TrackKind::Subtitle);
+    assert_eq!(track.title.as_deref(), Some("External"));
+    assert_eq!(track.language.as_deref(), Some("fra"));
+    assert_eq!(track.external_url.as_deref(), Some(url.as_str()));
+
+    player.select_subtitle(Some(id)).unwrap();
+    events.wait_for(TIMEOUT, |e| {
+        tracks_of(e).is_some_and(|t| {
+            t.iter()
+                .any(|x| x.kind == TrackKind::Subtitle && x.id == id && x.is_selected)
+        })
+    });
+}
+
+#[test]
+fn selecting_without_media_fails() {
+    let (_events, on_event) = Events::new();
+    let player = headless(on_event);
+    assert!(matches!(
+        player.select_audio(Some(TrackId(1))),
+        Err(PlayerError::NoMediaLoaded)
+    ));
+    assert!(matches!(
+        player.select_subtitle(None),
+        Err(PlayerError::NoMediaLoaded)
+    ));
+    assert!(matches!(
+        player.add_external_subtitle("x.srt", None, None),
+        Err(PlayerError::NoMediaLoaded)
+    ));
 }
