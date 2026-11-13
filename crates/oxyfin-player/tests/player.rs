@@ -55,6 +55,9 @@ fn playing_to_the_end_reports_ended_and_keeps_the_media() {
     player.load(&sample()).unwrap();
 
     events.wait_for(TIMEOUT, |e| *e == PlayerEvent::Ended);
+    events.wait_for(TIMEOUT, |e| {
+        position_secs(e).is_some_and(|s| (s - 3.0).abs() <= 0.15)
+    });
     player.stop().unwrap();
     events.wait_for(TIMEOUT, |e| {
         *e == PlayerEvent::Unloaded(UnloadReason::Stopped)
