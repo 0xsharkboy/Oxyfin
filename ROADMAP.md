@@ -6,7 +6,7 @@ This file is the single source of truth for planned work. An item is checked onl
 
 - [x] Workspace and Nix dev shell
 - [x] CI on Linux, Windows and macOS
-- [x] Video rendering prototype (Slint + mpv) validated (Wayland; HiDPI untested, X11 in copy mode: see spikes/video-underlay/README.md)
+- [x] Video rendering prototype (Slint + mpv) validated (Wayland, including HiDPI; X11 in copy mode, see the Later section)
 
 ## Milestone 1: Core experience (movies and shows)
 
@@ -22,6 +22,7 @@ This file is the single source of truth for planned work. An item is checked onl
 
 ## Later
 
+- [ ] Direct VAAPI on X11 (force EGL in the Slint winit backend)
 - [ ] Media keys and MPRIS
 - [ ] Trickplay thumbnails
 - [ ] Skip intro (media segments)
