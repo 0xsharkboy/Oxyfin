@@ -57,6 +57,13 @@ impl Session {
         &self.inner.server
     }
 
+    /// Full `Authorization` header value, including the access token.
+    ///
+    /// Give it to an HTTP client such as mpv's `http-header-fields`. Never log it.
+    pub fn authorization_header(&self) -> String {
+        self.server().http().authorization(Some(self.token()))
+    }
+
     /// Fetches the signed-in user (`GET Users/Me`).
     pub async fn me(&self) -> Result<UserDto> {
         self.server()

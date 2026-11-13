@@ -6,7 +6,9 @@ use common::{
     TEST_TOKEN, TEST_USER_ID, authorization_is, client_info, fixture, server, session,
     to_pascal_case, variants,
 };
-use oxyfin_api::{Error, MINIMUM_SERVER_VERSION, Server, ServerVersion, Session};
+use oxyfin_api::{
+    Error, ItemsQuery, MINIMUM_SERVER_VERSION, QuickConnectSecret, Server, ServerVersion, Session,
+};
 use serde_json::json;
 use wiremock::matchers::{body_json, header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -304,4 +306,28 @@ fn server_and_session_are_send_sync_clone() {
     fn assert_traits<T: Send + Sync + Clone + 'static>() {}
     assert_traits::<Server>();
     assert_traits::<Session>();
+}
+
+#[test]
+fn authorization_header_carries_the_token() {
+    let server = Server::new("http://127.0.0.1:8096", client_info()).unwrap();
+    let session = server.restore_session(TEST_TOKEN, TEST_USER_ID.into(), None);
+    assert!(
+        session
+            .authorization_header()
+            .ends_with(r#"Token="test-token""#)
+    );
+}
+
+#[test]
+fn futures_are_send() {
+    fn assert_send<T: Send>(_: &T) {}
+
+    let server = Server::new("http://127.0.0.1:8096", client_info()).unwrap();
+    let session = server.restore_session(TEST_TOKEN, TEST_USER_ID.into(), None);
+    let secret = QuickConnectSecret::from("secret".to_owned());
+    assert_send(&session.items(&ItemsQuery::default()));
+    assert_send(&session.playback_info(&"abc".into()));
+    assert_send(&server.authenticate_by_name("u", "p"));
+    assert_send(&server.quick_connect_poll(&secret));
 }
