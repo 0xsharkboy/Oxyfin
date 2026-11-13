@@ -8,6 +8,7 @@ mod images;
 mod items;
 mod json;
 mod models;
+mod playback;
 mod quick_connect;
 mod server;
 mod session;
@@ -21,8 +22,10 @@ pub use ids::{ItemId, MediaSourceId, PlaySessionId, UserId};
 pub use images::ImageRequest;
 pub use models::{
     BaseItemDto, BaseItemKind, BaseItemPerson, ImageType, ItemFields, ItemSortBy, ItemsQuery,
-    PublicSystemInfo, QueryResult, SortOrder, UserDto, UserItemDataDto,
+    MediaSourceInfo, MediaStream, MediaStreamType, PlaybackInfoResponse, PublicSystemInfo,
+    QueryResult, SortOrder, UserDto, UserItemDataDto,
 };
+pub use playback::{PlaybackReport, StreamSource};
 pub use quick_connect::{QuickConnectSecret, QuickConnectState};
 pub use server::Server;
 pub use session::Session;

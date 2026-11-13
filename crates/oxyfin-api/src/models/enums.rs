@@ -81,6 +81,18 @@ string_enum!(
     }
 );
 
+string_enum!(
+    /// Kind of a media stream inside a media source.
+    MediaStreamType {
+        /// A video track.
+        Video,
+        /// An audio track.
+        Audio,
+        /// A subtitle track.
+        Subtitle,
+    }
+);
+
 macro_rules! query_enum {
     ($(#[$meta:meta])* $name:ident { $($(#[$vmeta:meta])* $variant:ident),+ $(,)? }) => {
         $(#[$meta])*
