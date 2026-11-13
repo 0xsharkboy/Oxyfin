@@ -3,23 +3,13 @@
 mod common;
 
 use common::{
-    TEST_TOKEN, TEST_USER_ID, client_info, expected_authorization, fixture, server, session,
-    variants,
+    TEST_TOKEN, TEST_USER_ID, authorization_is, client_info, fixture, server, session,
+    to_pascal_case, variants,
 };
 use oxyfin_api::{Error, MINIMUM_SERVER_VERSION, Server, ServerVersion, Session};
 use serde_json::json;
 use wiremock::matchers::{body_json, header, method, path};
-use wiremock::{Mock, MockServer, Request, ResponseTemplate};
-
-fn authorization_is(token: Option<&str>) -> impl Fn(&Request) -> bool + Send + Sync + 'static {
-    let expected = expected_authorization(token);
-    move |request: &Request| {
-        request
-            .headers
-            .get("authorization")
-            .is_some_and(|value| value.as_bytes() == expected.as_bytes())
-    }
-}
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[tokio::test]
 async fn public_info_decodes_all_fixtures() {
@@ -94,7 +84,7 @@ async fn check_version_accepts_supported_servers() {
 async fn authenticate_by_name_posts_credentials() {
     for (label, body) in variants("authenticate_by_name") {
         let version = label.split('/').next().unwrap();
-        let captured = fixture(version, "authenticate_by_name");
+        let captured = to_pascal_case(fixture(version, "authenticate_by_name"));
         let token = captured["AccessToken"].as_str().unwrap();
         let user_id = captured["User"]["Id"].as_str().unwrap();
 
@@ -122,7 +112,7 @@ async fn authenticate_by_name_posts_credentials() {
 async fn session_requests_carry_token() {
     for (label, body) in variants("users_me") {
         let version = label.split('/').next().unwrap();
-        let captured = fixture(version, "users_me");
+        let captured = to_pascal_case(fixture(version, "users_me"));
         let mock = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/Users/Me"))

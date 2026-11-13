@@ -4,7 +4,7 @@
 use oxyfin_api::{ClientInfo, Server, Session, UserId};
 use serde_json::{Map, Value};
 use std::path::Path;
-use wiremock::MockServer;
+use wiremock::{MockServer, Request};
 
 /// Server versions the fixtures were captured from.
 pub const VERSIONS: [&str; 3] = ["10.10.7", "10.11.11", "12.4.0"];
@@ -106,4 +106,15 @@ pub fn server(mock: &MockServer) -> Server {
 /// A session restored on `mock` with [`TEST_TOKEN`] and [`TEST_USER_ID`].
 pub fn session(mock: &MockServer) -> Session {
     server(mock).restore_session(TEST_TOKEN, UserId::from(TEST_USER_ID))
+}
+
+/// Matcher for the exact `Authorization` header of [`expected_authorization`].
+pub fn authorization_is(token: Option<&str>) -> impl Fn(&Request) -> bool + Send + Sync + 'static {
+    let expected = expected_authorization(token);
+    move |request: &Request| {
+        request
+            .headers
+            .get("authorization")
+            .is_some_and(|value| value.as_bytes() == expected.as_bytes())
+    }
 }
