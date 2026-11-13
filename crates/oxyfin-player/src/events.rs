@@ -99,8 +99,10 @@ pub(crate) fn run(mpv: &Mpv, shared: &Shared, on_event: &(impl Fn(PlayerEvent) +
                 change: PropertyData::Flag(true),
                 ..
             }) => {
-                throttle.force_next();
                 on_event(PlayerEvent::Ended);
+                // time-pos stops changing at the end, so the throttle could
+                // otherwise drop the last position.
+                report_position_now(mpv, &mut throttle, on_event);
             }
             Ok(Event::PropertyChange {
                 name: TIME_POS,
