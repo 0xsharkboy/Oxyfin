@@ -10,25 +10,66 @@ use crate::{PlayerEvent, UnloadReason, tracks};
 
 /// Name of the observed property that signals the end of the media.
 pub(crate) const EOF_REACHED: &str = "eof-reached";
+const TIME_POS: &str = "time-pos";
+const PAUSE: &str = "pause";
+const VOLUME: &str = "volume";
+const MUTE: &str = "mute";
+
+/// Minimum distance between two reported positions.
+const POSITION_STEP: Duration = Duration::from_millis(250);
 
 /// Playback state shared between the [`crate::Player`] and its event thread.
 #[derive(Debug, Default)]
 pub(crate) struct Shared {
     /// True between `file-loaded` and `end-file`.
     pub(crate) loaded: AtomicBool,
-    /// True between `start-file` and `end-file`.
-    pub(crate) active: AtomicBool,
-    /// Set when a load replaces the active media.
-    pub(crate) replacing: AtomicBool,
+    /// Set by `stop()` so the next stop-type end is reported as `Stopped`.
+    pub(crate) stopping: AtomicBool,
+}
+
+/// Drops position updates that are too close to the last reported one.
+#[derive(Debug)]
+struct PositionThrottle {
+    min_step: Duration,
+    last: Option<Duration>,
+}
+
+impl PositionThrottle {
+    fn new(min_step: Duration) -> Self {
+        Self {
+            min_step,
+            last: None,
+        }
+    }
+
+    fn accept(&mut self, position: Duration) -> bool {
+        let moved = self
+            .last
+            .is_none_or(|last| position.abs_diff(last) >= self.min_step);
+        if moved {
+            self.last = Some(position);
+        }
+        moved
+    }
+
+    /// Makes the next position pass regardless of distance.
+    fn force_next(&mut self) {
+        self.last = None;
+    }
 }
 
 /// Registers the property observers the event loop relies on.
 pub(crate) fn observe(mpv: &Mpv) -> libmpv2::Result<()> {
-    mpv.observe_property(EOF_REACHED, Format::Flag, 0)
+    mpv.observe_property(EOF_REACHED, Format::Flag, 0)?;
+    mpv.observe_property(TIME_POS, Format::Double, 0)?;
+    mpv.observe_property(PAUSE, Format::Flag, 0)?;
+    mpv.observe_property(VOLUME, Format::Double, 0)?;
+    mpv.observe_property(MUTE, Format::Flag, 0)
 }
 
 /// Runs the event loop until mpv shuts down.
 pub(crate) fn run(mpv: &Mpv, shared: &Shared, on_event: &(impl Fn(PlayerEvent) + ?Sized)) {
+    let mut throttle = PositionThrottle::new(POSITION_STEP);
     loop {
         let event = match mpv.wait_event(-1.0) {
             None => continue,
@@ -36,25 +77,59 @@ pub(crate) fn run(mpv: &Mpv, shared: &Shared, on_event: &(impl Fn(PlayerEvent) +
         };
         match event {
             Ok(Event::Shutdown) => return,
-            Ok(Event::StartFile) => {
-                shared.active.store(true, Ordering::SeqCst);
-                shared.replacing.store(false, Ordering::SeqCst);
-            }
             Ok(Event::FileLoaded) => {
                 shared.loaded.store(true, Ordering::SeqCst);
+                throttle.force_next();
                 on_event(file_loaded(mpv));
+            }
+            Ok(Event::Seek) => on_event(PlayerEvent::Seeking),
+            Ok(Event::PlaybackRestart) => {
+                on_event(PlayerEvent::Seeked);
+                report_position_now(mpv, &mut throttle, on_event);
             }
             Ok(Event::PropertyChange {
                 name: EOF_REACHED,
                 change: PropertyData::Flag(true),
                 ..
-            }) => on_event(PlayerEvent::Ended),
+            }) => {
+                throttle.force_next();
+                on_event(PlayerEvent::Ended);
+            }
+            Ok(Event::PropertyChange {
+                name: TIME_POS,
+                change: PropertyData::Double(secs),
+                ..
+            }) => {
+                if let Some(position) = to_duration(secs)
+                    && throttle.accept(position)
+                {
+                    on_event(PlayerEvent::Position(position));
+                }
+            }
+            Ok(Event::PropertyChange {
+                name: PAUSE,
+                change: PropertyData::Flag(paused),
+                ..
+            }) => {
+                on_event(PlayerEvent::Paused(paused));
+                report_position_now(mpv, &mut throttle, on_event);
+            }
+            Ok(Event::PropertyChange {
+                name: VOLUME,
+                change: PropertyData::Double(volume),
+                ..
+            }) => on_event(PlayerEvent::Volume(volume)),
+            Ok(Event::PropertyChange {
+                name: MUTE,
+                change: PropertyData::Flag(muted),
+                ..
+            }) => on_event(PlayerEvent::Muted(muted)),
             Ok(Event::EndFile(reason)) => {
                 shared.loaded.store(false, Ordering::SeqCst);
-                shared.active.store(false, Ordering::SeqCst);
+                let stopping = shared.stopping.swap(false, Ordering::SeqCst);
                 match reason {
                     mpv_end_file_reason::Quit => {}
-                    mpv_end_file_reason::Stop if shared.replacing.swap(false, Ordering::SeqCst) => {
+                    mpv_end_file_reason::Stop if !stopping => {
                         on_event(PlayerEvent::Unloaded(UnloadReason::Replaced));
                     }
                     _ => on_event(PlayerEvent::Unloaded(UnloadReason::Stopped)),
@@ -63,13 +138,32 @@ pub(crate) fn run(mpv: &Mpv, shared: &Shared, on_event: &(impl Fn(PlayerEvent) +
             // libmpv2 reports an `end-file` carrying an error this way.
             Err(error) => {
                 shared.loaded.store(false, Ordering::SeqCst);
-                shared.active.store(false, Ordering::SeqCst);
+                shared.stopping.store(false, Ordering::SeqCst);
                 on_event(PlayerEvent::Unloaded(UnloadReason::Error(
                     error.to_string(),
                 )));
             }
             Ok(_) => {}
         }
+    }
+}
+
+fn to_duration(secs: f64) -> Option<Duration> {
+    (secs.is_finite() && secs >= 0.0).then(|| Duration::from_secs_f64(secs))
+}
+
+/// Reports the current position even when `time-pos` did not change, as it
+/// does not after a pause or a seek while paused.
+fn report_position_now(
+    mpv: &Mpv,
+    throttle: &mut PositionThrottle,
+    on_event: &(impl Fn(PlayerEvent) + ?Sized),
+) {
+    throttle.force_next();
+    if let Some(position) = mpv.get_property::<f64>(TIME_POS).ok().and_then(to_duration)
+        && throttle.accept(position)
+    {
+        on_event(PlayerEvent::Position(position));
     }
 }
 
@@ -81,4 +175,21 @@ fn file_loaded(mpv: &Mpv) -> PlayerEvent {
         .map(Duration::from_secs_f64);
     let tracks = tracks::read(mpv).unwrap_or_default();
     PlayerEvent::FileLoaded { duration, tracks }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn throttle_accepts_only_moves_of_at_least_the_step() {
+        let ms = Duration::from_millis;
+        let mut throttle = PositionThrottle::new(ms(250));
+        assert!(throttle.accept(ms(0)));
+        assert!(!throttle.accept(ms(100)));
+        assert!(throttle.accept(ms(300)));
+        assert!(!throttle.accept(ms(200)));
+        throttle.force_next();
+        assert!(throttle.accept(ms(210)));
+    }
 }
