@@ -8,7 +8,7 @@ use libmpv2::Mpv;
 
 use crate::events::{self, Shared};
 use crate::tracks;
-use crate::{MediaSource, PlayerError, PlayerEvent, SeekTarget, TrackId};
+use crate::{MediaSource, PlayerError, PlayerEvent, SeekTarget, TrackId, TrackKind};
 
 /// Where mpv sends decoded video.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -147,20 +147,25 @@ impl Player {
         self.set_property("mute", muted)
     }
 
-    /// Selects the audio track `track`, or disables audio with `None`.
+    /// Selects the audio track `track` (an id of an audio track), or disables
+    /// audio with `None`.
     pub fn select_audio(&self, track: Option<TrackId>) -> Result<(), PlayerError> {
         self.require_loaded()?;
         self.set_property("aid", track_value(track))
     }
 
-    /// Selects the subtitle track `track`, or disables subtitles with `None`.
+    /// Selects the subtitle track `track` (an id of a subtitle track), or
+    /// disables subtitles with `None`.
     pub fn select_subtitle(&self, track: Option<TrackId>) -> Result<(), PlayerError> {
         self.require_loaded()?;
         self.set_property("sid", track_value(track))
     }
 
-    /// Adds the subtitle file at `url` as an external track and returns its
-    /// identifier. mpv may select it when no subtitle is selected yet.
+    /// Adds the subtitle file at `url` (an absolute path or a full URL, matched
+    /// against the `external-filename` of mpv) as an external track and returns
+    /// the subtitle id of the new track.
+    ///
+    /// mpv may select it when no subtitle is selected yet.
     pub fn add_external_subtitle(
         &self,
         url: &str,
@@ -174,7 +179,9 @@ impl Player {
         )?;
         tracks::read(&self.mpv)?
             .into_iter()
-            .filter(|track| track.external_url.as_deref() == Some(url))
+            .filter(|track| {
+                track.kind == TrackKind::Subtitle && track.external_url.as_deref() == Some(url)
+            })
             .map(|track| track.id)
             .max_by_key(|id| id.0)
             .ok_or_else(|| PlayerError::Command {

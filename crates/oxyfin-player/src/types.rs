@@ -66,6 +66,9 @@ pub enum SeekTarget {
 }
 
 /// Identifier of a track, as assigned by mpv.
+///
+/// Ids are unique only within a [`TrackKind`]: audio 1 and subtitle 1 coexist,
+/// so the pair kind + id identifies a track.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TrackId(pub i64);
 
@@ -131,7 +134,8 @@ pub enum PlayerEvent {
         /// Tracks of the media.
         tracks: Vec<Track>,
     },
-    /// The track list changed.
+    /// The track list or the selection changed. The list may repeat unchanged,
+    /// so handle it idempotently.
     Tracks(Vec<Track>),
     /// The playback position changed.
     Position(Duration),
