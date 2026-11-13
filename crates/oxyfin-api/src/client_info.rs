@@ -59,7 +59,10 @@ mod tests {
         let info = ClientInfo::new("Living Room", "abc123");
         assert_eq!(
             authorization_header(&info, None),
-            r#"MediaBrowser Client="Oxyfin", Device="Living%20Room", DeviceId="abc123", Version="0.1.0""#
+            format!(
+                r#"MediaBrowser Client="Oxyfin", Device="Living%20Room", DeviceId="abc123", Version="{}""#,
+                env!("CARGO_PKG_VERSION")
+            )
         );
     }
 
