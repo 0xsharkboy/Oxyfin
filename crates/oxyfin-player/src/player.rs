@@ -8,7 +8,7 @@ use libmpv2::Mpv;
 
 use crate::events::{self, Shared};
 use crate::tracks;
-use crate::{MediaSource, PlayerError, PlayerEvent, SeekTarget, TrackId, TrackKind};
+use crate::{MediaSource, PlayerError, PlayerEvent, SeekTarget, Track, TrackId, TrackKind};
 
 /// Where mpv sends decoded video.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -33,6 +33,7 @@ pub struct PlayerOptions {
 /// dedicated thread.
 pub struct Player {
     mpv: Arc<Mpv>,
+    video_output: VideoOutput,
     shared: Arc<Shared>,
     event_thread: Option<JoinHandle<()>>,
 }
@@ -76,6 +77,7 @@ impl Player {
         };
         Ok(Self {
             mpv,
+            video_output: options.video_output,
             shared,
             event_thread: Some(event_thread),
         })
@@ -190,13 +192,85 @@ impl Player {
             })
     }
 
+    /// Returns a one-line summary of decoding and rendering counters
+    /// (hardware decoder, video size, dropped and delayed frames, fps).
+    ///
+    /// Meant for diagnostics only: the format is not stable. A value mpv
+    /// cannot report is shown as `-`.
+    pub fn stats(&self) -> String {
+        fn show<T: std::fmt::Display>(value: Option<T>) -> String {
+            value.map_or_else(|| "-".to_owned(), |v| v.to_string())
+        }
+        let hwdec = self
+            .mpv
+            .get_property::<String>("hwdec-current")
+            .ok()
+            .filter(|h| !h.is_empty());
+        let video = match (
+            self.mpv.get_property::<i64>("video-params/w").ok(),
+            self.mpv.get_property::<i64>("video-params/h").ok(),
+        ) {
+            (Some(w), Some(h)) => Some(format!("{w}x{h}")),
+            _ => None,
+        };
+        let dropped = self.mpv.get_property::<i64>("frame-drop-count").ok();
+        let delayed = self.mpv.get_property::<i64>("vo-delayed-frame-count").ok();
+        let fps = self
+            .mpv
+            .get_property::<f64>("estimated-vf-fps")
+            .ok()
+            .map(|f| format!("{f:.2}"));
+        format!(
+            "hwdec={} video={} drop={} delayed={} fps={}",
+            show(hwdec),
+            show(video),
+            show(dropped),
+            show(delayed),
+            show(fps),
+        )
+    }
+
     /// Fails with [`PlayerError::NoMediaLoaded`] unless a media is loaded.
     pub(crate) fn require_loaded(&self) -> Result<(), PlayerError> {
-        if self.shared.loaded.load(Ordering::SeqCst) {
+        if self.is_loaded() {
             Ok(())
         } else {
             Err(PlayerError::NoMediaLoaded)
         }
+    }
+
+    pub(crate) fn is_loaded(&self) -> bool {
+        self.shared.loaded.load(Ordering::SeqCst)
+    }
+
+    /// Selects the default (or first) video track when the loaded media has
+    /// video but none is selected.
+    pub(crate) fn restore_video(&self) -> Result<(), PlayerError> {
+        // Setting `vid=auto` during playback does not select a track again.
+        let tracks = tracks::read(&self.mpv)?;
+        let video: Vec<&Track> = tracks
+            .iter()
+            .filter(|track| track.kind == TrackKind::Video)
+            .collect();
+        if video.iter().any(|track| track.is_selected) {
+            return Ok(());
+        }
+        match video
+            .iter()
+            .find(|track| track.is_default)
+            .or(video.first())
+        {
+            Some(track) => self.set_property("vid", track_value(Some(track.id))),
+            None => Ok(()),
+        }
+    }
+
+    pub(crate) fn video_output(&self) -> VideoOutput {
+        self.video_output
+    }
+
+    pub(crate) fn mpv(&self) -> &Arc<Mpv> {
+        &self.mpv
     }
 
     fn set_property(&self, name: &str, value: impl libmpv2::SetData) -> Result<(), PlayerError> {

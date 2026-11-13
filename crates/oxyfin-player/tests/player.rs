@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use oxyfin_player::{
     MediaSource, PlayerError, PlayerEvent, SeekTarget, Track, TrackId, TrackKind, UnloadReason,
+    VideoRenderer,
 };
 use support::{Events, HttpServer, fixture, headless};
 
@@ -459,4 +460,13 @@ fn http_headers_reach_the_server() {
             assert_eq!(values, [AUTHORIZATION], "headers for {path}: {headers:#?}");
         }
     }
+}
+
+#[test]
+fn renderer_needs_an_embedded_output() {
+    let (_events, on_event) = Events::new();
+    let player = headless(on_event);
+
+    let renderer = VideoRenderer::new(&player, &|_| std::ptr::null(), None);
+    assert!(matches!(renderer, Err(PlayerError::Render(_))));
 }
