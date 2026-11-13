@@ -250,10 +250,10 @@ fn volume_and_mute_are_reported() {
     let (events, on_event) = Events::new();
     let player = headless(on_event);
 
-    player.set_volume(150.0).unwrap();
-    events.wait_for(TIMEOUT, |e| *e == PlayerEvent::Volume(100.0));
     player.set_volume(40.0).unwrap();
     events.wait_for(TIMEOUT, |e| *e == PlayerEvent::Volume(40.0));
+    player.set_volume(150.0).unwrap();
+    events.wait_for(TIMEOUT, |e| *e == PlayerEvent::Volume(100.0));
     player.set_muted(true).unwrap();
     events.wait_for(TIMEOUT, |e| *e == PlayerEvent::Muted(true));
 }
