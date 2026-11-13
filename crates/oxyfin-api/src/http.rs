@@ -79,7 +79,6 @@ impl Http {
     }
 
     /// `GET route`, returning the raw response body.
-    #[cfg_attr(not(test), expect(dead_code, reason = "first used by image requests"))]
     pub(crate) async fn get_bytes(
         &self,
         token: Option<&str>,
@@ -122,10 +121,6 @@ impl Http {
     }
 
     /// `DELETE route` without a request body, decoding the JSON response.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "first used by user data requests")
-    )]
     pub(crate) async fn delete_empty<T: DeserializeOwned>(
         &self,
         token: Option<&str>,
