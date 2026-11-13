@@ -40,6 +40,11 @@ fn load_gl_symbol(loader: &GlLoader, name: &str) -> *mut c_void {
 /// valid inside those callbacks, and the type is not `Send`, which keeps it on
 /// that thread.
 ///
+/// ```compile_fail,E0277
+/// fn assert_send<T: Send>() {}
+/// assert_send::<oxyfin_player::VideoRenderer>();
+/// ```
+///
 /// The renderer keeps the mpv core alive, and dropping it frees its render
 /// context before the core can be destroyed. Rendering and loading are
 /// independent: a renderer can be dropped and created again (for example when
@@ -154,7 +159,9 @@ impl VideoRenderer {
     /// Sets the function called when mpv has a new frame to draw, typically to
     /// request a redraw of the window.
     ///
-    /// It runs on an mpv thread and must not call into the player.
+    /// It runs on an mpv thread and must not call into the player. It must not
+    /// panic either: it runs inside an `extern "C"` wrapper, so a panic aborts
+    /// the process.
     pub fn set_update_callback(&mut self, callback: impl Fn() + Send + 'static) {
         self.ctx.set_update_callback(callback);
     }
