@@ -334,6 +334,12 @@ async fn items_query_serializes_parameters() {
     let s = session(&mock);
     s.items(&full).await.unwrap();
     s.items(&ItemsQuery::default()).await.unwrap();
+    s.items(&ItemsQuery {
+        genres: vec!["Drama".into(), "Comedy".into()],
+        ..ItemsQuery::default()
+    })
+    .await
+    .unwrap();
 
     let requests = mock.received_requests().await.unwrap();
     let pairs = |i: usize| -> Vec<(String, String)> {
@@ -370,6 +376,13 @@ async fn items_query_serializes_parameters() {
             ("enableUserData".to_string(), "true".to_string())
         ]
     );
+    assert!(
+        pairs(2).contains(&("genres".to_string(), "Drama|Comedy".to_string())),
+        "{:?}",
+        pairs(2)
+    );
+    let raw = requests[2].url.query().unwrap();
+    assert!(raw.contains("genres=Drama%7CComedy"), "{raw}");
 }
 
 #[test]

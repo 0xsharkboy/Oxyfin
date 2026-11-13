@@ -172,7 +172,7 @@ pub struct ItemsQuery {
     pub sort_by: Vec<ItemSortBy>,
     /// Sort direction.
     pub sort_order: Option<SortOrder>,
-    /// Only items having all of these genres.
+    /// Only items of these genres, sent pipe delimited.
     pub genres: Vec<String>,
     /// Only played (`true`) or unplayed (`false`) items.
     pub is_played: Option<bool>,
@@ -212,7 +212,7 @@ impl ItemsQuery {
             params.push(("sortOrder", order.as_str().to_owned()));
         }
         if !self.genres.is_empty() {
-            params.push(("genres", join(self.genres.iter().map(String::as_str))));
+            params.push(("genres", self.genres.join("|")));
         }
         if let Some(played) = self.is_played {
             params.push(("isPlayed", played.to_string()));
