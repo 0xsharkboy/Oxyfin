@@ -473,3 +473,36 @@ fn renderer_needs_an_embedded_output() {
     let renderer = VideoRenderer::new(&player, &|_| std::ptr::null(), None);
     assert!(matches!(renderer, Err(PlayerError::Render(_))));
 }
+
+#[test]
+fn player_is_send_and_sync() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<oxyfin_player::Player>();
+}
+
+#[test]
+fn dropping_the_player_from_its_own_callback_does_not_hang() {
+    use std::sync::{Arc, Mutex, mpsc};
+
+    let slot: Arc<Mutex<Option<oxyfin_player::Player>>> = Arc::new(Mutex::new(None));
+    let (done_tx, done_rx) = mpsc::channel();
+    let player = headless({
+        let slot = Arc::clone(&slot);
+        move |event| {
+            if is_file_loaded(&event) {
+                let player = slot.lock().unwrap().take();
+                drop(player);
+                let _ = done_tx.send(());
+            }
+        }
+    });
+    *slot.lock().unwrap() = Some(player);
+    slot.lock()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .load(&sample())
+        .unwrap();
+
+    assert!(done_rx.recv_timeout(TIMEOUT).is_ok());
+}

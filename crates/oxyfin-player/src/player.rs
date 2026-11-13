@@ -44,8 +44,9 @@ impl Player {
     /// `on_event`.
     ///
     /// `on_event` runs on the event thread, so it must return quickly. It must
-    /// not panic, which would stop event delivery, and it must not drop the
-    /// [`Player`], which would deadlock joining that thread.
+    /// not panic, which would stop event delivery. Dropping the [`Player`] from
+    /// it is not supported: the drop then skips joining the event thread, which
+    /// exits on its own once the callback returns.
     pub fn new(
         options: PlayerOptions,
         on_event: impl Fn(PlayerEvent) + Send + 'static,
@@ -299,7 +300,9 @@ impl Drop for Player {
     fn drop(&mut self) {
         // The event thread only exits on mpv's shutdown event.
         let _ = self.mpv.command("quit", &[]);
-        if let Some(event_thread) = self.event_thread.take() {
+        if let Some(event_thread) = self.event_thread.take()
+            && event_thread.thread().id() != thread::current().id()
+        {
             let _ = event_thread.join();
         }
     }
