@@ -97,8 +97,31 @@ let ticks = position.as_nanos() / 100;
 ## Tests
 
 - Unit tests live next to the code they test (`#[cfg(test)] mod tests`).
-- `oxyfin-api` is tested against a mock HTTP server, never against a real Jellyfin instance.
+- `oxyfin-api` is tested against a mock HTTP server in CI. Opt-in tests against a real server are described below.
 - A new feature comes with tests. A bug fix comes with a test that fails without the fix.
+
+### Testing against a real Jellyfin server
+
+`scripts/jellyfin-test-server.sh` starts a disposable Jellyfin server in Docker, with generated media (a movie and a two-season show). It needs Docker, `ffmpeg`, `curl` and `jq`; `nix develop` provides the last three. Pick a version tag (`10.10.7`, `10.11.11` or `12.4`):
+
+```sh
+eval "$(scripts/jellyfin-test-server.sh up 12.4)"   # exports the OXYFIN_TEST_* variables
+scripts/jellyfin-test-server.sh down                # removes the container
+```
+
+The live tests are `#[ignore]`d, so `cargo test --workspace` skips them. There are two tiers:
+
+```sh
+# Read-only: no writes
+cargo test -p oxyfin-api --test live_read -- --ignored
+
+# Writes to the server: disposable Docker server only
+cargo test -p oxyfin-api --test live_write -- --ignored --test-threads=1
+```
+
+With a variable missing, the tests fail and name it instead of passing silently.
+
+`live_write` marks items played, toggles favorites, reports playback progress and signs out. It refuses to run unless `OXYFIN_TEST_DISPOSABLE=1`, which only the script sets. Never set it by hand and never point `live_write` at a personal server: it would alter your watch history and resume positions.
 
 ## Dependencies
 
