@@ -4,6 +4,7 @@ mod client_info;
 mod error;
 mod http;
 mod ids;
+mod images;
 mod items;
 mod json;
 mod models;
@@ -11,11 +12,13 @@ mod quick_connect;
 mod server;
 mod session;
 mod ticks;
+mod user_data;
 mod version;
 
 pub use client_info::ClientInfo;
 pub use error::{Error, Result};
 pub use ids::{ItemId, MediaSourceId, PlaySessionId, UserId};
+pub use images::ImageRequest;
 pub use models::{
     BaseItemDto, BaseItemKind, BaseItemPerson, ImageType, ItemFields, ItemSortBy, ItemsQuery,
     PublicSystemInfo, QueryResult, SortOrder, UserDto, UserItemDataDto,
