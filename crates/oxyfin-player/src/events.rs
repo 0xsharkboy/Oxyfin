@@ -14,6 +14,9 @@ const TIME_POS: &str = "time-pos";
 const PAUSE: &str = "pause";
 const VOLUME: &str = "volume";
 const MUTE: &str = "mute";
+const TRACK_COUNT: &str = "track-list/count";
+const AID: &str = "aid";
+const SID: &str = "sid";
 
 /// Minimum distance between two reported positions.
 const POSITION_STEP: Duration = Duration::from_millis(250);
@@ -64,7 +67,10 @@ pub(crate) fn observe(mpv: &Mpv) -> libmpv2::Result<()> {
     mpv.observe_property(TIME_POS, Format::Double, 0)?;
     mpv.observe_property(PAUSE, Format::Flag, 0)?;
     mpv.observe_property(VOLUME, Format::Double, 0)?;
-    mpv.observe_property(MUTE, Format::Flag, 0)
+    mpv.observe_property(MUTE, Format::Flag, 0)?;
+    mpv.observe_property(TRACK_COUNT, Format::Int64, 0)?;
+    mpv.observe_property(AID, Format::String, 0)?;
+    mpv.observe_property(SID, Format::String, 0)
 }
 
 /// Runs the event loop until mpv shuts down.
@@ -124,6 +130,17 @@ pub(crate) fn run(mpv: &Mpv, shared: &Shared, on_event: &(impl Fn(PlayerEvent) +
                 change: PropertyData::Flag(muted),
                 ..
             }) => on_event(PlayerEvent::Muted(muted)),
+            Ok(Event::PropertyChange {
+                name: TRACK_COUNT | AID | SID,
+                ..
+            }) => {
+                // On a read failure the previous list stays valid, so nothing is sent.
+                if shared.loaded.load(Ordering::SeqCst)
+                    && let Ok(tracks) = tracks::read(mpv)
+                {
+                    on_event(PlayerEvent::Tracks(tracks));
+                }
+            }
             Ok(Event::EndFile(reason)) => {
                 shared.loaded.store(false, Ordering::SeqCst);
                 let stopping = shared.stopping.swap(false, Ordering::SeqCst);
