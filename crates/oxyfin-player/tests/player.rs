@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use oxyfin_player::{
     MediaSource, PlayerError, PlayerEvent, SeekTarget, Track, TrackId, TrackKind, UnloadReason,
 };
-use support::{Events, fixture, headless};
+use support::{Events, HttpServer, fixture, headless};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -423,4 +423,40 @@ fn selecting_without_media_fails() {
         player.add_external_subtitle("x.srt", None, None),
         Err(PlayerError::NoMediaLoaded)
     ));
+}
+
+#[test]
+fn http_headers_reach_the_server() {
+    const AUTHORIZATION: &str = r#"MediaBrowser Client="Oxyfin", Device="Test", DeviceId="abc", Version="0.1.0", Token="secret""#;
+
+    let server = HttpServer::serve(&[
+        ("/video.mkv", fixture("sample.mkv")),
+        ("/sub.srt", fixture("external.srt")),
+    ]);
+    let (events, on_event) = Events::new();
+    let player = headless(on_event);
+
+    player
+        .load(
+            &MediaSource::new(server.url("/video.mkv")).with_header("Authorization", AUTHORIZATION),
+        )
+        .unwrap();
+    events.wait_for(TIMEOUT, is_file_loaded);
+    player
+        .add_external_subtitle(&server.url("/sub.srt"), None, None)
+        .unwrap();
+
+    let requests = server.requests();
+    for path in ["/video.mkv", "/sub.srt"] {
+        let for_path: Vec<_> = requests.iter().filter(|(p, _)| p == path).collect();
+        assert!(!for_path.is_empty(), "no request for {path}: {requests:#?}");
+        for (_, headers) in for_path {
+            let values: Vec<_> = headers
+                .iter()
+                .filter(|(name, _)| name.eq_ignore_ascii_case("authorization"))
+                .map(|(_, value)| value.as_str())
+                .collect();
+            assert_eq!(values, [AUTHORIZATION], "headers for {path}: {headers:#?}");
+        }
+    }
 }
