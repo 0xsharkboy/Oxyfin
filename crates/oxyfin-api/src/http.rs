@@ -54,6 +54,7 @@ impl Http {
 
     /// Absolute URL of `route` with `query` appended in order; no `?` when `query` is empty.
     pub(crate) fn url(&self, route: &str, query: &[(&str, String)]) -> Url {
+        debug_assert!(!route.starts_with('/'), "route must be relative: {route}");
         let mut url = self.base_url.clone();
         if let Ok(mut segments) = url.path_segments_mut() {
             segments.pop_if_empty().extend(route.split('/'));
