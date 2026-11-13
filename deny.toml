@@ -40,3 +40,11 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = []
+
+[[licenses.exceptions]]
+allow = ["LGPL-2.1"]
+crate = "libmpv2"
+
+[[licenses.exceptions]]
+allow = ["LGPL-2.1"]
+crate = "libmpv2-sys"

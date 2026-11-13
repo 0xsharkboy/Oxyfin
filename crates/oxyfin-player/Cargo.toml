@@ -5,6 +5,16 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+default = ["mpv"]
+mpv = ["dep:libmpv2", "dep:raw-window-handle", "dep:glow"]
+
+[dependencies]
+libmpv2 = { version = "=7.0.1", optional = true }
+raw-window-handle = { version = "0.6", optional = true }
+glow = { version = "0.18", optional = true }
+thiserror = "2"
+
 [lints.rust]
 unsafe_code = "deny"
 missing_docs = "warn"
