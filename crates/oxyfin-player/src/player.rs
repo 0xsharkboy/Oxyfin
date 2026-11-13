@@ -7,7 +7,7 @@ use std::thread::{self, JoinHandle};
 use libmpv2::Mpv;
 
 use crate::events::{self, Shared};
-use crate::{MediaSource, PlayerError, PlayerEvent};
+use crate::{MediaSource, PlayerError, PlayerEvent, SeekTarget};
 
 /// Where mpv sends decoded video.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -39,6 +39,10 @@ pub struct Player {
 impl Player {
     /// Creates a player with the given options, sending its events to
     /// `on_event`.
+    ///
+    /// `on_event` runs on the event thread, so it must return quickly. It must
+    /// not panic, which would stop event delivery, and it must not drop the
+    /// [`Player`], which would deadlock joining that thread.
     pub fn new(
         options: PlayerOptions,
         on_event: impl Fn(PlayerEvent) + Send + 'static,
@@ -81,9 +85,6 @@ impl Player {
     /// The outcome is reported through events: [`PlayerEvent::FileLoaded`]
     /// on success, [`PlayerEvent::Unloaded`] with an error otherwise.
     pub fn load(&self, source: &MediaSource) -> Result<(), PlayerError> {
-        if self.shared.active.load(Ordering::SeqCst) {
-            self.shared.replacing.store(true, Ordering::SeqCst);
-        }
         let start = source.start.map_or_else(
             || "none".to_owned(),
             |start| format!("+{}", start.as_secs_f64()),
@@ -99,22 +100,64 @@ impl Player {
             let header = format!("{name}: {value}");
             self.command("change-list", &["http-header-fields", "append", &header])?;
         }
+        self.shared.stopping.store(false, Ordering::SeqCst);
         self.command("loadfile", &[&source.location, "replace"])
     }
 
     /// Stops playback and unloads the current media.
     pub fn stop(&self) -> Result<(), PlayerError> {
+        self.shared.stopping.store(true, Ordering::SeqCst);
         self.command("stop", &[])
     }
 
+    /// Pauses or resumes playback.
+    pub fn set_paused(&self, paused: bool) -> Result<(), PlayerError> {
+        self.set_property("pause", paused)
+    }
+
+    /// Seeks to `target`. Fails with [`PlayerError::NoMediaLoaded`] when no
+    /// media is loaded.
+    pub fn seek(&self, target: SeekTarget) -> Result<(), PlayerError> {
+        self.require_loaded()?;
+        let (secs, mode) = match target {
+            SeekTarget::Absolute(at) => (at.as_secs_f64(), "absolute"),
+            SeekTarget::Forward(by) => (by.as_secs_f64(), "relative+exact"),
+            SeekTarget::Backward(by) => (-by.as_secs_f64(), "relative+exact"),
+        };
+        self.command("seek", &[&format!("{secs:.3}"), mode])
+    }
+
+    /// Sets the volume, clamped to `0.0..=100.0`.
+    pub fn set_volume(&self, volume: f64) -> Result<(), PlayerError> {
+        let volume = if volume.is_nan() {
+            0.0
+        } else {
+            volume.clamp(0.0, 100.0)
+        };
+        self.set_property("volume", volume)
+    }
+
+    /// Mutes or unmutes the audio.
+    pub fn set_muted(&self, muted: bool) -> Result<(), PlayerError> {
+        self.set_property("mute", muted)
+    }
+
     /// Fails with [`PlayerError::NoMediaLoaded`] unless a media is loaded.
-    #[allow(dead_code)]
     pub(crate) fn require_loaded(&self) -> Result<(), PlayerError> {
         if self.shared.loaded.load(Ordering::SeqCst) {
             Ok(())
         } else {
             Err(PlayerError::NoMediaLoaded)
         }
+    }
+
+    fn set_property(&self, name: &str, value: impl libmpv2::SetData) -> Result<(), PlayerError> {
+        self.mpv
+            .set_property(name, value)
+            .map_err(|e| PlayerError::Property {
+                name: name.to_owned(),
+                message: e.to_string(),
+            })
     }
 
     fn command(&self, name: &str, args: &[&str]) -> Result<(), PlayerError> {
