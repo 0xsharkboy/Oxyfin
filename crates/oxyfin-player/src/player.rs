@@ -107,7 +107,11 @@ impl Player {
     /// Stops playback and unloads the current media.
     pub fn stop(&self) -> Result<(), PlayerError> {
         self.shared.stopping.store(true, Ordering::SeqCst);
-        self.command("stop", &[])
+        let result = self.command("stop", &[]);
+        if result.is_err() {
+            self.shared.stopping.store(false, Ordering::SeqCst);
+        }
+        result
     }
 
     /// Pauses or resumes playback.
