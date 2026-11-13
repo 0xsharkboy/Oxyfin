@@ -17,7 +17,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            cargo_flags: ""
+          # libmpv is not provided on these systems.
+          - os: windows-latest
+            cargo_flags: "--no-default-features"
+          - os: macos-latest
+            cargo_flags: "--no-default-features"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -25,9 +32,11 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libmpv-dev
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      - run: cargo clippy --workspace --all-targets ${{ matrix.cargo_flags }} -- -D warnings
+      - run: cargo test --workspace ${{ matrix.cargo_flags }}
 
   hygiene:
     name: Repository hygiene
