@@ -105,7 +105,7 @@ pub fn server(mock: &MockServer) -> Server {
 
 /// A session restored on `mock` with [`TEST_TOKEN`] and [`TEST_USER_ID`].
 pub fn session(mock: &MockServer) -> Session {
-    server(mock).restore_session(TEST_TOKEN, UserId::from(TEST_USER_ID))
+    server(mock).restore_session(TEST_TOKEN, UserId::from(TEST_USER_ID), None)
 }
 
 /// Matcher for the exact `Authorization` header of [`expected_authorization`].

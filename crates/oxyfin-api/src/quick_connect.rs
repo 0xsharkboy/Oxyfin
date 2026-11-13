@@ -79,6 +79,6 @@ impl Server {
             .http()
             .post_json(None, "Users/AuthenticateWithQuickConnect", &[], &body)
             .await?;
-        Ok(self.restore_session(result.access_token, result.user.id))
+        Ok(self.restore_session(result.access_token, result.user.id, result.server_id))
     }
 }

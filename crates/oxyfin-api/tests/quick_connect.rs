@@ -114,6 +114,11 @@ async fn authenticate_posts_secret_and_returns_session() {
             captured["User"]["Id"].as_str().unwrap(),
             "{label}"
         );
+        assert_eq!(
+            session.server_id(),
+            captured["ServerId"].as_str(),
+            "{label}"
+        );
     }
 }
 

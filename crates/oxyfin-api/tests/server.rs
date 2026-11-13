@@ -102,6 +102,11 @@ async fn authenticate_by_name_posts_credentials() {
         assert_eq!(session.token(), token, "{label}");
         assert_eq!(session.user_id().as_str(), user_id, "{label}");
         assert_eq!(
+            session.server_id(),
+            captured["ServerId"].as_str(),
+            "{label}"
+        );
+        assert_eq!(
             session.server().base_url().as_str(),
             format!("{}/", mock.uri())
         );
@@ -153,9 +158,10 @@ async fn logout_posts_sessions_logout() {
 #[test]
 fn restore_session_keeps_token_and_user() {
     let server = Server::new("http://127.0.0.1:8096", client_info()).unwrap();
-    let session = server.restore_session(TEST_TOKEN, TEST_USER_ID.into());
+    let session = server.restore_session(TEST_TOKEN, TEST_USER_ID.into(), Some("srv".into()));
     assert_eq!(session.token(), TEST_TOKEN);
     assert_eq!(session.user_id().as_str(), TEST_USER_ID);
+    assert_eq!(session.server_id(), Some("srv"));
     assert_eq!(session.clone().token(), TEST_TOKEN);
 }
 

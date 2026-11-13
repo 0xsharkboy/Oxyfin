@@ -81,12 +81,17 @@ impl Server {
             .http
             .post_json(None, "Users/AuthenticateByName", &[], &body)
             .await?;
-        Ok(self.restore_session(result.access_token, result.user.id))
+        Ok(self.restore_session(result.access_token, result.user.id, result.server_id))
     }
 
-    /// Resumes a session from a stored token, without any request.
-    pub fn restore_session(&self, token: impl Into<String>, user_id: UserId) -> Session {
-        Session::new(self.clone(), token.into(), user_id)
+    /// Resumes a session from a stored token and server id, without any request.
+    pub fn restore_session(
+        &self,
+        token: impl Into<String>,
+        user_id: UserId,
+        server_id: Option<String>,
+    ) -> Session {
+        Session::new(self.clone(), token.into(), user_id, server_id)
     }
 }
 
