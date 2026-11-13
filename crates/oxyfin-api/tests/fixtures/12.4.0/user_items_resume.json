@@ -2,7 +2,7 @@
   "Items": [
     {
       "Name": "Test Movie (2020)",
-      "ServerId": "16aae0f8ee22491aad6bfaa1c0d77cee",
+      "ServerId": "87fcca6823684ae692e5c60378bf931d",
       "Id": "76282b1c408f374beeee50519e9157a4",
       "HasSubtitles": true,
       "Container": "mkv",
@@ -16,19 +16,19 @@
         "PlaybackPositionTicks": 30000000,
         "PlayCount": 1,
         "IsFavorite": true,
-        "LastPlayedDate": "2026-11-13T00:29:56.636639Z",
+        "LastPlayedDate": "2026-11-13T00:37:06.8943956Z",
         "Played": false,
         "Key": "76282b1c-408f-374b-eeee-50519e9157a4",
         "ItemId": "76282b1c408f374beeee50519e9157a4"
       },
       "VideoType": "VideoFile",
       "ImageTags": {
-        "Primary": "79b7aefdafe37535d0bc4a3c3d3206e2"
+        "Primary": "30340af04bf3a0495109fff75a0b7cd0"
       },
       "BackdropImageTags": [],
       "ImageBlurHashes": {
         "Primary": {
-          "79b7aefdafe37535d0bc4a3c3d3206e2": "duLETkx^w4yMs:V~OqXeayManhMBofawnjaPoLVsS|Vz"
+          "30340af04bf3a0495109fff75a0b7cd0": "duLETkx^w4yMs:V~OqXeayManhMBofawnjaPoLVsS|Vz"
         }
       },
       "LocationType": "FileSystem",
@@ -36,7 +36,7 @@
     },
     {
       "Name": "Season 1",
-      "ServerId": "16aae0f8ee22491aad6bfaa1c0d77cee",
+      "ServerId": "87fcca6823684ae692e5c60378bf931d",
       "Id": "0407e3d02b7d70abe4a2d37241b02fea",
       "ChannelId": null,
       "IndexNumber": 1,
@@ -62,7 +62,7 @@
     },
     {
       "Name": "Test Show",
-      "ServerId": "16aae0f8ee22491aad6bfaa1c0d77cee",
+      "ServerId": "87fcca6823684ae692e5c60378bf931d",
       "Id": "9ea196e7ccc3ae17d2c3f75c3ab34406",
       "ChannelId": null,
       "ProductionYear": 2021,

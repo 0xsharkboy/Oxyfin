@@ -2,10 +2,10 @@
   "Items": [
     {
       "Name": "Movies",
-      "ServerId": "15325ee9b8e047fcac0f390d0b2715ac",
+      "ServerId": "60706ee0899b4ddc9b0bb185b68c7f2d",
       "Id": "f137a2dd21bbc1b99aa5c0f6bf02a805",
-      "Etag": "90fac48dd662971c60b55fb4400d68f8",
-      "DateCreated": "2026-11-13T00:32:03.9172398Z",
+      "Etag": "9980bbb6d42cc53643abd0849b631117",
+      "DateCreated": "2026-11-13T00:36:28.7920455Z",
       "DateLastMediaAdded": "0001-01-01T00:00:00.0000000Z",
       "CanDelete": false,
       "CanDownload": false,
@@ -34,7 +34,7 @@
         "Key": "f137a2dd-21bb-c1b9-9aa5-c0f6bf02a805",
         "ItemId": "f137a2dd21bbc1b99aa5c0f6bf02a805"
       },
-      "ChildCount": 7,
+      "ChildCount": 8,
       "SpecialFeatureCount": 0,
       "DisplayPreferencesId": "f137a2dd21bbc1b99aa5c0f6bf02a805",
       "Tags": [],
@@ -49,10 +49,11 @@
     },
     {
       "Name": "Shows",
-      "ServerId": "15325ee9b8e047fcac0f390d0b2715ac",
+      "ServerId": "60706ee0899b4ddc9b0bb185b68c7f2d",
       "Id": "a656b907eb3a73532e40e44b968d0225",
-      "Etag": "4508943a6d2cb4498555835a22ad6d7f",
-      "DateCreated": "2026-11-13T00:32:04.0861847Z",
+      "Etag": "12f65436447e0a8e3489d4b3c3af0985",
+      "DateCreated": "2026-11-13T00:36:28.9591254Z",
+      "DateLastMediaAdded": "0001-01-01T00:00:00.0000000Z",
       "CanDelete": false,
       "CanDownload": false,
       "SortName": "shows",
@@ -80,7 +81,7 @@
         "Key": "a656b907-eb3a-7353-2e40-e44b968d0225",
         "ItemId": "a656b907eb3a73532e40e44b968d0225"
       },
-      "ChildCount": 5,
+      "ChildCount": 9,
       "SpecialFeatureCount": 0,
       "DisplayPreferencesId": "a656b907eb3a73532e40e44b968d0225",
       "Tags": [],

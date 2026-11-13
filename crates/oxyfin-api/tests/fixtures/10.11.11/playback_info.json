@@ -9,7 +9,7 @@
       "Size": 199838,
       "Name": "Test Movie (2020)",
       "IsRemote": false,
-      "ETag": "0ce558e820737eabd76975095c879b39",
+      "ETag": "3f15a372aba5803f78588367f8653c42",
       "RunTimeTicks": 100230000,
       "ReadAtNativeFramerate": false,
       "IgnoreDts": false,
@@ -152,5 +152,5 @@
       "HasSegments": false
     }
   ],
-  "PlaySessionId": "fedc15861942417e8e7deccbde109739"
+  "PlaySessionId": "9a43e684bd4b4d5d9e425327eadd6749"
 }
