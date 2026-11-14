@@ -93,8 +93,8 @@ pub(crate) fn run(mpv: &Mpv, shared: &Shared, on_event: &(impl Fn(PlayerEvent) +
             }
             Ok(Event::Seek) => on_event(PlayerEvent::Seeking),
             Ok(Event::PlaybackRestart) => {
-                on_event(PlayerEvent::Seeked);
                 report_position_now(mpv, &mut throttle, on_event);
+                on_event(PlayerEvent::Seeked);
             }
             Ok(Event::PropertyChange {
                 name: EOF_REACHED,
