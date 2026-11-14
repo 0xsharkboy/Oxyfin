@@ -91,6 +91,8 @@ struct Trimmer {
     requests: AtomicU64,
     /// Bytes on disk: measured by each pass, raised by each write in between.
     total: AtomicU64,
+    /// A pass has completed.
+    ran: AtomicBool,
     pass: tokio::sync::Mutex<()>,
 }
 
@@ -119,6 +121,14 @@ impl Trimmer {
         });
     }
 
+    /// Requests the first pass when none has run or is running, as when the
+    /// cache was built outside a runtime.
+    fn ensure_ran(self: &Arc<Self>) {
+        if !self.ran.load(Ordering::SeqCst) && !self.running.load(Ordering::SeqCst) {
+            self.request();
+        }
+    }
+
     /// Counts a write of `len` bytes; requests a trim once over the budget.
     fn wrote(self: &Arc<Self>, len: u64) {
         let total = self
@@ -133,6 +143,7 @@ impl Trimmer {
     async fn run(&self) {
         let _guard = self.pass.lock().await;
         let _ = self.trim().await;
+        self.ran.store(true, Ordering::SeqCst);
     }
 
     async fn trim(&self) -> std::io::Result<()> {
@@ -207,7 +218,8 @@ pub struct ImageCache {
 impl ImageCache {
     /// A cache storing files under `paths.cache_dir`, within `budgets`.
     ///
-    /// Starts a background trim of the disk cache when called inside a Tokio runtime.
+    /// Starts a background trim of the disk cache when called inside a Tokio
+    /// runtime, and otherwise on the first [`ImageCache::get`].
     pub fn new(session: Session, paths: &Paths, budgets: CacheBudgets) -> Self {
         let dir = paths.cache_dir.join("images");
         let trimmer = Arc::new(Trimmer {
@@ -217,6 +229,7 @@ impl ImageCache {
             pending: AtomicBool::new(false),
             requests: AtomicU64::new(0),
             total: AtomicU64::new(0),
+            ran: AtomicBool::new(false),
             pass: tokio::sync::Mutex::new(()),
         });
         trimmer.request();
@@ -243,6 +256,7 @@ impl ImageCache {
 
     /// Returns the bytes of `image` scaled to fit `size`, from memory, disk or the server.
     pub async fn get(&self, image: &ImageRef, size: ImageSize) -> Result<Arc<[u8]>> {
+        self.trimmer.ensure_ran();
         let name = file_name(image, size);
         if let Some(bytes) = self.lock().get(&name) {
             return Ok(bytes);
