@@ -73,7 +73,7 @@ The hooks in `.githooks/` run the fast checks locally. CI runs the same checks, 
 - `rustfmt` formatting and zero `clippy` warnings.
 - No `unwrap()` or `expect()` outside tests.
 - Libraries (`oxyfin-api`, `oxyfin-player`, `oxyfin-core`) return typed errors built with `thiserror`. Only the `oxyfin` binary uses `anyhow`.
-- Logging goes through `tracing`. No `println!` outside the binary's entry point.
+- Logging goes through the `log` facade. No `println!` outside the binary's entry point.
 - `unsafe` is only allowed in `oxyfin-player`, around libmpv. Every `unsafe` block has a `// SAFETY:` comment explaining why it is sound.
 - Prototypes under `spikes/` are exempt from the `unsafe`, `println!` and test rules.
 - Every user-facing string goes through Slint translations (`@tr(...)`). After changing one, regenerate the catalog with `find crates/oxyfin/ui -name "*.slint" | sort | xargs slint-tr-extractor --package-name oxyfin -o crates/oxyfin/po/oxyfin.pot` (the extractor is in the Nix dev shell).
