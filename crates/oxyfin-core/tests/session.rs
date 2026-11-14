@@ -3,6 +3,7 @@
 mod common;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use common::{FailingStore, fixture, manager, memory_vault};
 use oxyfin_core::{
@@ -175,6 +176,92 @@ async fn sign_out_clears_even_if_logout_fails() {
     assert!(manager.restore().await.unwrap().is_none());
     assert_token_gone(&primary, &fallback, &signed);
 }
+
+#[tokio::test]
+async fn sign_out_forgets_before_a_hanging_logout() {
+    let mock = MockServer::start().await;
+    mount_public_info(&mock).await;
+    mount_sign_in(&mock).await;
+    Mock::given(method("POST"))
+        .and(path("/Sessions/Logout"))
+        .respond_with(ResponseTemplate::new(500).set_delay(Duration::from_secs(30)))
+        .mount(&mock)
+        .await;
+    let dir = TempDir::new().unwrap();
+    let primary = Arc::new(MemoryStore::default());
+    let fallback = Arc::new(MemoryStore::default());
+    let manager = manager(
+        &mock,
+        &dir,
+        TokenVault::new(primary.clone(), fallback.clone()),
+    );
+    let handle = manager.connect(&mock.uri()).await.unwrap();
+    let signed = manager.sign_in(&handle, "oxyfin", "pw").await.unwrap();
+    let pending =
+        tokio::time::timeout(Duration::from_secs(1), manager.sign_out(&signed.session)).await;
+    assert!(pending.is_err(), "the logout should still be pending");
+    assert!(manager.restore().await.unwrap().is_none());
+    assert_token_gone(&primary, &fallback, &signed);
+}
+
+async fn sign_in_as(
+    mock: &MockServer,
+    manager: &SessionManager,
+    user_id: &str,
+    token: &str,
+) -> SignedIn {
+    let mut body = fixture("authenticate_by_name");
+    body["User"]["Id"] = json!(user_id);
+    body["AccessToken"] = json!(token);
+    mock.reset().await;
+    mount_public_info(mock).await;
+    Mock::given(method("POST"))
+        .and(path("/Users/AuthenticateByName"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .mount(mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/Users/Me"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("users_me")))
+        .mount(mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/Sessions/Logout"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(mock)
+        .await;
+    let handle = manager
+        .connect(&mock.uri())
+        .await
+        .unwrap_or_else(|err| panic!("cannot connect: {err}"));
+    manager
+        .sign_in(&handle, "oxyfin", "pw")
+        .await
+        .unwrap_or_else(|err| panic!("cannot sign in as {user_id}: {err}"))
+}
+
+#[tokio::test]
+async fn late_sign_out_keeps_a_newer_session() {
+    let mock = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let primary = Arc::new(MemoryStore::default());
+    let fallback = Arc::new(MemoryStore::default());
+    let manager = manager(&mock, &dir, TokenVault::new(primary.clone(), fallback));
+    let first = sign_in_as(&mock, &manager, ACCOUNT_A, "token-a").await;
+
+    for (user_id, token) in [(ACCOUNT_B, "token-b"), (ACCOUNT_A, "token-c")] {
+        let newer = sign_in_as(&mock, &manager, user_id, token).await;
+        manager.sign_out(&first.session).await.unwrap();
+        let restored = manager.restore().await.unwrap().unwrap();
+        assert_eq!(restored.session.user_id(), newer.session.user_id());
+        assert_eq!(restored.session.token(), token);
+        let account = account_key(&newer.server_url, user_id);
+        assert_eq!(primary.get(&account).unwrap().as_deref(), Some(token));
+    }
+}
+
+const ACCOUNT_A: &str = "0123456789abcdef0123456789abcdef";
+const ACCOUNT_B: &str = "ffffffffffffffffffffffffffffffff";
 
 #[tokio::test]
 async fn file_fallback_warns_once() {

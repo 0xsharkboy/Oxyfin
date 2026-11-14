@@ -230,10 +230,39 @@ impl SessionManager {
         self.update(|config| config.session = None)
     }
 
-    /// Ends the session on the server, then forgets it locally even if the server call fails.
+    /// Forgets `session` locally, then ends it on the server, ignoring any server error.
+    ///
+    /// Only the account of `session` is forgotten, and only while it still holds
+    /// the token of `session`, so a later sign-in survives a late sign-out.
     pub async fn sign_out(&self, session: &Session) -> Result<()> {
+        let forgotten = self.forget(session).await;
         let _ = session.logout().await;
-        self.expire().await
+        forgotten
+    }
+
+    async fn forget(&self, session: &Session) -> Result<()> {
+        let server_url = session.server().base_url().to_string();
+        let user_id = session.user_id().to_string();
+        let account = account_key(&server_url, &user_id);
+        let token = session.token().to_owned();
+        let cleared = self
+            .vault_call(move |vault| match vault.load(&account) {
+                Ok(Some((stored, _))) if stored != token => Ok(false),
+                _ => vault.clear(&account).map(|()| true),
+            })
+            .await?;
+        if !cleared {
+            return Ok(());
+        }
+        self.update(|config| {
+            if config
+                .session
+                .as_ref()
+                .is_some_and(|saved| saved.server_url == server_url && saved.user_id == user_id)
+            {
+                config.session = None;
+            }
+        })
     }
 
     /// Records that the user has seen the plain-file token warning.
