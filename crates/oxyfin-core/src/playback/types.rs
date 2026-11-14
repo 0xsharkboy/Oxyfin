@@ -125,9 +125,11 @@ pub enum PlaybackEvent {
         audio: Vec<AudioOption>,
         /// Subtitle tracks.
         subtitles: Vec<SubtitleOption>,
-        /// Whether a previous item exists.
+        /// Whether the previous button does something: it plays the previous
+        /// episode, or restarts a movie or a first episode. Always true.
         has_previous: bool,
-        /// Whether a next item exists.
+        /// Whether a next episode exists. False for a movie, the last
+        /// episode, or when the episode list could not be fetched.
         has_next: bool,
     },
     /// The position changed.
@@ -151,7 +153,9 @@ pub enum PlaybackEvent {
         /// Subtitle tracks.
         subtitles: Vec<SubtitleOption>,
     },
-    /// The item played to its end.
+    /// The item played to its end: the last position was within 10 s of the
+    /// duration or past 95 % of it, or the duration is unknown. An earlier
+    /// end is reported as [`PlaybackEvent::Stopped`].
     Ended,
     /// The next episode starts in `remaining` seconds.
     NextUpCountdown {

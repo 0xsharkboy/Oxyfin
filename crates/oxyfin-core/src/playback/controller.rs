@@ -239,7 +239,8 @@ impl PlaybackController {
         }
     }
 
-    /// Seeks; a backward seek cancels the next episode countdown.
+    /// Seeks. A backward seek cancels the next episode countdown, and after a
+    /// real end it resumes playback, so the server session starts again.
     fn seek(&mut self, target: SeekTarget) {
         let backward = match target {
             SeekTarget::Backward(_) => true,
@@ -252,10 +253,17 @@ impl PlaybackController {
         if backward {
             self.cancel_countdown();
         }
-        if self.call(self.player.seek(target))
-            && let Some(current) = self.current.as_mut()
-        {
-            current.seek_pending = true;
+        if !self.call(self.player.seek(target)) {
+            return;
+        }
+        let Some(current) = self.current.as_mut() else {
+            return;
+        };
+        current.seek_pending = true;
+        if backward && current.ended {
+            current.ended = false;
+            self.report(ReportKind::Start);
+            self.schedule_progress();
         }
     }
 
@@ -364,17 +372,10 @@ impl PlaybackController {
                 match catalog.all_episodes(&episode.series_id).await {
                     Ok(list) => {
                         let (previous, next) = neighbours(&list, &item);
-                        Siblings {
-                            is_episode: true,
-                            previous,
-                            next,
-                        }
+                        Siblings { previous, next }
                     }
                     Err(CoreError::SessionExpired) => return self.expire(),
-                    Err(_) => Siblings {
-                        is_episode: true,
-                        ..Siblings::default()
-                    },
+                    Err(_) => Siblings::default(),
                 }
             }
         };
@@ -569,15 +570,12 @@ impl PlaybackController {
         current.loaded = true;
         let duration = duration.or_else(|| current.source.run_time_ticks.map(Ticks::to_duration));
         current.duration = duration;
-        let siblings = &current.siblings;
-        // Previous restarts a movie, so it is always offered; an episode needs a predecessor.
-        let has_previous = !siblings.is_episode || siblings.previous.is_some();
-        let has_next = siblings.next.is_some();
+        let has_next = current.siblings.next.is_some();
         self.emit(PlaybackEvent::Ready {
             duration,
             audio,
             subtitles,
-            has_previous,
+            has_previous: true,
             has_next,
         });
         self.schedule_progress();

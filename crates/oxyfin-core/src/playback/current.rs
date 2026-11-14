@@ -17,8 +17,6 @@ const END_FRACTION: f64 = 0.95;
 /// The items around the current one.
 #[derive(Default)]
 pub(super) struct Siblings {
-    /// Whether the item is an episode, which has a list of siblings.
-    pub(super) is_episode: bool,
     pub(super) previous: Option<Episode>,
     pub(super) next: Option<Episode>,
 }

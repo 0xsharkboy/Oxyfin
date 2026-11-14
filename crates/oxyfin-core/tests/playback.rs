@@ -1237,7 +1237,7 @@ async fn previous_and_next_episode() {
 async fn previous_on_first_episode_restarts() {
     let mut h = harness(episode_timings(Duration::from_secs(3600))).await;
     let ready = h.start_item(EPISODES[0], TEN_MINUTES).await;
-    assert_eq!(neighbours_of(&ready), (false, true));
+    assert_eq!(neighbours_of(&ready), (true, true));
     h.handle.send(PlaybackCommand::Previous);
     h.player
         .wait_call(|c| *c == Call::Seek(SeekTarget::Absolute(Duration::ZERO)))
@@ -1346,4 +1346,134 @@ async fn switching_items_reports_stop_first() {
     assert_eq!(reports[1].1["ItemId"], json!(EPISODES[1]));
     assert_eq!(reports[1].1["PositionTicks"], json!(420_000_000));
     assert_eq!(reports[2].1["ItemId"], json!(EPISODES[2]));
+}
+
+/// Ends E2 for real and waits for the countdown and the stop report.
+async fn end_episode_two(h: &mut Harness) {
+    h.start_item(EPISODES[1], TEN_MINUTES).await;
+    h.end_at(Duration::from_secs(599));
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::NextUpCountdown { .. })
+    })
+    .await;
+    wait_requests(&h.mock, STOPPED, 1).await;
+}
+
+/// Seeks back 30 s from the end as the user would, through the real event order.
+async fn seek_back_from_end(h: &mut Harness) {
+    h.handle.send(PlaybackCommand::Seek(SeekTarget::Backward(
+        Duration::from_secs(30),
+    )));
+    wait_event(&mut h.events, |e| *e == PlaybackEvent::NextUpCancelled).await;
+    h.sink.send(PlayerEvent::Seeking);
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(569)));
+    h.sink.send(PlayerEvent::Seeked);
+    wait_event(&mut h.events, |e| *e == PlaybackEvent::Seeked).await;
+}
+
+fn session_reports(requests: Vec<wiremock::Request>) -> Vec<(String, Value)> {
+    requests
+        .into_iter()
+        .filter(|r| r.url.path() == START || r.url.path() == STOPPED)
+        .map(|r| {
+            (
+                r.url.path().to_owned(),
+                serde_json::from_slice(&r.body).unwrap_or(Value::Null),
+            )
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn seek_back_from_the_end_reports_again() {
+    let mut h = harness(episode_timings(Duration::from_secs(3600))).await;
+    end_episode_two(&mut h).await;
+    seek_back_from_end(&mut h).await;
+    wait_requests(&h.mock, START, 2).await;
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(580)));
+    wait_event(&mut h.events, |e| {
+        *e == PlaybackEvent::Position(Duration::from_secs(580))
+    })
+    .await;
+    h.handle.send(PlaybackCommand::Stop);
+    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Stopped)).await;
+    wait_requests(&h.mock, STOPPED, 2).await;
+    let reports = session_reports(h.mock.received_requests().await.unwrap_or_default());
+    let routes: Vec<&str> = reports.iter().map(|(route, _)| route.as_str()).collect();
+    assert_eq!(routes, vec![START, STOPPED, START, STOPPED]);
+    assert_eq!(reports[1].1["PositionTicks"], json!(5_990_000_000_i64));
+    assert_eq!(reports[2].1["PlaySessionId"], json!(PLAY_SESSION_ID));
+    assert_eq!(reports[3].1["PositionTicks"], json!(5_800_000_000_i64));
+}
+
+#[tokio::test]
+async fn seek_back_from_the_end_resumes_progress_reports() {
+    let mut h = harness(PlaybackTimings {
+        progress_interval: Duration::from_millis(20),
+        ..episode_timings(Duration::from_secs(3600))
+    })
+    .await;
+    end_episode_two(&mut h).await;
+    let before = bodies(&h.mock, PROGRESS).await.len();
+    seek_back_from_end(&mut h).await;
+    wait_requests(&h.mock, PROGRESS, before + 3).await;
+}
+
+#[tokio::test]
+async fn second_real_end_starts_the_countdown_again() {
+    let mut h = harness(episode_timings(Duration::from_secs(3600))).await;
+    end_episode_two(&mut h).await;
+    seek_back_from_end(&mut h).await;
+    h.end_at(Duration::from_secs(599));
+    let seen = events_until(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::NextUpCountdown { .. })
+    })
+    .await;
+    assert!(seen.contains(&PlaybackEvent::Ended), "{seen:?}");
+    assert_eq!(countdowns(&seen), vec![(EPISODES[2].to_owned(), 10)]);
+    wait_requests(&h.mock, STOPPED, 2).await;
+}
+
+#[tokio::test]
+async fn previous_restarts_a_finished_movie() {
+    let mut h = harness(episode_timings(Duration::from_secs(3600))).await;
+    h.start().await;
+    h.end_at(Duration::from_millis(10_000));
+    wait_event(&mut h.events, |e| *e == PlaybackEvent::Ended).await;
+    h.handle.send(PlaybackCommand::Previous);
+    h.player
+        .wait_call(|c| *c == Call::Seek(SeekTarget::Absolute(Duration::ZERO)))
+        .await;
+    wait_requests(&h.mock, START, 2).await;
+}
+
+#[tokio::test]
+async fn play_during_the_countdown_cancels_it() {
+    let mut h = harness(episode_timings(Duration::from_secs(3600))).await;
+    end_episode_two(&mut h).await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(EPISODES[0]),
+        mode: PlayMode::Auto,
+    });
+    let seen = events_until(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::Loading { .. })
+    })
+    .await;
+    assert!(seen.contains(&PlaybackEvent::NextUpCancelled), "{seen:?}");
+    let PlaybackEvent::Loading { item, .. } = &seen[seen.len() - 1] else {
+        unreachable!();
+    };
+    assert_eq!(*item, ItemId::from(EPISODES[0]));
+    wait_loads(&h, 2).await;
+    assert!(h.loaded_ids()[1].contains(EPISODES[0]));
+}
+
+#[tokio::test]
+async fn absolute_seek_back_cancels_the_countdown() {
+    let mut h = harness(episode_timings(Duration::from_secs(3600))).await;
+    end_episode_two(&mut h).await;
+    h.handle.send(PlaybackCommand::Seek(SeekTarget::Absolute(
+        Duration::from_secs(100),
+    )));
+    wait_event(&mut h.events, |e| *e == PlaybackEvent::NextUpCancelled).await;
 }
