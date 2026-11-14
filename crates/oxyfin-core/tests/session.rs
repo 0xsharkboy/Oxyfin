@@ -322,16 +322,21 @@ mod quick_connect {
             .await;
         let dir = TempDir::new().unwrap();
         let manager = manager(&mock, &dir, memory_vault())
-            .with_quick_connect_interval(Duration::from_millis(200));
+            .with_quick_connect_interval(Duration::from_secs(1));
         let handle = manager.connect(&mock.uri()).await.unwrap();
         let flow = manager.start_quick_connect(&handle).await.unwrap();
-        let waited = tokio::time::timeout(
-            Duration::from_millis(100),
-            manager.finish_quick_connect(&handle, flow),
-        )
-        .await;
-        assert!(waited.is_err());
-        tokio::time::sleep(Duration::from_millis(700)).await;
+        let first_poll_seen = async {
+            while poll_count(&mock).await < 1 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        };
+        tokio::select! {
+            _ = manager.finish_quick_connect(&handle, flow) => panic!("the flow ended"),
+            seen = tokio::time::timeout(Duration::from_secs(10), first_poll_seen) => {
+                assert!(seen.is_ok(), "no poll reached the server");
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(3500)).await;
         assert_eq!(poll_count(&mock).await, 1);
     }
 }
