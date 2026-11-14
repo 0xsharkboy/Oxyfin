@@ -7,6 +7,21 @@ use oxyfin_player::{Track, TrackId, TrackKind};
 
 use super::tracks::TrackMap;
 use super::{AudioOption, SubtitleOption};
+use crate::models::Episode;
+
+/// A last position at most this far from the duration counts as the real end.
+const END_MARGIN: Duration = Duration::from_secs(10);
+/// A last position past this fraction of the duration counts as the real end.
+const END_FRACTION: f64 = 0.95;
+
+/// The items around the current one.
+#[derive(Default)]
+pub(super) struct Siblings {
+    /// Whether the item is an episode, which has a list of siblings.
+    pub(super) is_episode: bool,
+    pub(super) previous: Option<Episode>,
+    pub(super) next: Option<Episode>,
+}
 
 /// State of the item being played.
 pub(super) struct Current {
@@ -23,6 +38,10 @@ pub(super) struct Current {
     pub(super) position: Duration,
     pub(super) paused: bool,
     pub(super) seek_pending: bool,
+    pub(super) duration: Option<Duration>,
+    /// The media reached its real end; reset by each load since a load makes a new `Current`.
+    pub(super) ended: bool,
+    pub(super) siblings: Siblings,
 }
 
 impl Current {
@@ -31,6 +50,7 @@ impl Current {
         source: MediaSourceInfo,
         play_session_id: Option<PlaySessionId>,
         position: Duration,
+        siblings: Siblings,
     ) -> Self {
         Self {
             item,
@@ -46,7 +66,25 @@ impl Current {
             position,
             paused: false,
             seek_pending: false,
+            duration: None,
+            ended: false,
+            siblings,
         }
+    }
+
+    /// Whether the server session is open: started and not ended.
+    pub(super) fn reporting(&self) -> bool {
+        self.loaded && !self.ended
+    }
+
+    /// Whether the last position is close enough to the duration to count as
+    /// the end of the item; true when the duration is unknown.
+    pub(super) fn at_real_end(&self) -> bool {
+        let Some(duration) = self.duration else {
+            return true;
+        };
+        self.position + END_MARGIN >= duration
+            || self.position.as_secs_f64() >= duration.as_secs_f64() * END_FRACTION
     }
 
     pub(super) fn report(&self) -> PlaybackReport {
