@@ -1023,6 +1023,8 @@ async fn session_expired_is_emitted_once() {
         item: ItemId::from(OTHER_ID),
         mode: PlayMode::Auto,
     });
+    // A stop cancels the load, so it waits for the item request to go out.
+    wait_requests(&h.mock, &format!("/Items/{OTHER_ID}"), 1).await;
     h.handle.send(PlaybackCommand::Stop);
     let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::Stopped)).await;
     assert!(
@@ -1776,4 +1778,138 @@ async fn no_load_after_shutdown() {
     assert!(h.loads().is_empty(), "{:?}", h.loads());
     let info = bodies(&h.mock, &format!("/Items/{OTHER_ID}/PlaybackInfo")).await;
     assert!(info.is_empty());
+}
+
+/// Serves `fixture` on `route` after `delay`, ahead of the default routes.
+async fn mount_slow(
+    mock: &MockServer,
+    verb: &str,
+    route: &str,
+    fixture_name: &str,
+    delay: Duration,
+) {
+    Mock::given(method(verb))
+        .and(path(route))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(fixture(fixture_name))
+                .set_delay(delay),
+        )
+        .with_priority(1)
+        .mount(mock)
+        .await;
+}
+
+#[tokio::test]
+async fn pause_is_handled_while_play_fetches() {
+    let mock = MockServer::start().await;
+    let route = format!("/Items/{MOVIE_ID}");
+    mount_slow(&mock, "GET", &route, "item_movie", Duration::from_secs(5)).await;
+    let h = harness_on(mock, quiet()).await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(MOVIE_ID),
+        mode: PlayMode::Auto,
+    });
+    wait_requests(&h.mock, &route, 1).await;
+    let sent = tokio::time::Instant::now();
+    h.handle.send(PlaybackCommand::SetPaused(true));
+    h.player.wait_call(|c| *c == Call::SetPaused(true)).await;
+    assert!(
+        sent.elapsed() < Duration::from_millis(500),
+        "{:?}",
+        sent.elapsed()
+    );
+}
+
+#[tokio::test]
+async fn stop_during_fetch_cancels_the_load() {
+    let mock = MockServer::start().await;
+    let route = format!("/Items/{MOVIE_ID}");
+    mount_slow(
+        &mock,
+        "GET",
+        &route,
+        "item_movie",
+        Duration::from_millis(500),
+    )
+    .await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(MOVIE_ID),
+        mode: PlayMode::Auto,
+    });
+    wait_requests(&h.mock, &route, 1).await;
+    h.handle.send(PlaybackCommand::Stop);
+    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Stopped)).await;
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert!(h.loads().is_empty(), "{:?}", h.loads());
+    for route in [START, PROGRESS, STOPPED] {
+        assert!(bodies(&h.mock, route).await.is_empty(), "{route}");
+    }
+    let info = bodies(&h.mock, &format!("/Items/{MOVIE_ID}/PlaybackInfo")).await;
+    assert!(info.is_empty());
+}
+
+#[tokio::test]
+async fn second_play_supersedes_the_first() {
+    let mock = MockServer::start().await;
+    let route = format!("/Items/{MOVIE_ID}");
+    mount_slow(
+        &mock,
+        "GET",
+        &route,
+        "item_movie",
+        Duration::from_millis(500),
+    )
+    .await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(MOVIE_ID),
+        mode: PlayMode::Auto,
+    });
+    wait_requests(&h.mock, &route, 1).await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(OTHER_ID),
+        mode: PlayMode::FromStart,
+    });
+    wait_loads(&h, 1).await;
+    // Past the moment the first item's response arrives.
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+    let loaded = h.loaded_ids();
+    assert_eq!(loaded.len(), 1, "{loaded:?}");
+    assert!(
+        loaded[0].contains(&format!("/Videos/{OTHER_ID}/")),
+        "{loaded:?}"
+    );
+    let ready = h.file_loaded().await;
+    assert_other_started_single(&h, &ready).await;
+    let mut loading = Vec::new();
+    while let Ok(event) = h.events.try_recv() {
+        loading.push(event);
+    }
+    assert!(
+        !loading.iter().any(
+            |e| matches!(e, PlaybackEvent::Loading { item, .. } if *item == ItemId::from(MOVIE_ID))
+        ),
+        "{loading:?}"
+    );
+}
+
+#[tokio::test]
+async fn episode_list_and_playback_info_run_concurrently() {
+    let mock = MockServer::start().await;
+    let delay = Duration::from_secs(1);
+    let episodes = format!("/Shows/{SERIES_ID}/Episodes");
+    mount_slow(&mock, "GET", &episodes, "shows_episodes", delay).await;
+    let info = format!("/Items/{}/PlaybackInfo", EPISODES[0]);
+    mount_slow(&mock, "POST", &info, "playback_info", delay).await;
+    let mut h = harness_on(mock, quiet()).await;
+    let started = tokio::time::Instant::now();
+    h.play_item(EPISODES[0], PlayMode::Auto).await;
+    h.file_loaded().await;
+    assert!(
+        started.elapsed() < Duration::from_millis(1800),
+        "{:?}",
+        started.elapsed()
+    );
 }
