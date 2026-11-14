@@ -23,6 +23,7 @@ mod page {
         import { TopBar } from "ui/components/top_bar.slint";
         import { Banner } from "ui/components/banner.slint";
         import { Icons } from "ui/icons.slint";
+        import { PlayerControls } from "ui/components/player_controls.slint";
 
         export component ComponentsPage inherits Window {
             callback sign-in-clicked();
@@ -44,6 +45,7 @@ mod page {
                     PosterCard { title: "Movie"; subtitle: "2024"; status: CardStatus.watched; }
                     LandscapeCard { title: "Series"; subtitle: "S02E05"; status: CardStatus.in-progress; progress: 0.75; }
                 }
+                PlayerControls { width: 1280px; volume: 50; duration: 10; }
             }
         }
     }
@@ -73,6 +75,19 @@ fn button_runs_its_accessible_action_and_messages_are_translated() {
         inputs[0].size().height >= 22.0,
         "an empty text field must keep a clickable line height, got {}",
         inputs[0].size().height
+    );
+
+    let center = |label: &str, role: AccessibleRole| {
+        let element = ElementHandle::find_by_accessible_label(&page, label)
+            .find(|element| element.accessible_role() == Some(role))
+            .unwrap();
+        element.absolute_position().y + element.size().height / 2.0
+    };
+    let slider = center("Volume", AccessibleRole::Slider);
+    let mute = center("Mute", AccessibleRole::Button);
+    assert!(
+        (slider - mute).abs() < 1.0,
+        "the volume slider must be centered on the mute button: {slider} vs {mute}"
     );
 
     let window = AppWindow::new().unwrap();
