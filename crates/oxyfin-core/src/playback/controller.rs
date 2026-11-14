@@ -11,25 +11,18 @@ use oxyfin_player::{
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::time::{Instant, sleep_until, timeout_at};
 
+use super::countdown::Countdown;
 use super::current::{Current, Siblings, mark_selected};
 use super::media_player::{MediaPlayer, PlayerEvents};
 use super::queue::neighbours;
 use super::reporter::{ReportKind, Reporter};
 use super::tracks::{TrackMap, subtitle_format};
 use super::types::{
-    NEXT_UP_COUNTDOWN, PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent, PlaybackTimings,
-    PlaybackTitle,
+    PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent, PlaybackTimings, PlaybackTitle,
 };
 use crate::catalog::Catalog;
 use crate::error::CoreError;
 use crate::models::{Episode, ItemSummary, UserState};
-
-/// The countdown before the next episode starts.
-struct Countdown {
-    episode: Episode,
-    remaining: u32,
-    deadline: Instant,
-}
 
 /// Sends commands to a running [`PlaybackController`].
 #[derive(Clone, Debug)]
@@ -208,34 +201,20 @@ impl PlaybackController {
     }
 
     fn start_countdown(&mut self, episode: Episode) {
-        let remaining = u32::try_from(NEXT_UP_COUNTDOWN.as_secs()).unwrap_or(u32::MAX);
-        self.emit(PlaybackEvent::NextUpCountdown {
-            episode: Box::new(episode.clone()),
-            remaining,
-        });
-        self.countdown = Some(Countdown {
-            episode,
-            remaining,
-            deadline: Instant::now() + self.timings.next_up_countdown_tick,
-        });
+        let (countdown, event) = Countdown::start(episode, self.timings.next_up_countdown_tick);
+        self.countdown = Some(countdown);
+        self.emit(event);
     }
 
     async fn tick_countdown(&mut self) {
-        let tick = self.timings.next_up_countdown_tick;
         let Some(countdown) = self.countdown.as_mut() else {
             return;
         };
-        countdown.remaining = countdown.remaining.saturating_sub(1);
-        if countdown.remaining > 0 {
-            countdown.deadline += tick;
-            let event = PlaybackEvent::NextUpCountdown {
-                episode: Box::new(countdown.episode.clone()),
-                remaining: countdown.remaining,
-            };
+        if let Some(event) = countdown.step() {
             return self.emit(event);
         }
         if let Some(countdown) = self.countdown.take() {
-            self.play(countdown.episode.id, PlayMode::Auto).await;
+            self.play(countdown.into_episode().id, PlayMode::Auto).await;
         }
     }
 
@@ -327,7 +306,7 @@ impl PlaybackController {
             }
             PlaybackCommand::PlayNextNow => {
                 if let Some(countdown) = self.countdown.take() {
-                    self.play(countdown.episode.id, PlayMode::Auto).await;
+                    self.play(countdown.into_episode().id, PlayMode::Auto).await;
                 }
             }
             PlaybackCommand::CancelNextUp => self.cancel_countdown(),
