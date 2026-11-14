@@ -5,4 +5,6 @@ mod generated {
     slint::include_modules!();
 }
 
+pub mod state;
+
 pub use generated::*;
