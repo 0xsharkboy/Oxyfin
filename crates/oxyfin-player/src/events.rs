@@ -14,6 +14,7 @@ pub(crate) const EOF_REACHED: &str = "eof-reached";
 const TIME_POS: &str = "time-pos";
 const PAUSE: &str = "pause";
 const VOLUME: &str = "volume";
+const SPEED: &str = "speed";
 const MUTE: &str = "mute";
 const TRACK_COUNT: &str = "track-list/count";
 const AID: &str = "aid";
@@ -68,6 +69,7 @@ pub(crate) fn observe(mpv: &Mpv) -> libmpv2::Result<()> {
     mpv.observe_property(TIME_POS, Format::Double, 0)?;
     mpv.observe_property(PAUSE, Format::Flag, 0)?;
     mpv.observe_property(VOLUME, Format::Double, 0)?;
+    mpv.observe_property(SPEED, Format::Double, 0)?;
     mpv.observe_property(MUTE, Format::Flag, 0)?;
     mpv.observe_property(TRACK_COUNT, Format::Int64, 0)?;
     mpv.observe_property(AID, Format::String, 0)?;
@@ -128,6 +130,11 @@ pub(crate) fn run(mpv: &Mpv, shared: &Shared, on_event: &(impl Fn(PlayerEvent) +
                 change: PropertyData::Double(volume),
                 ..
             }) => on_event(PlayerEvent::Volume(volume)),
+            Ok(Event::PropertyChange {
+                name: SPEED,
+                change: PropertyData::Double(speed),
+                ..
+            }) => on_event(PlayerEvent::Speed(speed)),
             Ok(Event::PropertyChange {
                 name: MUTE,
                 change: PropertyData::Flag(muted),

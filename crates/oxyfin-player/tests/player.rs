@@ -265,6 +265,17 @@ fn volume_and_mute_are_reported() {
 }
 
 #[test]
+fn set_speed_reports_the_new_speed() {
+    let (events, on_event) = Events::new();
+    let player = headless(on_event);
+    player.load(&sample()).unwrap();
+    events.wait_for(TIMEOUT, is_file_loaded);
+
+    player.set_speed(1.5).unwrap();
+    events.wait_for(TIMEOUT, |e| *e == PlayerEvent::Speed(1.5));
+}
+
+#[test]
 fn stop_then_load_reports_stopped_then_loads() {
     let (events, on_event) = Events::new();
     let player = headless(on_event);

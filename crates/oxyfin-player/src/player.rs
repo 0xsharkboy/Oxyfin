@@ -138,6 +138,11 @@ impl Player {
         self.command("seek", &[&format!("{secs:.3}"), mode])
     }
 
+    /// Sets the playback speed; mpv rejects values outside `0.01..=100.0`.
+    pub fn set_speed(&self, speed: f64) -> Result<(), PlayerError> {
+        self.set_property("speed", speed)
+    }
+
     /// Sets the volume, clamped to `0.0..=100.0`.
     pub fn set_volume(&self, volume: f64) -> Result<(), PlayerError> {
         let volume = if volume.is_nan() {
