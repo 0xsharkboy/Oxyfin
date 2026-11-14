@@ -23,6 +23,15 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 const MOVIE_ID: &str = "76282b1c408f374beeee50519e9157a4";
 /// A second item, served with the same fixtures.
 const OTHER_ID: &str = "0000000000000000000000000000000b";
+/// Series of `shows_episodes.json`.
+const SERIES_ID: &str = "9ea196e7ccc3ae17d2c3f75c3ab34406";
+/// Episodes of `shows_episodes.json`, in server order: S01E01, S01E02, S02E01, S02E02.
+const EPISODES: [&str; 4] = [
+    "0366bed6b6c97d8af5be151ffc258992",
+    "50d3822a34079d70485f1bf36c274c35",
+    "6cd987e31b59eee077807423aecbcd8a",
+    "6aeeb019134a3bf62f0f69ab03349ab3",
+];
 const PLAY_SESSION_ID: &str = "8050f69acbe34027b28b38f406d4fe49";
 const START: &str = "/Sessions/Playing";
 const PROGRESS: &str = "/Sessions/Playing/Progress";
@@ -78,6 +87,23 @@ async fn harness_on(mock: MockServer, timings: PlaybackTimings) -> Harness {
             .mount(&mock)
             .await;
     }
+    for id in EPISODES {
+        Mock::given(method("GET"))
+            .and(path(format!("/Items/{id}")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(fixture("item_episode")))
+            .mount(&mock)
+            .await;
+        Mock::given(method("POST"))
+            .and(path(format!("/Items/{id}/PlaybackInfo")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(fixture("playback_info")))
+            .mount(&mock)
+            .await;
+    }
+    Mock::given(method("GET"))
+        .and(path(format!("/Shows/{SERIES_ID}/Episodes")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("shows_episodes")))
+        .mount(&mock)
+        .await;
     for route in [START, PROGRESS, STOPPED] {
         Mock::given(method("POST"))
             .and(path(route))
@@ -190,6 +216,18 @@ impl Harness {
         let ready = self.file_loaded().await;
         wait_requests(&self.mock, START, 1).await;
         ready
+    }
+
+    /// Like [`Harness::stop`] for an item that already reported its stop (real
+    /// end): no new stop report is awaited.
+    async fn stop_after_end(&mut self) -> Vec<PlaybackEvent> {
+        let marker = PlaybackEvent::Position(Duration::from_millis(999));
+        self.sink
+            .send(PlayerEvent::Position(Duration::from_millis(999)));
+        let mut seen = events_until(&mut self.events, |e| *e == marker).await;
+        self.handle.send(PlaybackCommand::Stop);
+        seen.extend(events_until(&mut self.events, |e| matches!(e, PlaybackEvent::Stopped)).await);
+        seen
     }
 
     /// Lets the controller handle every player event sent so far, then stops
@@ -333,7 +371,7 @@ async fn loaded_file_applies_default_tracks() {
     assert_eq!(audio.len(), 2);
     assert_eq!(subtitles.len(), 1);
     assert!(subtitles[0].selected && subtitles[0].external);
-    assert!(!has_previous && !has_next);
+    assert!(has_previous && !has_next);
 }
 
 #[tokio::test]
@@ -963,4 +1001,349 @@ async fn session_expired_is_emitted_once() {
         .filter(|r| r.url.path() == format!("/Items/{OTHER_ID}"))
         .count();
     assert_eq!(item_requests, 1);
+}
+
+/// Timings for the episode tests: a countdown step of `tick`, a short unload grace.
+fn episode_timings(tick: Duration) -> PlaybackTimings {
+    PlaybackTimings {
+        next_up_countdown_tick: tick,
+        unload_grace: Duration::from_millis(30),
+        ..quiet()
+    }
+}
+
+const TEN_MINUTES: Duration = Duration::from_secs(600);
+
+impl Harness {
+    /// Plays `id`, loads it with `duration` and waits for its start report; returns `Ready`.
+    async fn start_item(&mut self, id: &str, duration: Duration) -> PlaybackEvent {
+        let starts = bodies(&self.mock, START).await.len();
+        self.play_item(id, PlayMode::Auto).await;
+        self.sink.send(PlayerEvent::FileLoaded {
+            duration: Some(duration),
+            tracks: file_tracks(),
+        });
+        let ready = wait_event(&mut self.events, |e| {
+            matches!(e, PlaybackEvent::Ready { .. })
+        })
+        .await;
+        wait_requests(&self.mock, START, starts + 1).await;
+        ready
+    }
+
+    /// Reports `position`, then the end of the media.
+    fn end_at(&self, position: Duration) {
+        self.sink.send(PlayerEvent::Position(position));
+        self.sink.send(PlayerEvent::Ended);
+    }
+
+    fn loaded_ids(&self) -> Vec<String> {
+        self.loads()
+            .into_iter()
+            .map(|source| source.location)
+            .collect()
+    }
+}
+
+fn neighbours_of(ready: &PlaybackEvent) -> (bool, bool) {
+    match ready {
+        PlaybackEvent::Ready {
+            has_previous,
+            has_next,
+            ..
+        } => (*has_previous, *has_next),
+        other => panic!("not a Ready event: {other:?}"),
+    }
+}
+
+fn countdowns(seen: &[PlaybackEvent]) -> Vec<(String, u32)> {
+    seen.iter()
+        .filter_map(|e| match e {
+            PlaybackEvent::NextUpCountdown { episode, remaining } => {
+                Some((episode.id.to_string(), *remaining))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+async fn wait_loads(h: &Harness, count: usize) {
+    let start = tokio::time::Instant::now();
+    while h.loads().len() < count {
+        assert!(
+            start.elapsed() < common::DEADLINE,
+            "{} loads",
+            h.loads().len()
+        );
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+}
+
+#[tokio::test]
+async fn ended_twice_counts_once() {
+    let mut h = harness(episode_timings(Duration::from_secs(3600))).await;
+    h.start_item(EPISODES[1], TEN_MINUTES).await;
+    h.end_at(Duration::from_secs(595));
+    h.sink.send(PlayerEvent::Ended);
+    let seen = h.stop_after_end().await;
+    assert_eq!(
+        seen.iter()
+            .filter(|e| matches!(e, PlaybackEvent::Ended))
+            .count(),
+        1,
+        "{seen:?}"
+    );
+    assert_eq!(countdowns(&seen), vec![(EPISODES[2].to_owned(), 10)]);
+    assert!(seen.contains(&PlaybackEvent::NextUpCancelled));
+    // The stop at the real end is the only one: a later start report is the barrier.
+    h.start_item(EPISODES[0], TEN_MINUTES).await;
+    let stopped = bodies(&h.mock, STOPPED).await;
+    assert_eq!(stopped.len(), 1, "{stopped:?}");
+    assert_eq!(stopped[0]["PositionTicks"], json!(5_950_000_000_i64));
+}
+
+#[tokio::test]
+async fn early_end_is_a_stop() {
+    let mut h = harness(episode_timings(Duration::from_millis(10))).await;
+    h.start_item(EPISODES[1], TEN_MINUTES).await;
+    h.end_at(Duration::from_secs(30));
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::Stopped)).await;
+    assert!(
+        !seen.iter().any(|e| matches!(
+            e,
+            PlaybackEvent::Ended | PlaybackEvent::NextUpCountdown { .. }
+        )),
+        "{seen:?}"
+    );
+    let stopped = wait_requests(&h.mock, STOPPED, 1).await;
+    assert_eq!(stopped[0]["PositionTicks"], json!(300_000_000));
+    assert!(h.player.calls().contains(&Call::Stop));
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(h.loads().len(), 1);
+}
+
+#[tokio::test]
+async fn countdown_then_next_episode() {
+    let mut h = harness(episode_timings(Duration::from_millis(20))).await;
+    h.start_item(EPISODES[1], TEN_MINUTES).await;
+    h.end_at(Duration::from_secs(599));
+    let seen = events_until(
+        &mut h.events,
+        |e| matches!(e, PlaybackEvent::Loading { item, .. } if *item == ItemId::from(EPISODES[2])),
+    )
+    .await;
+    assert!(seen.contains(&PlaybackEvent::Ended));
+    let expected: Vec<(String, u32)> = (1..=10)
+        .rev()
+        .map(|remaining| (EPISODES[2].to_owned(), remaining))
+        .collect();
+    assert_eq!(countdowns(&seen), expected);
+    assert!(!seen.contains(&PlaybackEvent::NextUpCancelled));
+    wait_loads(&h, 2).await;
+    let next = &h.loads()[1];
+    assert!(next.location.contains(EPISODES[2]), "{}", next.location);
+    assert_eq!(next.start, None);
+}
+
+#[tokio::test]
+async fn cancel_next_up() {
+    let mut h = harness(episode_timings(Duration::from_millis(20))).await;
+    h.start_item(EPISODES[1], TEN_MINUTES).await;
+    h.end_at(Duration::from_secs(599));
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::NextUpCountdown { .. })
+    })
+    .await;
+    h.handle.send(PlaybackCommand::CancelNextUp);
+    wait_event(&mut h.events, |e| *e == PlaybackEvent::NextUpCancelled).await;
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    assert_eq!(h.loads().len(), 1);
+    let mut later = Vec::new();
+    while let Ok(event) = h.events.try_recv() {
+        later.push(event);
+    }
+    assert!(countdowns(&later).is_empty(), "{later:?}");
+}
+
+#[tokio::test]
+async fn backward_seek_cancels_next_up() {
+    let mut h = harness(episode_timings(Duration::from_secs(3600))).await;
+    h.start_item(EPISODES[1], TEN_MINUTES).await;
+    h.end_at(Duration::from_secs(599));
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::NextUpCountdown { .. })
+    })
+    .await;
+    h.handle.send(PlaybackCommand::Seek(SeekTarget::Backward(
+        Duration::from_secs(10),
+    )));
+    wait_event(&mut h.events, |e| *e == PlaybackEvent::NextUpCancelled).await;
+    h.handle.send(PlaybackCommand::PlayNextNow);
+    let seen = h.stop_after_end().await;
+    assert!(
+        !seen
+            .iter()
+            .any(|e| matches!(e, PlaybackEvent::Loading { .. }))
+    );
+    assert_eq!(h.loads().len(), 1);
+}
+
+#[tokio::test]
+async fn play_next_now() {
+    let mut h = harness(episode_timings(Duration::from_secs(3600))).await;
+    h.start_item(EPISODES[1], TEN_MINUTES).await;
+    h.end_at(Duration::from_secs(599));
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::NextUpCountdown { .. })
+    })
+    .await;
+    h.handle.send(PlaybackCommand::PlayNextNow);
+    let seen = events_until(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::Loading { .. })
+    })
+    .await;
+    assert!(!seen.contains(&PlaybackEvent::NextUpCancelled), "{seen:?}");
+    wait_loads(&h, 2).await;
+    assert!(h.loads()[1].location.contains(EPISODES[2]));
+}
+
+#[tokio::test]
+async fn previous_and_next_episode() {
+    let mut h = harness(episode_timings(Duration::from_secs(3600))).await;
+    let ready = h.start_item(EPISODES[1], TEN_MINUTES).await;
+    assert_eq!(neighbours_of(&ready), (true, true));
+
+    h.handle.send(PlaybackCommand::Next);
+    wait_loads(&h, 2).await;
+    assert!(h.loaded_ids()[1].contains(EPISODES[2]));
+    let stopped = wait_requests(&h.mock, STOPPED, 1).await;
+    assert_eq!(stopped[0]["ItemId"], json!(EPISODES[1]));
+    h.sink.send(PlayerEvent::FileLoaded {
+        duration: Some(TEN_MINUTES),
+        tracks: file_tracks(),
+    });
+    let ready = wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Ready { .. })).await;
+    assert_eq!(neighbours_of(&ready), (true, true));
+    wait_requests(&h.mock, START, 2).await;
+
+    h.handle.send(PlaybackCommand::Previous);
+    wait_loads(&h, 3).await;
+    assert!(h.loaded_ids()[2].contains(EPISODES[1]));
+    let stopped = wait_requests(&h.mock, STOPPED, 2).await;
+    assert_eq!(stopped[1]["ItemId"], json!(EPISODES[2]));
+}
+
+#[tokio::test]
+async fn previous_on_first_episode_restarts() {
+    let mut h = harness(episode_timings(Duration::from_secs(3600))).await;
+    let ready = h.start_item(EPISODES[0], TEN_MINUTES).await;
+    assert_eq!(neighbours_of(&ready), (false, true));
+    h.handle.send(PlaybackCommand::Previous);
+    h.player
+        .wait_call(|c| *c == Call::Seek(SeekTarget::Absolute(Duration::ZERO)))
+        .await;
+    assert_eq!(h.loads().len(), 1);
+}
+
+#[tokio::test]
+async fn previous_on_movie_restarts() {
+    let mut h = harness(episode_timings(Duration::from_secs(3600))).await;
+    let ready = h.start().await;
+    assert_eq!(neighbours_of(&ready), (true, false));
+    h.handle.send(PlaybackCommand::Previous);
+    h.player
+        .wait_call(|c| *c == Call::Seek(SeekTarget::Absolute(Duration::ZERO)))
+        .await;
+    h.handle.send(PlaybackCommand::Next);
+    h.stop().await;
+    assert_eq!(h.loads().len(), 1);
+    assert!(
+        !h.mock
+            .received_requests()
+            .await
+            .unwrap_or_default()
+            .iter()
+            .any(|r| r.url.path().starts_with("/Shows/"))
+    );
+}
+
+#[tokio::test]
+async fn last_episode_has_no_next() {
+    let mut h = harness(episode_timings(Duration::from_millis(10))).await;
+    let ready = h.start_item(EPISODES[3], TEN_MINUTES).await;
+    assert_eq!(neighbours_of(&ready), (true, false));
+    h.handle.send(PlaybackCommand::Next);
+    h.end_at(Duration::from_secs(590));
+    wait_event(&mut h.events, |e| *e == PlaybackEvent::Ended).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    h.handle.send(PlaybackCommand::Stop);
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::Stopped)).await;
+    assert!(countdowns(&seen).is_empty(), "{seen:?}");
+    assert!(!seen.contains(&PlaybackEvent::NextUpCancelled), "{seen:?}");
+    assert_eq!(h.loads().len(), 1);
+}
+
+#[tokio::test]
+async fn real_end_stops_the_progress_timer() {
+    let mut h = harness(PlaybackTimings {
+        progress_interval: Duration::from_millis(20),
+        ..episode_timings(Duration::from_secs(3600))
+    })
+    .await;
+    h.start_item(EPISODES[3], TEN_MINUTES).await;
+    wait_requests(&h.mock, PROGRESS, 1).await;
+    h.end_at(Duration::from_secs(599));
+    wait_event(&mut h.events, |e| *e == PlaybackEvent::Ended).await;
+    wait_requests(&h.mock, STOPPED, 1).await;
+    let after_end = bodies(&h.mock, PROGRESS).await.len();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(bodies(&h.mock, PROGRESS).await.len(), after_end);
+}
+
+#[tokio::test]
+async fn switching_items_reports_stop_first() {
+    let mut h = harness(episode_timings(Duration::from_secs(3600))).await;
+    h.start_item(EPISODES[1], TEN_MINUTES).await;
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(42)));
+    wait_event(&mut h.events, |e| {
+        *e == PlaybackEvent::Position(Duration::from_secs(42))
+    })
+    .await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(EPISODES[2]),
+        mode: PlayMode::Auto,
+    });
+    wait_loads(&h, 2).await;
+    h.sink.send(PlayerEvent::FileLoaded {
+        duration: Some(TEN_MINUTES),
+        tracks: file_tracks(),
+    });
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::Ready { .. })).await;
+    assert!(
+        !seen.iter().any(|e| matches!(
+            e,
+            PlaybackEvent::Ended | PlaybackEvent::NextUpCountdown { .. }
+        )),
+        "{seen:?}"
+    );
+    wait_requests(&h.mock, START, 2).await;
+    let reports: Vec<(String, Value)> = h
+        .mock
+        .received_requests()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|r| r.url.path().starts_with("/Sessions/Playing"))
+        .map(|r| {
+            (
+                r.url.path().to_owned(),
+                serde_json::from_slice(&r.body).unwrap_or(Value::Null),
+            )
+        })
+        .collect();
+    let routes: Vec<&str> = reports.iter().map(|(route, _)| route.as_str()).collect();
+    assert_eq!(routes, vec![START, STOPPED, START]);
+    assert_eq!(reports[1].1["ItemId"], json!(EPISODES[1]));
+    assert_eq!(reports[1].1["PositionTicks"], json!(420_000_000));
+    assert_eq!(reports[2].1["ItemId"], json!(EPISODES[2]));
 }

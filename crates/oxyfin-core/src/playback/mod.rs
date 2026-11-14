@@ -3,10 +3,6 @@
 mod controller;
 mod current;
 mod media_player;
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the next-episode logic")
-)]
 mod queue;
 mod reporter;
 mod tracks;

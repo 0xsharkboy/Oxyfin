@@ -5,19 +5,31 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use oxyfin_api::{ItemId, MediaStreamType, Session, Ticks};
-use oxyfin_player::{MediaSource, PlayerError, PlayerEvent, Track, TrackKind, UnloadReason};
+use oxyfin_player::{
+    MediaSource, PlayerError, PlayerEvent, SeekTarget, Track, TrackKind, UnloadReason,
+};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::time::{Instant, sleep_until, timeout_at};
 
-use super::current::{Current, mark_selected};
+use super::current::{Current, Siblings, mark_selected};
 use super::media_player::{MediaPlayer, PlayerEvents};
+use super::queue::neighbours;
 use super::reporter::{ReportKind, Reporter};
 use super::tracks::{TrackMap, subtitle_format};
 use super::types::{
-    PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent, PlaybackTimings, PlaybackTitle,
+    NEXT_UP_COUNTDOWN, PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent, PlaybackTimings,
+    PlaybackTitle,
 };
+use crate::catalog::Catalog;
 use crate::error::CoreError;
-use crate::models::{ItemSummary, UserState};
+use crate::models::{Episode, ItemSummary, UserState};
+
+/// The countdown before the next episode starts.
+struct Countdown {
+    episode: Episode,
+    remaining: u32,
+    deadline: Instant,
+}
 
 /// Sends commands to a running [`PlaybackController`].
 #[derive(Clone, Debug)]
@@ -50,6 +62,7 @@ pub struct PlaybackController {
     /// `SessionExpired` was emitted; it is emitted once per controller.
     expired: bool,
     next_progress: Option<Instant>,
+    countdown: Option<Countdown>,
 }
 
 impl PlaybackController {
@@ -89,6 +102,7 @@ impl PlaybackController {
             awaiting_unload: false,
             expired: false,
             next_progress: None,
+            countdown: None,
         };
         tokio::spawn(controller.run(command_receiver, expired));
         (PlaybackHandle { commands }, event_receiver)
@@ -101,6 +115,7 @@ impl PlaybackController {
     ) {
         loop {
             let deadline = self.next_progress;
+            let countdown = self.countdown.as_ref().map(|countdown| countdown.deadline);
             tokio::select! {
                 command = commands.recv() => match command {
                     Some(command) => self.on_command(command).await,
@@ -114,6 +129,9 @@ impl PlaybackController {
                 () = sleep_until(deadline.unwrap_or_else(Instant::now)), if deadline.is_some() => {
                     self.report(ReportKind::Progress);
                     self.schedule_progress();
+                }
+                () = sleep_until(countdown.unwrap_or_else(Instant::now)), if countdown.is_some() => {
+                    self.tick_countdown().await;
                 }
             }
         }
@@ -138,7 +156,7 @@ impl PlaybackController {
 
     fn schedule_progress(&mut self) {
         self.next_progress = match &self.current {
-            Some(current) if current.loaded && !current.paused => {
+            Some(current) if current.reporting() && !current.paused => {
                 Some(Instant::now() + self.timings.progress_interval)
             }
             _ => None,
@@ -161,15 +179,15 @@ impl PlaybackController {
         }
     }
 
-    /// Queues a report for the current item.
+    /// Queues a report for the current item while its server session is open.
     fn report(&self, kind: ReportKind) {
-        if let Some(current) = &self.current {
+        if let Some(current) = self.current.as_ref().filter(|c| c.reporting()) {
             self.reporter.send(kind, current.report());
         }
     }
 
     /// Stops the player and forgets the current item, reporting its stop
-    /// when `report` is set and its start was reported.
+    /// when `report` is set and its server session is open.
     fn release(&mut self, report: bool) {
         self.next_progress = None;
         let Some(current) = self.current.take() else {
@@ -177,9 +195,72 @@ impl PlaybackController {
         };
         let _ = self.player.stop();
         self.awaiting_unload = true;
-        if report && current.loaded {
+        if report && current.reporting() {
             self.reporter.send(ReportKind::Stopped, current.report());
         }
+    }
+
+    /// Cancels the next episode countdown, if one runs.
+    fn cancel_countdown(&mut self) {
+        if self.countdown.take().is_some() {
+            self.emit(PlaybackEvent::NextUpCancelled);
+        }
+    }
+
+    fn start_countdown(&mut self, episode: Episode) {
+        let remaining = u32::try_from(NEXT_UP_COUNTDOWN.as_secs()).unwrap_or(u32::MAX);
+        self.emit(PlaybackEvent::NextUpCountdown {
+            episode: Box::new(episode.clone()),
+            remaining,
+        });
+        self.countdown = Some(Countdown {
+            episode,
+            remaining,
+            deadline: Instant::now() + self.timings.next_up_countdown_tick,
+        });
+    }
+
+    async fn tick_countdown(&mut self) {
+        let tick = self.timings.next_up_countdown_tick;
+        let Some(countdown) = self.countdown.as_mut() else {
+            return;
+        };
+        countdown.remaining = countdown.remaining.saturating_sub(1);
+        if countdown.remaining > 0 {
+            countdown.deadline += tick;
+            let event = PlaybackEvent::NextUpCountdown {
+                episode: Box::new(countdown.episode.clone()),
+                remaining: countdown.remaining,
+            };
+            return self.emit(event);
+        }
+        if let Some(countdown) = self.countdown.take() {
+            self.play(countdown.episode.id, PlayMode::Auto).await;
+        }
+    }
+
+    /// Seeks; a backward seek cancels the next episode countdown.
+    fn seek(&mut self, target: SeekTarget) {
+        let backward = match target {
+            SeekTarget::Backward(_) => true,
+            SeekTarget::Forward(_) => false,
+            SeekTarget::Absolute(position) => self
+                .current
+                .as_ref()
+                .is_some_and(|current| position < current.position),
+        };
+        if backward {
+            self.cancel_countdown();
+        }
+        if self.call(self.player.seek(target))
+            && let Some(current) = self.current.as_mut()
+        {
+            current.seek_pending = true;
+        }
+    }
+
+    fn siblings(&self) -> Option<&Siblings> {
+        self.current.as_ref().map(|current| &current.siblings)
     }
 
     async fn on_command(&mut self, command: PlaybackCommand) {
@@ -188,13 +269,7 @@ impl PlaybackController {
             PlaybackCommand::SetPaused(paused) => {
                 self.call(self.player.set_paused(paused));
             }
-            PlaybackCommand::Seek(target) => {
-                if self.call(self.player.seek(target))
-                    && let Some(current) = self.current.as_mut()
-                {
-                    current.seek_pending = true;
-                }
-            }
+            PlaybackCommand::Seek(target) => self.seek(target),
             PlaybackCommand::SetSpeed(speed) => {
                 self.call(self.player.set_speed(speed));
             }
@@ -220,13 +295,34 @@ impl PlaybackController {
                 }
             }
             PlaybackCommand::Stop => {
+                self.cancel_countdown();
                 self.release(true);
                 self.emit(PlaybackEvent::Stopped);
             }
-            PlaybackCommand::Previous
-            | PlaybackCommand::Next
-            | PlaybackCommand::PlayNextNow
-            | PlaybackCommand::CancelNextUp => {}
+            PlaybackCommand::Previous => {
+                let Some(siblings) = self.siblings() else {
+                    return;
+                };
+                match siblings.previous.as_ref().map(|episode| episode.id.clone()) {
+                    Some(previous) => self.play(previous, PlayMode::Auto).await,
+                    None => self.seek(SeekTarget::Absolute(Duration::ZERO)),
+                }
+            }
+            PlaybackCommand::Next => {
+                let next = self
+                    .siblings()
+                    .and_then(|siblings| siblings.next.as_ref())
+                    .map(|episode| episode.id.clone());
+                if let Some(next) = next {
+                    self.play(next, PlayMode::Auto).await;
+                }
+            }
+            PlaybackCommand::PlayNextNow => {
+                if let Some(countdown) = self.countdown.take() {
+                    self.play(countdown.episode.id, PlayMode::Auto).await;
+                }
+            }
+            PlaybackCommand::CancelNextUp => self.cancel_countdown(),
         }
     }
 
@@ -237,6 +333,7 @@ impl PlaybackController {
     }
 
     async fn play(&mut self, item: ItemId, mode: PlayMode) {
+        self.cancel_countdown();
         self.release(true);
         let dto = match self.session.item(&item).await {
             Ok(dto) => dto,
@@ -260,6 +357,27 @@ impl PlaybackController {
             title,
         });
 
+        let siblings = match Episode::from_dto(&dto) {
+            None => Siblings::default(),
+            Some(episode) => {
+                let catalog = Catalog::new(self.session.clone());
+                match catalog.all_episodes(&episode.series_id).await {
+                    Ok(list) => {
+                        let (previous, next) = neighbours(&list, &item);
+                        Siblings {
+                            is_episode: true,
+                            previous,
+                            next,
+                        }
+                    }
+                    Err(CoreError::SessionExpired) => return self.expire(),
+                    Err(_) => Siblings {
+                        is_episode: true,
+                        ..Siblings::default()
+                    },
+                }
+            }
+        };
         let info = match self.session.playback_info(&item).await {
             Ok(info) => info,
             Err(error) => return self.fail(error.into()),
@@ -290,6 +408,7 @@ impl PlaybackController {
             source,
             info.play_session_id,
             start.unwrap_or_default(),
+            siblings,
         ));
     }
 
@@ -344,18 +463,38 @@ impl PlaybackController {
                     self.schedule_progress();
                 }
             }
-            PlayerEvent::Ended => {}
+            PlayerEvent::Ended => self.on_ended(),
             PlayerEvent::Unloaded(UnloadReason::Error(message)) => {
                 let Some(current) = self.current.take() else {
                     return;
                 };
                 self.next_progress = None;
-                if current.loaded {
+                if current.reporting() {
                     self.reporter.send(ReportKind::Stopped, current.report());
                 }
                 self.emit(PlaybackEvent::Error(PlaybackError::load(message)));
             }
             PlayerEvent::Unloaded(_) => {}
+        }
+    }
+
+    /// Handles the end of the media, once per load: a real end reports the
+    /// stop and starts the next episode countdown; an early one is a stop.
+    fn on_ended(&mut self) {
+        let Some(current) = self.current.as_mut().filter(|c| c.reporting()) else {
+            return;
+        };
+        if !current.at_real_end() {
+            self.release(true);
+            return self.emit(PlaybackEvent::Stopped);
+        }
+        self.reporter.send(ReportKind::Stopped, current.report());
+        current.ended = true;
+        let next = current.siblings.next.clone();
+        self.next_progress = None;
+        self.emit(PlaybackEvent::Ended);
+        if let Some(next) = next {
+            self.start_countdown(next);
         }
     }
 
@@ -429,12 +568,17 @@ impl PlaybackController {
         let (audio, subtitles) = current.refresh_options().unwrap_or_default();
         current.loaded = true;
         let duration = duration.or_else(|| current.source.run_time_ticks.map(Ticks::to_duration));
+        current.duration = duration;
+        let siblings = &current.siblings;
+        // Previous restarts a movie, so it is always offered; an episode needs a predecessor.
+        let has_previous = !siblings.is_episode || siblings.previous.is_some();
+        let has_next = siblings.next.is_some();
         self.emit(PlaybackEvent::Ready {
             duration,
             audio,
             subtitles,
-            has_previous: false,
-            has_next: false,
+            has_previous,
+            has_next,
         });
         self.schedule_progress();
         self.report(ReportKind::Start);
@@ -463,7 +607,7 @@ impl PlaybackController {
             return;
         }
         current.paused = paused;
-        if current.loaded {
+        if current.reporting() {
             self.report(ReportKind::Progress);
             self.schedule_progress();
         }
