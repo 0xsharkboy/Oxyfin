@@ -115,6 +115,8 @@ component HomeRowView inherits Rectangle {
 export component HomeScreen inherits Rectangle {
     in property <HomeBanner> banner;
     in property <[HomeRow]> rows;
+    // True once every source of the screen has answered.
+    in property <bool> settled;
     callback play(id: string);
     callback open-settings();
 
@@ -158,6 +160,23 @@ export component HomeScreen inherits Rectangle {
                 section: row;
                 play(id) => {
                     root.play(id);
+                }
+            }
+
+            if root.settled && !root.banner.has && root.rows.length == 0: VerticalLayout {
+                alignment: center;
+                padding: Theme.space-3xl;
+                spacing: Theme.space-sm;
+
+                HeadingText {
+                    text: @tr("Nothing to show yet");
+                    horizontal-alignment: center;
+                }
+
+                BodyText {
+                    text: @tr("Movies and shows you add or start watching will appear here.");
+                    color: Theme.text-secondary;
+                    horizontal-alignment: center;
                 }
             }
         }
