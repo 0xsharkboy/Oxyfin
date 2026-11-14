@@ -94,6 +94,14 @@ impl PlaybackController {
     /// controller's events. The task ends on [`PlaybackHandle::shutdown`], or
     /// when every handle is dropped: it then does the same work (stop report,
     /// player stopped, queued reports sent) with no one waiting for it.
+    ///
+    /// The runtime must be multi-threaded: adding an external subtitle makes
+    /// mpv download it on the controller's thread.
+    ///
+    /// A controller is bound to `session` and consumes `events`, so it lives
+    /// for one signed-in session. After a sign-out or an expiry, the binary
+    /// creates a new player, event sink and controller, and therefore a new
+    /// `VideoRenderer`.
     pub fn spawn(
         session: Session,
         player: Arc<dyn MediaPlayer>,

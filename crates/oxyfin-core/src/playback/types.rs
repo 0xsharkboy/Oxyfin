@@ -171,6 +171,14 @@ pub enum PlaybackEvent {
     /// Playback or a command failed.
     Error(PlaybackError),
     /// The server no longer accepts the session; playback stopped.
+    ///
+    /// The binary must then call [`SessionManager::expire`] and rebuild the
+    /// [`Catalog`], the [`ImageCache`] and the playback controller for the
+    /// next session.
+    ///
+    /// [`SessionManager::expire`]: crate::SessionManager::expire
+    /// [`Catalog`]: crate::Catalog
+    /// [`ImageCache`]: crate::ImageCache
     SessionExpired,
 }
 
