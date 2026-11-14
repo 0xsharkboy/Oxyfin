@@ -3600,6 +3600,7 @@ version = "0.1.0"
 dependencies = [
  "glow",
  "libmpv2",
+ "libmpv2-sys",
  "raw-window-handle",
  "slint",
  "thiserror 2.0.21",
