@@ -22,9 +22,9 @@ pub use models::{
 pub use paths::Paths;
 pub use playback::{
     AudioOption, MediaPlayer, NEXT_UP_COUNTDOWN, PROGRESS_INTERVAL, PlayMode, PlaybackCommand,
-    PlaybackController, PlaybackEvent, PlaybackHandle, PlaybackTimings, PlaybackTitle,
-    PlayerEventSink, PlayerEvents, SEEK_STEP, SHUTDOWN_TIMEOUT, SPEEDS, SubtitleOption,
-    player_events,
+    PlaybackController, PlaybackError, PlaybackEvent, PlaybackHandle, PlaybackTimings,
+    PlaybackTitle, PlayerEventSink, PlayerEvents, SEEK_STEP, SHUTDOWN_TIMEOUT, SPEEDS,
+    SubtitleOption, UNLOAD_GRACE, player_events,
 };
 pub use quick_connect::{QUICK_CONNECT_POLL_INTERVAL, QuickConnect};
 pub use secrets::{
