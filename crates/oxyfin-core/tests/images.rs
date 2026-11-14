@@ -4,7 +4,10 @@ mod common;
 
 use common::session;
 use oxyfin_api::{ImageType, ItemId};
-use oxyfin_core::{ImageCache, ImageRef, ImageSize, Paths};
+use oxyfin_core::{
+    CacheBudgets, DEFAULT_DISK_BUDGET, DEFAULT_MEMORY_BUDGET, ImageCache, ImageRef, ImageSize,
+    Paths,
+};
 use tempfile::TempDir;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -36,8 +39,29 @@ async fn requests(mock: &MockServer) -> usize {
     mock.received_requests().await.map_or(0, |all| all.len())
 }
 
-fn cache(mock: &MockServer, dir: &TempDir, budget: usize) -> ImageCache {
-    ImageCache::new(session(mock), &Paths::under(dir.path()), budget, u64::MAX)
+fn cache(mock: &MockServer, dir: &TempDir, memory_bytes: u64) -> ImageCache {
+    with_budgets(mock, dir, memory_bytes, u64::MAX)
+}
+
+fn with_budgets(
+    mock: &MockServer,
+    dir: &TempDir,
+    memory_bytes: u64,
+    disk_bytes: u64,
+) -> ImageCache {
+    let budgets = CacheBudgets {
+        memory_bytes,
+        disk_bytes,
+    };
+    ImageCache::new(session(mock), &Paths::under(dir.path()), budgets)
+}
+
+#[test]
+fn default_budgets() {
+    let budgets = CacheBudgets::default();
+    assert_eq!(budgets.memory_bytes, DEFAULT_MEMORY_BUDGET);
+    assert_eq!(DEFAULT_MEMORY_BUDGET, 64 * 1024 * 1024);
+    assert_eq!(budgets.disk_bytes, DEFAULT_DISK_BUDGET);
 }
 
 #[tokio::test]
@@ -214,7 +238,7 @@ async fn disk_cache_is_trimmed_to_its_budget() {
         serve(&mock, item, body).await;
     }
     let dir = TempDir::new().unwrap();
-    let cache = ImageCache::new(session(&mock), &Paths::under(dir.path()), 0, 30);
+    let cache = with_budgets(&mock, &dir, 0, 30);
     for (item, _) in &bodies[..3] {
         cache.get(&image(item, "t"), SIZE).await.unwrap();
     }

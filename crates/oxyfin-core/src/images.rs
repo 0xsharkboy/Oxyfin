@@ -19,8 +19,29 @@ pub struct ImageSize {
     pub max_height: u32,
 }
 
+/// Default memory budget of the image cache: 64 MB.
+pub const DEFAULT_MEMORY_BUDGET: u64 = 64 * 1024 * 1024;
+
 /// Default disk budget of the image cache: 500 MB.
 pub const DEFAULT_DISK_BUDGET: u64 = 500 * 1024 * 1024;
+
+/// Byte budgets of an [`ImageCache`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CacheBudgets {
+    /// Images kept in memory, in bytes (see [`DEFAULT_MEMORY_BUDGET`]).
+    pub memory_bytes: u64,
+    /// Images kept on disk, in bytes (see [`DEFAULT_DISK_BUDGET`]).
+    pub disk_bytes: u64,
+}
+
+impl Default for CacheBudgets {
+    fn default() -> Self {
+        Self {
+            memory_bytes: DEFAULT_MEMORY_BUDGET,
+            disk_bytes: DEFAULT_DISK_BUDGET,
+        }
+    }
+}
 
 /// Temporary files younger than this may belong to a write in progress.
 const STALE_TMP_AGE: Duration = Duration::from_secs(60);
@@ -160,21 +181,14 @@ pub struct ImageCache {
 }
 
 impl ImageCache {
-    /// A cache storing files under `paths.cache_dir`, keeping at most
-    /// `memory_budget_bytes` of images in memory and `disk_budget_bytes` on disk
-    /// (see [`DEFAULT_DISK_BUDGET`]).
+    /// A cache storing files under `paths.cache_dir`, within `budgets`.
     ///
     /// Starts a background trim of the disk cache when called inside a Tokio runtime.
-    pub fn new(
-        session: Session,
-        paths: &Paths,
-        memory_budget_bytes: usize,
-        disk_budget_bytes: u64,
-    ) -> Self {
+    pub fn new(session: Session, paths: &Paths, budgets: CacheBudgets) -> Self {
         let dir = paths.cache_dir.join("images");
         let trimmer = Arc::new(Trimmer {
             dir: dir.clone(),
-            budget: disk_budget_bytes,
+            budget: budgets.disk_bytes,
             running: AtomicBool::new(false),
             pending: AtomicBool::new(false),
             pass: tokio::sync::Mutex::new(()),
@@ -183,7 +197,7 @@ impl ImageCache {
         Self {
             session,
             dir,
-            budget: memory_budget_bytes,
+            budget: usize::try_from(budgets.memory_bytes).unwrap_or(usize::MAX),
             memory: Mutex::new(Memory::default()),
             trimmer,
         }
