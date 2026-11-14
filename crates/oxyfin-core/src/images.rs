@@ -84,8 +84,9 @@ impl ImageCache {
         }
         let path = self.dir.join(&name);
         let bytes: Arc<[u8]> = match tokio::fs::read(&path).await {
-            Ok(bytes) => bytes.into(),
-            Err(_) => {
+            // An empty file is a write cut short, by a power loss for instance.
+            Ok(bytes) if !bytes.is_empty() => bytes.into(),
+            _ => {
                 let mut request =
                     ImageRequest::new(image.item_id.clone(), image.image_type.clone());
                 request.tag = Some(image.tag.clone());
