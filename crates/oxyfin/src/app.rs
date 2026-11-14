@@ -4,6 +4,7 @@ use std::cell::{Cell, RefCell};
 use std::future::Future;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
+use std::time::Duration;
 
 use oxyfin_api::{ItemId, Session};
 use oxyfin_core::PlaybackCommand;
@@ -11,7 +12,7 @@ use oxyfin_core::{
     Catalog, Config, CoreError, ImageCache, Paths, SessionManager, SignedIn, TokenStorage,
     TokenVault,
 };
-use slint::{CloseRequestResponse, ComponentHandle};
+use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode};
 use tokio::runtime::Handle;
 use tokio::task::{AbortHandle, JoinHandle};
 
@@ -21,15 +22,19 @@ use crate::generation::{Route, route};
 use crate::present::device_name;
 use crate::screens::home::HomeController;
 use crate::screens::player;
+use crate::screens::settings;
 use crate::screens::sign_in::SignInController;
 use crate::state::{AppState, Effect, GenerationId, Msg, Notice, Screen, SessionInfo};
-use crate::{AppWindow, Message};
+use crate::{AppWindow, Message, NoticeData};
 
 /// Logical size of the next episode thumbnail, as laid out by the toast.
 #[cfg(feature = "mpv")]
 const NEXT_UP_THUMB_WIDTH: f32 = 160.0;
 #[cfg(feature = "mpv")]
 const NEXT_UP_THUMB_HEIGHT: f32 = 90.0;
+
+/// How long a notice that needs no action stays on screen.
+pub const NOTICE_DURATION: Duration = Duration::from_secs(5);
 
 /// The running application, living on the Slint thread.
 ///
@@ -48,6 +53,7 @@ pub struct App {
     ending: RefCell<Vec<JoinHandle<()>>>,
     quitting: Cell<bool>,
     pending_stops: Cell<u32>,
+    notice_timer: Timer,
     #[cfg(feature = "mpv")]
     video: crate::video::VideoSource,
     pub(crate) sign_in: SignInController,
@@ -79,6 +85,7 @@ impl App {
             ending: RefCell::new(Vec::new()),
             quitting: Cell::new(false),
             pending_stops: Cell::new(0),
+            notice_timer: Timer::default(),
             #[cfg(feature = "mpv")]
             video: Default::default(),
             sign_in: SignInController::default(),
@@ -251,7 +258,9 @@ impl App {
         if let PlaybackEvent::NextUpCountdown { episode, .. } = &event {
             self.load_next_up_image(&window, episode);
         }
-        player::apply(&window, event);
+        if let Some(message) = player::apply(&window, event) {
+            self.notify(message);
+        }
 
         let on_player = self.state.borrow().screen() == Screen::Player;
         if stopped {
@@ -315,11 +324,56 @@ impl App {
         }
     }
 
+    /// Shows `message` in the notice banner, replacing the one shown. Messages
+    /// that need no action leave after [`NOTICE_DURATION`]; the others stay
+    /// until the user closes them.
     fn notify(&self, message: Message) {
-        if let Some(window) = self.window() {
-            window.set_notice(message);
-            window.set_notice_detail(Default::default());
-            window.set_notice_visible(true);
+        let Some(window) = self.window() else { return };
+        let dismissible = is_persistent(message);
+        window.set_notice(NoticeData {
+            visible: true,
+            message,
+            detail: Default::default(),
+            dismissible,
+        });
+        if dismissible {
+            self.notice_timer.stop();
+            return;
+        }
+        let weak = window.as_weak();
+        self.notice_timer
+            .start(TimerMode::SingleShot, NOTICE_DURATION, move || {
+                if let Some(window) = weak.upgrade() {
+                    hide_notice(&window);
+                }
+            });
+    }
+
+    /// The user closed the notice; closing the file-token warning acknowledges it.
+    fn dismiss_notice(&self) {
+        let Some(window) = self.window() else { return };
+        let notice = window.get_notice();
+        if !notice.visible {
+            return;
+        }
+        self.notice_timer.stop();
+        hide_notice(&window);
+        if notice.message == Message::FileTokenWarning {
+            let manager = self.manager();
+            self.runtime.spawn_blocking(move || {
+                if let Err(error) = manager.acknowledge_file_token_warning() {
+                    log::warn!("cannot record the file-token warning as seen: {error}");
+                }
+            });
+        }
+    }
+
+    /// Hides the notice unless it still applies to `screen`.
+    fn notice_on(&self, window: &AppWindow, screen: Screen) {
+        let notice = window.get_notice();
+        if notice.visible && !keeps_notice(notice.message, screen) {
+            self.notice_timer.stop();
+            hide_notice(window);
         }
     }
 
@@ -415,6 +469,9 @@ impl App {
         window.on_cancel_quick_connect(with(|app| app.dispatch(Msg::CloseQuickConnect)));
         window.on_retry_quick_connect(with(|app| app.sign_in.start_quick_connect(app)));
         window.on_open_settings(with(|app| app.dispatch(Msg::OpenSettings)));
+        window.on_close_settings(with(|app| app.dispatch(Msg::CloseSettings)));
+        window.on_sign_out(with(|app| app.dispatch(Msg::SignOut)));
+        window.on_dismiss_notice(with(|app| app.dismiss_notice()));
 
         let this = self.this.clone();
         window.on_server_changed(move |address| {
@@ -519,9 +576,12 @@ impl App {
             Effect::Show(screen) => {
                 let previous = self.shown.replace(screen);
                 if let Some(window) = self.window() {
-                    window.set_notice_visible(false);
+                    self.notice_on(&window, screen);
                     if screen != Screen::Player {
                         player::leave(&window);
+                    }
+                    if screen == Screen::Settings {
+                        settings::show(&window, self.state.borrow().session());
                     }
                     window.set_screen(slint_screen(screen));
                 }
@@ -564,5 +624,56 @@ fn notice_message(notice: Notice) -> Message {
         Notice::SessionExpired => Message::SessionExpired,
         Notice::FileTokenWarning => Message::FileTokenWarning,
         Notice::StorageError => Message::StorageError,
+    }
+}
+
+fn hide_notice(window: &AppWindow) {
+    let mut notice = window.get_notice();
+    notice.visible = false;
+    window.set_notice(notice);
+}
+
+/// Whether `message` stays until the user closes it, rather than leaving on its own.
+fn is_persistent(message: Message) -> bool {
+    matches!(
+        message,
+        Message::SessionExpired | Message::FileTokenWarning | Message::StorageError
+    )
+}
+
+/// Whether a notice showing `message` stays when `screen` is shown.
+fn keeps_notice(message: Message, screen: Screen) -> bool {
+    match message {
+        Message::FileTokenWarning => {
+            matches!(screen, Screen::Home | Screen::Player | Screen::Settings)
+        }
+        Message::SessionExpired | Message::StorageError => {
+            matches!(screen, Screen::SignIn | Screen::QuickConnect)
+        }
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_messages_that_need_the_user_persist() {
+        assert!(is_persistent(Message::SessionExpired));
+        assert!(is_persistent(Message::FileTokenWarning));
+        assert!(is_persistent(Message::StorageError));
+        assert!(!is_persistent(Message::CommandFailed));
+        assert!(!is_persistent(Message::PlaybackUnavailable));
+        assert!(!is_persistent(Message::LoadFailed));
+    }
+
+    #[test]
+    fn notices_stay_only_where_they_still_apply() {
+        assert!(keeps_notice(Message::FileTokenWarning, Screen::Settings));
+        assert!(!keeps_notice(Message::FileTokenWarning, Screen::SignIn));
+        assert!(keeps_notice(Message::SessionExpired, Screen::QuickConnect));
+        assert!(!keeps_notice(Message::SessionExpired, Screen::Home));
+        assert!(!keeps_notice(Message::CommandFailed, Screen::Player));
     }
 }

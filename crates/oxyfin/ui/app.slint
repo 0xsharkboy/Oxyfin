@@ -3,16 +3,18 @@ import "fonts/Inter-Medium.ttf";
 import "fonts/Inter-SemiBold.ttf";
 import "fonts/Inter-Bold.ttf";
 import { Theme, Message, Messages, NextUp, TrackRow } from "theme.slint";
-import { LabelText } from "components/text.slint";
 import { StartingScreen } from "screens/starting.slint";
 import { SignInScreen, ServerState, ServerStatus } from "screens/sign_in.slint";
 import { QuickConnectScreen } from "screens/quick_connect.slint";
 import { HomeScreen, HomeBanner, HomeRow, HomeRowKind, HomeTitles } from "screens/home.slint";
 import { PlayerScreen } from "screens/player.slint";
+import { SettingsScreen } from "screens/settings.slint";
+import { NoticeBanner, NoticeData } from "components/notice_banner.slint";
 
 export { CardData, Message, Messages, NextUp, TrackRow } from "theme.slint";
 export { ServerState, ServerStatus }
 export { HomeBanner, HomeRow, HomeRowKind, HomeTitles }
+export { NoticeData }
 
 // Mirrors the Rust `state::Screen` one to one.
 export enum Screen { starting, sign-in, quick-connect, home, player, settings }
@@ -83,9 +85,15 @@ export component AppWindow inherits Window {
     callback player-command-select-subtitle(index: int);
     callback close-player();
 
-    in property <Message> notice;
-    in property <string> notice-detail;
-    in property <bool> notice-visible;
+    in property <string> settings-server-address;
+    in property <string> settings-user-name;
+    in property <bool> settings-token-in-file;
+    in property <string> app-version;
+    callback close-settings();
+    callback sign-out();
+
+    in property <NoticeData> notice;
+    callback dismiss-notice();
 
     title: "Oxyfin";
     background: transparent;
@@ -220,24 +228,27 @@ export component AppWindow inherits Window {
         }
     }
 
-    if root.notice-visible: Rectangle {
-        y: Theme.space-lg;
+    if root.screen == Screen.settings: SettingsScreen {
+        server-address: root.settings-server-address;
+        user-name: root.settings-user-name;
+        token-in-file: root.settings-token-in-file;
+        version: root.app-version;
+        back => {
+            root.close-settings();
+        }
+        sign-out => {
+            root.sign-out();
+        }
+    }
+
+    // Below the top bar of the screens that have one.
+    if root.notice.visible: NoticeBanner {
+        y: root.screen == Screen.home || root.screen == Screen.settings ? Theme.space-3xl + Theme.space-lg : Theme.space-lg;
         x: (parent.width - self.width) / 2;
         width: min(parent.width - 2 * Theme.space-lg, 560px);
-        height: notice-text.preferred-height + 2 * Theme.space-md;
-        background: Theme.bg-hover;
-        border-radius: Theme.radius-md;
-        border-width: Theme.border-thin;
-        border-color: Theme.border-default;
-
-        notice-text := LabelText {
-            accessible-role: text;
-            x: Theme.space-lg;
-            width: parent.width - 2 * Theme.space-lg;
-            text: Messages.message-text(root.notice, root.notice-detail);
-            color: Theme.text-primary;
-            wrap: word-wrap;
-            vertical-alignment: center;
+        notice: root.notice;
+        dismiss => {
+            root.dismiss-notice();
         }
     }
 }

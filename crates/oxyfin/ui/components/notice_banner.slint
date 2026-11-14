@@ -1,0 +1,58 @@
+import { Theme, Message, Messages } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { BodyText } from "text.slint";
+import { IconButton } from "icon_button.slint";
+
+// The message shown by the banner; `dismissible` ones stay until closed with the cross.
+export struct NoticeData {
+    visible: bool,
+    message: Message,
+    detail: string,
+    dismissible: bool,
+}
+
+// Discreet banner at the top of the content for errors that belong to no field or row.
+export component NoticeBanner inherits Rectangle {
+    in property <NoticeData> notice;
+    callback dismiss();
+
+    accessible-role: groupbox;
+    accessible-label: @tr("Notice");
+
+    height: layout.preferred-height;
+    background: Theme.bg-hover;
+    border-radius: Theme.radius-md;
+    border-width: Theme.border-thin;
+    border-color: Theme.border-default;
+    drop-shadow-blur: Theme.space-lg;
+    drop-shadow-offset-y: Theme.space-xs;
+    drop-shadow-color: Theme.card-shadow;
+
+    layout := HorizontalLayout {
+        padding-left: Theme.space-lg;
+        padding-right: root.notice.dismissible ? Theme.space-sm : Theme.space-lg;
+        padding-top: Theme.space-sm;
+        padding-bottom: Theme.space-sm;
+        spacing: Theme.space-md;
+
+        BodyText {
+            accessible-role: text;
+            min-height: 24px + 2 * Theme.space-sm;
+            horizontal-stretch: 1;
+            text: Messages.message-text(root.notice.message, root.notice.detail);
+            wrap: word-wrap;
+            vertical-alignment: center;
+        }
+        if root.notice.dismissible: VerticalLayout {
+            alignment: center;
+            IconButton {
+                icon: Icons.x;
+                label: @tr("Close");
+                icon-color: Theme.text-secondary;
+                clicked => {
+                    root.dismiss();
+                }
+            }
+        }
+    }
+}
