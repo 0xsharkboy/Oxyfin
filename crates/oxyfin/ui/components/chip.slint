@@ -22,7 +22,7 @@ export component Chip inherits Rectangle {
     background: selected ? Theme.accent : (touch.has-hover && enabled ? Theme.bg-hover : Theme.bg-elevated);
     border-width: focus.has-focus ? Theme.border-focus : (selected ? 0 : Theme.border-thin);
     border-color: focus.has-focus ? (selected ? Theme.text-primary : Theme.accent) : Theme.border-default;
-    opacity: enabled ? 1 : 0.4;
+    opacity: enabled ? 1 : Theme.disabled-opacity;
 
     function activate() {
         if enabled {

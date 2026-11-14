@@ -25,7 +25,7 @@ export component Button inherits Rectangle {
     background: style == ButtonStyle.primary ? Theme.accent : style == ButtonStyle.secondary ? Theme.bg-hover : (touch.has-hover && enabled ? Theme.bg-hover : transparent);
     border-width: focus.has-focus ? Theme.border-focus : style == ButtonStyle.ghost ? Theme.border-thin : 0;
     border-color: focus.has-focus ? (style == ButtonStyle.primary ? Theme.text-primary : Theme.accent) : Theme.border-default;
-    opacity: enabled ? 1 : 0.4;
+    opacity: enabled ? 1 : Theme.disabled-opacity;
 
     function activate() {
         if enabled {
