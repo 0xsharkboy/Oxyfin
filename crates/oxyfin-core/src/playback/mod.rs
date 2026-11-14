@@ -1,9 +1,21 @@
 //! Playback of a media: track selection and episode navigation.
 
-#[allow(dead_code, reason = "used by the playback session added later")]
+mod controller;
+mod current;
+mod media_player;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "used by the next-episode logic")
+)]
 mod queue;
-#[allow(dead_code, reason = "used by the playback session added later")]
 mod tracks;
+
+pub use controller::{
+    NEXT_UP_COUNTDOWN, PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackController,
+    PlaybackEvent, PlaybackHandle, PlaybackTimings, PlaybackTitle, SEEK_STEP, SHUTDOWN_TIMEOUT,
+    SPEEDS,
+};
+pub use media_player::{MediaPlayer, PlayerEventSink, PlayerEvents, player_events};
 
 /// An audio track the user can pick.
 #[derive(Clone, Debug, PartialEq, Eq)]

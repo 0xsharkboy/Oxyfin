@@ -1,0 +1,640 @@
+//! Integration tests for the playback controller, with a fake player.
+
+mod common;
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use common::{
+    Call, FakePlayer, TEST_TOKEN, bodies, events_until, fixture, session, wait_event, wait_requests,
+};
+use oxyfin_api::ItemId;
+use oxyfin_core::{
+    PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackController, PlaybackEvent,
+    PlaybackHandle, PlaybackTimings, PlayerEventSink, SHUTDOWN_TIMEOUT, player_events,
+};
+use oxyfin_player::{PlayerEvent, SeekTarget, Track, TrackId, TrackKind, UnloadReason};
+use serde_json::{Value, json};
+use tokio::sync::mpsc::UnboundedReceiver;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
+
+const MOVIE_ID: &str = "76282b1c408f374beeee50519e9157a4";
+const PLAY_SESSION_ID: &str = "8050f69acbe34027b28b38f406d4fe49";
+const START: &str = "/Sessions/Playing";
+const PROGRESS: &str = "/Sessions/Playing/Progress";
+const STOPPED: &str = "/Sessions/Playing/Stopped";
+/// `UserData.PlaybackPositionTicks` of `item_movie.json`.
+const RESUME: Duration = Duration::from_secs(3);
+
+struct Harness {
+    mock: MockServer,
+    player: Arc<FakePlayer>,
+    sink: PlayerEventSink,
+    handle: PlaybackHandle,
+    events: UnboundedReceiver<PlaybackEvent>,
+}
+
+/// Timings with no periodic report, so only explicit triggers send one.
+fn quiet() -> PlaybackTimings {
+    PlaybackTimings {
+        progress_interval: Duration::from_secs(3600),
+        ..PlaybackTimings::default()
+    }
+}
+
+async fn mount_status(mock: &MockServer, verb: &str, route: &str, status: u16) {
+    Mock::given(method(verb))
+        .and(path(route))
+        .respond_with(ResponseTemplate::new(status))
+        .with_priority(1)
+        .mount(mock)
+        .await;
+}
+
+async fn mount_playback_info(mock: &MockServer, body: Value) {
+    Mock::given(method("POST"))
+        .and(path(format!("/Items/{MOVIE_ID}/PlaybackInfo")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .with_priority(1)
+        .mount(mock)
+        .await;
+}
+
+/// Spawns a controller on `mock`, after mounting the default routes (lowest priority).
+async fn harness_on(mock: MockServer, timings: PlaybackTimings) -> Harness {
+    Mock::given(method("GET"))
+        .and(path(format!("/Items/{MOVIE_ID}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("item_movie")))
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(format!("/Items/{MOVIE_ID}/PlaybackInfo")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("playback_info")))
+        .mount(&mock)
+        .await;
+    for route in [START, PROGRESS, STOPPED] {
+        Mock::given(method("POST"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock)
+            .await;
+    }
+    let player = Arc::new(FakePlayer::default());
+    let (sink, player_events) = player_events();
+    let (handle, events) = PlaybackController::spawn_with_timings(
+        session(&mock),
+        player.clone(),
+        player_events,
+        timings,
+    );
+    Harness {
+        mock,
+        player,
+        sink,
+        handle,
+        events,
+    }
+}
+
+async fn harness(timings: PlaybackTimings) -> Harness {
+    harness_on(MockServer::start().await, timings).await
+}
+
+fn track(id: i64, kind: TrackKind, ff: i64, selected: bool) -> Track {
+    Track {
+        id: TrackId(id),
+        kind,
+        language: None,
+        title: None,
+        codec: None,
+        channels: None,
+        is_default: false,
+        is_forced: false,
+        is_external: false,
+        is_selected: selected,
+        stream_index: Some(ff),
+        external_url: None,
+    }
+}
+
+/// The tracks mpv reports for the fixture file: video 0, audio 1 (eng) and 2 (fra).
+fn file_tracks() -> Vec<Track> {
+    vec![
+        track(1, TrackKind::Video, 0, true),
+        track(1, TrackKind::Audio, 1, true),
+        track(2, TrackKind::Audio, 2, false),
+    ]
+}
+
+impl Harness {
+    async fn play(&mut self, mode: PlayMode) {
+        self.handle.send(PlaybackCommand::Play {
+            item: ItemId::from(MOVIE_ID),
+            mode,
+        });
+        wait_event(&mut self.events, |e| {
+            matches!(e, PlaybackEvent::Loading { .. })
+        })
+        .await;
+        self.player.wait_call(|c| matches!(c, Call::Load(_))).await;
+    }
+
+    /// Plays the movie in auto mode and loads it; returns the `Ready` event.
+    async fn start(&mut self) -> PlaybackEvent {
+        self.play(PlayMode::Auto).await;
+        self.sink.send(PlayerEvent::FileLoaded {
+            duration: Some(Duration::from_millis(10_023)),
+            tracks: file_tracks(),
+        });
+        let ready = wait_event(&mut self.events, |e| {
+            matches!(e, PlaybackEvent::Ready { .. })
+        })
+        .await;
+        wait_requests(&self.mock, START, 1).await;
+        ready
+    }
+
+    /// Lets the controller handle every player event sent so far, then stops
+    /// playback; returns every event received up to `Stopped`.
+    ///
+    /// Player events and commands travel on separate channels, hence the
+    /// marker event before the command.
+    async fn stop(&mut self) -> Vec<PlaybackEvent> {
+        let marker = PlaybackEvent::Position(Duration::from_millis(999));
+        self.sink
+            .send(PlayerEvent::Position(Duration::from_millis(999)));
+        let mut seen = events_until(&mut self.events, |e| *e == marker).await;
+        self.handle.send(PlaybackCommand::Stop);
+        seen.extend(events_until(&mut self.events, |e| matches!(e, PlaybackEvent::Stopped)).await);
+        seen
+    }
+}
+
+fn load_call(player: &FakePlayer) -> oxyfin_player::MediaSource {
+    player
+        .calls()
+        .into_iter()
+        .find_map(|call| match call {
+            Call::Load(source) => Some(source),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("no load call"))
+}
+
+fn position_of(seen: &[Call], wanted: &Call) -> usize {
+    seen.iter()
+        .position(|call| call == wanted)
+        .unwrap_or_else(|| panic!("{wanted:?} not in {seen:?}"))
+}
+
+#[test]
+fn default_timings_follow_the_spec() {
+    let timings = PlaybackTimings::default();
+    assert_eq!(timings.progress_interval, PROGRESS_INTERVAL);
+    assert_eq!(timings.progress_interval, Duration::from_secs(10));
+    assert_eq!(timings.next_up_countdown_tick, Duration::from_secs(1));
+    assert_eq!(timings.shutdown_timeout, SHUTDOWN_TIMEOUT);
+    assert_eq!(timings.shutdown_timeout, Duration::from_secs(2));
+}
+
+#[tokio::test]
+async fn play_auto_resumes_at_saved_position() {
+    let mut h = harness(quiet()).await;
+    h.play(PlayMode::Auto).await;
+    let source = load_call(&h.player);
+    assert_eq!(source.start, Some(RESUME));
+    assert!(
+        source
+            .location
+            .contains(&format!("/Videos/{MOVIE_ID}/stream")),
+        "{}",
+        source.location
+    );
+    let auth = source
+        .headers
+        .iter()
+        .find(|(name, _)| name == "Authorization")
+        .map(|(_, value)| value.clone())
+        .unwrap_or_default();
+    assert!(auth.contains(TEST_TOKEN));
+}
+
+#[tokio::test]
+async fn play_from_start_has_no_start() {
+    let mut h = harness(quiet()).await;
+    h.play(PlayMode::FromStart).await;
+    assert_eq!(load_call(&h.player).start, None);
+}
+
+#[tokio::test]
+async fn loading_event_carries_the_title() {
+    let mut h = harness(quiet()).await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(MOVIE_ID),
+        mode: PlayMode::Auto,
+    });
+    let event = wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::Loading { .. })
+    })
+    .await;
+    let PlaybackEvent::Loading { item, title } = event else {
+        unreachable!();
+    };
+    assert_eq!(item, ItemId::from(MOVIE_ID));
+    assert_eq!(title.title, "Test Movie (2020)");
+    assert_eq!(title.series_name, None);
+    assert_eq!(title.episode_label, None);
+}
+
+#[tokio::test]
+async fn loaded_file_applies_default_tracks() {
+    let mut h = harness(quiet()).await;
+    let ready = h.start().await;
+    let calls = h.player.calls();
+    let add = calls
+        .iter()
+        .position(|call| matches!(call, Call::AddExternal { .. }))
+        .unwrap_or_else(|| panic!("no external subtitle added: {calls:?}"));
+    let Call::AddExternal { url, language, .. } = &calls[add] else {
+        unreachable!();
+    };
+    assert!(
+        url.ends_with(&format!(
+            "/Videos/{MOVIE_ID}/{MOVIE_ID}/Subtitles/0/Stream.srt"
+        )),
+        "{url}"
+    );
+    assert_eq!(language.as_deref(), Some("eng"));
+    let audio = position_of(&calls, &Call::SelectAudio(Some(TrackId(1))));
+    let subtitle = position_of(&calls, &Call::SelectSubtitle(Some(TrackId(1))));
+    assert!(add < subtitle && add < audio);
+    position_of(&calls, &Call::SetSpeed(1.0));
+
+    let PlaybackEvent::Ready {
+        duration,
+        audio,
+        subtitles,
+        has_previous,
+        has_next,
+    } = ready
+    else {
+        unreachable!();
+    };
+    assert_eq!(duration, Some(Duration::from_millis(10_023)));
+    let selected_audio: Vec<i32> = audio
+        .iter()
+        .filter(|a| a.selected)
+        .map(|a| a.index)
+        .collect();
+    assert_eq!(selected_audio, vec![2]);
+    assert_eq!(audio.len(), 2);
+    assert_eq!(subtitles.len(), 1);
+    assert!(subtitles[0].selected && subtitles[0].external);
+    assert!(!has_previous && !has_next);
+}
+
+#[tokio::test]
+async fn missing_default_subtitle_turns_subtitles_off() {
+    let mock = MockServer::start().await;
+    let mut info = fixture("playback_info");
+    let source = &mut info["MediaSources"][0];
+    let Some(source) = source.as_object_mut() else {
+        panic!("bad fixture");
+    };
+    source.remove("DefaultSubtitleStreamIndex");
+    source.remove("DefaultAudioStreamIndex");
+    mount_playback_info(&mock, info).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    let calls = h.player.calls();
+    position_of(&calls, &Call::SelectSubtitle(None));
+    assert!(
+        !calls.iter().any(|c| matches!(c, Call::SelectAudio(_))),
+        "{calls:?}"
+    );
+    let start = wait_requests(&h.mock, START, 1).await;
+    assert_eq!(start[0]["AudioStreamIndex"], json!(2));
+    assert_eq!(start[0].get("SubtitleStreamIndex"), None);
+}
+
+#[tokio::test]
+async fn start_report_has_jellyfin_indexes() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    let start = wait_requests(&h.mock, START, 1).await;
+    let body = &start[0];
+    assert_eq!(body["ItemId"], json!(MOVIE_ID));
+    assert_eq!(body["MediaSourceId"], json!(MOVIE_ID));
+    assert_eq!(body["PlaySessionId"], json!(PLAY_SESSION_ID));
+    assert_eq!(body["AudioStreamIndex"], json!(2));
+    assert_eq!(body["SubtitleStreamIndex"], json!(0));
+    assert_eq!(body["PositionTicks"], json!(30_000_000));
+    assert_eq!(body["IsPaused"], json!(false));
+}
+
+#[tokio::test]
+async fn progress_reports_on_each_interval_until_paused() {
+    let mut h = harness(PlaybackTimings {
+        progress_interval: Duration::from_millis(30),
+        ..PlaybackTimings::default()
+    })
+    .await;
+    h.start().await;
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(4)));
+    let periodic = wait_requests(&h.mock, PROGRESS, 3).await;
+    assert!(periodic.iter().all(|body| body["IsPaused"] == json!(false)));
+
+    h.sink.send(PlayerEvent::Paused(true));
+    let start = tokio::time::Instant::now();
+    let after_pause = loop {
+        let found = bodies(&h.mock, PROGRESS).await;
+        if found
+            .last()
+            .is_some_and(|body| body["IsPaused"] == json!(true))
+        {
+            break found.len();
+        }
+        assert!(start.elapsed() < common::DEADLINE, "no paused report");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    };
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(bodies(&h.mock, PROGRESS).await.len(), after_pause);
+}
+
+#[tokio::test]
+async fn pause_reports_immediately() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(5)));
+    h.sink.send(PlayerEvent::Paused(true));
+    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Paused(true))).await;
+    let progress = wait_requests(&h.mock, PROGRESS, 1).await;
+    assert_eq!(progress[0]["IsPaused"], json!(true));
+    assert_eq!(progress[0]["PositionTicks"], json!(50_000_000));
+}
+
+#[tokio::test]
+async fn renderer_seek_pair_is_silent() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    h.sink.send(PlayerEvent::Seeking);
+    h.sink.send(PlayerEvent::Seeked);
+    let seen = h.stop().await;
+    assert!(
+        !seen
+            .iter()
+            .any(|e| matches!(e, PlaybackEvent::Seeking | PlaybackEvent::Seeked)),
+        "{seen:?}"
+    );
+    assert!(bodies(&h.mock, PROGRESS).await.is_empty());
+}
+
+#[tokio::test]
+async fn user_seek_reports_on_seeked() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    let target = SeekTarget::Forward(Duration::from_secs(10));
+    h.handle.send(PlaybackCommand::Seek(target));
+    h.player.wait_call(|c| *c == Call::Seek(target)).await;
+    h.sink.send(PlayerEvent::Seeking);
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(13)));
+    h.sink.send(PlayerEvent::Seeked);
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::Seeked)).await;
+    assert!(seen.iter().any(|e| matches!(e, PlaybackEvent::Seeking)));
+    let progress = wait_requests(&h.mock, PROGRESS, 1).await;
+    assert_eq!(progress[0]["PositionTicks"], json!(130_000_000));
+
+    h.sink.send(PlayerEvent::Seeking);
+    h.sink.send(PlayerEvent::Seeked);
+    let seen = h.stop().await;
+    assert!(
+        !seen.iter().any(|e| matches!(e, PlaybackEvent::Seeked)),
+        "{seen:?}"
+    );
+    assert_eq!(bodies(&h.mock, PROGRESS).await.len(), 1);
+}
+
+#[tokio::test]
+async fn command_while_loading_is_ignored() {
+    let mut h = harness(quiet()).await;
+    h.player.set_no_media(true);
+    h.play(PlayMode::Auto).await;
+    let target = SeekTarget::Absolute(Duration::from_secs(1));
+    h.handle.send(PlaybackCommand::SetPaused(true));
+    h.handle.send(PlaybackCommand::Seek(target));
+    h.player.wait_call(|c| *c == Call::Seek(target)).await;
+    h.player.set_no_media(false);
+
+    h.sink.send(PlayerEvent::FileLoaded {
+        duration: Some(Duration::from_millis(10_023)),
+        tracks: file_tracks(),
+    });
+    h.sink.send(PlayerEvent::Seeking);
+    h.sink.send(PlayerEvent::Seeked);
+    let mut seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::Ready { .. })).await;
+    seen.extend(h.stop().await);
+    assert!(
+        !seen.iter().any(|e| matches!(
+            e,
+            PlaybackEvent::Error(_) | PlaybackEvent::Seeking | PlaybackEvent::Seeked
+        )),
+        "{seen:?}"
+    );
+    assert!(bodies(&h.mock, PROGRESS).await.is_empty());
+    wait_requests(&h.mock, STOPPED, 1).await;
+}
+
+#[tokio::test]
+async fn failed_progress_report_keeps_playing() {
+    let mock = MockServer::start().await;
+    mount_status(&mock, "POST", PROGRESS, 500).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.sink.send(PlayerEvent::Paused(true));
+    wait_requests(&h.mock, PROGRESS, 1).await;
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(5)));
+    let seen = events_until(&mut h.events, |e| {
+        *e == PlaybackEvent::Position(Duration::from_secs(5))
+    })
+    .await;
+    assert!(
+        !seen
+            .iter()
+            .any(|e| matches!(e, PlaybackEvent::Error(_) | PlaybackEvent::SessionExpired)),
+        "{seen:?}"
+    );
+    assert!(!h.player.calls().contains(&Call::Stop));
+    h.stop().await;
+    wait_requests(&h.mock, STOPPED, 1).await;
+}
+
+#[tokio::test]
+async fn progress_401_is_session_expired() {
+    let mock = MockServer::start().await;
+    mount_status(&mock, "POST", PROGRESS, 401).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.sink.send(PlayerEvent::Paused(true));
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::SessionExpired)
+    })
+    .await;
+    assert!(h.player.calls().contains(&Call::Stop));
+    assert!(bodies(&h.mock, STOPPED).await.is_empty());
+}
+
+#[tokio::test]
+async fn item_401_is_session_expired() {
+    let mock = MockServer::start().await;
+    mount_status(&mock, "GET", &format!("/Items/{MOVIE_ID}"), 401).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(MOVIE_ID),
+        mode: PlayMode::Auto,
+    });
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::SessionExpired)
+    })
+    .await;
+    assert!(!h.player.calls().iter().any(|c| matches!(c, Call::Load(_))));
+}
+
+#[tokio::test]
+async fn no_direct_play_source_is_an_error() {
+    let mock = MockServer::start().await;
+    let mut info = fixture("playback_info");
+    info["MediaSources"][0]["SupportsDirectPlay"] = json!(false);
+    mount_playback_info(&mock, info).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(MOVIE_ID),
+        mode: PlayMode::Auto,
+    });
+    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Error(_))).await;
+    assert!(!h.player.calls().iter().any(|c| matches!(c, Call::Load(_))));
+
+    let mock = MockServer::start().await;
+    mount_playback_info(&mock, json!({ "MediaSources": [] })).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(MOVIE_ID),
+        mode: PlayMode::Auto,
+    });
+    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Error(_))).await;
+    assert!(h.player.calls().is_empty());
+}
+
+#[tokio::test]
+async fn load_error_is_reported() {
+    let mut h = harness(quiet()).await;
+    h.player.set_fail_load(true);
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(MOVIE_ID),
+        mode: PlayMode::Auto,
+    });
+    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Error(_))).await;
+    assert!(bodies(&h.mock, START).await.is_empty());
+}
+
+#[tokio::test]
+async fn playback_error_is_reported_with_a_stop_report() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    h.sink.send(PlayerEvent::Unloaded(UnloadReason::Error(
+        "loading failed".into(),
+    )));
+    wait_event(&mut h.events, |e| {
+        *e == PlaybackEvent::Error("loading failed".into())
+    })
+    .await;
+    wait_requests(&h.mock, STOPPED, 1).await;
+}
+
+#[tokio::test]
+async fn stop_reports_then_emits_stopped() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(7)));
+    wait_event(&mut h.events, |e| {
+        *e == PlaybackEvent::Position(Duration::from_secs(7))
+    })
+    .await;
+    h.handle.send(PlaybackCommand::Stop);
+    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Stopped)).await;
+    let stopped = wait_requests(&h.mock, STOPPED, 1).await;
+    assert_eq!(stopped[0]["PositionTicks"], json!(70_000_000));
+    assert!(h.player.calls().contains(&Call::Stop));
+}
+
+#[tokio::test]
+async fn select_commands_use_mpv_ids() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::SelectAudio(3));
+    h.player
+        .wait_call(|c| *c == Call::SelectAudio(Some(TrackId(2))))
+        .await;
+    h.handle.send(PlaybackCommand::SelectSubtitle(None));
+    h.player
+        .wait_call(|c| *c == Call::SelectSubtitle(None))
+        .await;
+}
+
+#[tokio::test]
+async fn track_change_reports_once() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    let mut external = track(1, TrackKind::Subtitle, 0, true);
+    external.is_external = true;
+    external.stream_index = None;
+    let tracks = vec![
+        track(1, TrackKind::Video, 0, true),
+        track(1, TrackKind::Audio, 1, false),
+        track(2, TrackKind::Audio, 2, true),
+        external,
+    ];
+    h.sink.send(PlayerEvent::Tracks(tracks.clone()));
+    let event = wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::TracksChanged { .. })
+    })
+    .await;
+    let PlaybackEvent::TracksChanged { audio, .. } = event else {
+        unreachable!();
+    };
+    assert!(audio.iter().any(|a| a.index == 3 && a.selected));
+    let progress = wait_requests(&h.mock, PROGRESS, 1).await;
+    assert_eq!(progress[0]["AudioStreamIndex"], json!(3));
+    assert_eq!(progress[0]["SubtitleStreamIndex"], json!(0));
+
+    h.sink.send(PlayerEvent::Tracks(tracks));
+    let seen = h.stop().await;
+    assert!(
+        !seen
+            .iter()
+            .any(|e| matches!(e, PlaybackEvent::TracksChanged { .. })),
+        "{seen:?}"
+    );
+    assert_eq!(bodies(&h.mock, PROGRESS).await.len(), 1);
+}
+
+#[tokio::test]
+async fn player_state_events_are_forwarded() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    h.sink.send(PlayerEvent::Volume(42.0));
+    h.sink.send(PlayerEvent::Muted(true));
+    h.sink.send(PlayerEvent::Speed(1.5));
+    let seen = events_until(&mut h.events, |e| *e == PlaybackEvent::Speed(1.5)).await;
+    assert!(seen.contains(&PlaybackEvent::Volume(42.0)));
+    assert!(seen.contains(&PlaybackEvent::Muted(true)));
+    h.handle.send(PlaybackCommand::SetSpeed(2.0));
+    h.handle.send(PlaybackCommand::SetVolume(50.0));
+    h.handle.send(PlaybackCommand::SetMuted(false));
+    h.handle.send(PlaybackCommand::SetPaused(true));
+    h.player.wait_call(|c| *c == Call::SetPaused(true)).await;
+    let calls = h.player.calls();
+    assert!(calls.contains(&Call::SetSpeed(2.0)));
+    assert!(calls.contains(&Call::SetVolume(50.0)));
+    assert!(calls.contains(&Call::SetMuted(false)));
+}
