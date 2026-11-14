@@ -88,10 +88,17 @@ impl Catalog {
         Self { session }
     }
 
-    /// Lists the libraries of the user.
+    /// Lists the movie and show libraries of the user.
+    ///
+    /// Other views (music, live TV, playlists, untyped) are left out.
     pub async fn libraries(&self) -> Result<Vec<Library>> {
         let views = self.session.user_views().await?;
-        Ok(views.items.iter().map(Library::from_dto).collect())
+        Ok(views
+            .items
+            .iter()
+            .map(Library::from_dto)
+            .filter(|library| matches!(library.kind, LibraryKind::Movies | LibraryKind::Shows))
+            .collect())
     }
 
     /// Lists the items the user can resume.
