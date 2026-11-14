@@ -132,12 +132,10 @@ impl TrackMap {
 }
 
 fn label(stream: &MediaStream) -> String {
-    stream
-        .display_title
-        .as_ref()
-        .or(stream.title.as_ref())
-        .or(stream.language.as_ref())
-        .cloned()
+    let non_empty = |text: &Option<String>| text.clone().filter(|text| !text.is_empty());
+    non_empty(&stream.display_title)
+        .or_else(|| non_empty(&stream.title))
+        .or_else(|| stream.language.clone())
         .unwrap_or_default()
 }
 
@@ -285,6 +283,17 @@ mod tests {
         assert!(audio[0].selected);
         let subs = map.subtitle_options();
         assert!(subs[0].external && !subs[0].selected);
+    }
+
+    #[test]
+    fn label_skips_empty_titles() {
+        let mut s = stream(0, MediaStreamType::Audio, false);
+        s.display_title = Some(String::new());
+        s.title = Some(String::new());
+        s.language = Some("fra".to_owned());
+        assert_eq!(label(&s), "fra");
+        s.title = Some("Commentary".to_owned());
+        assert_eq!(label(&s), "Commentary");
     }
 
     #[test]

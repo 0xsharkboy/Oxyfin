@@ -6,7 +6,7 @@ mod error;
 mod images;
 mod models;
 mod paths;
-pub mod playback;
+mod playback;
 mod quick_connect;
 mod secrets;
 mod session;
@@ -20,7 +20,12 @@ pub use models::{
     Season, SeriesDetails, UserState,
 };
 pub use paths::Paths;
-pub use playback::{AudioOption, SubtitleOption};
+pub use playback::{
+    AudioOption, MediaPlayer, NEXT_UP_COUNTDOWN, PROGRESS_INTERVAL, PlayMode, PlaybackCommand,
+    PlaybackController, PlaybackEvent, PlaybackHandle, PlaybackTimings, PlaybackTitle,
+    PlayerEventSink, PlayerEvents, SEEK_STEP, SHUTDOWN_TIMEOUT, SPEEDS, SubtitleOption,
+    player_events,
+};
 pub use quick_connect::{QUICK_CONNECT_POLL_INTERVAL, QuickConnect};
 pub use secrets::{
     FileStore, KeyringStore, MemoryStore, SecretStore, TokenStorage, TokenVault, account_key,
