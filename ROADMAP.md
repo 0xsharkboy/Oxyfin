@@ -10,13 +10,13 @@ This file is the single source of truth for planned work. An item is checked onl
 
 ## Milestone 1: Core experience (movies and shows)
 
-- [ ] Sign in (password and Quick Connect, session remembered)
-- [ ] Home (featured banner, Continue Watching, Next Up, Recently Added)
+- [x] Sign in (password and Quick Connect, session remembered)
+- [x] Home (featured banner, Continue Watching, Next Up, Recently Added)
 - [ ] Libraries (grid, sort, filters)
 - [ ] Search
 - [ ] Movie and series details (seasons, episodes)
-- [ ] Player (direct play, controls, audio and subtitle menu, mpv shortcuts, resume and progress sync, next episode)
-- [ ] Settings (account, sign out, version)
+- [x] Player (direct play, controls, audio and subtitle menu, mpv shortcuts, resume and progress sync, next episode)
+- [x] Settings (account, sign out, version)
 - [ ] English UI with translation support
 - [ ] Linux packages (Flatpak, Nix)
 
