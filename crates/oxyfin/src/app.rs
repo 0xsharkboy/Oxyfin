@@ -205,8 +205,13 @@ impl App {
                     Route::Ignore => {}
                     Route::Expire(id) => app.dispatch(Msg::Expired(id)),
                     Route::Show(event) => {
+                        let stopped = event == oxyfin_core::PlaybackEvent::Stopped;
                         if let Some(window) = app.window() {
                             player::apply(&window, event);
+                        }
+                        // The stop report is queued before this event: Continue Watching catches up.
+                        if stopped && app.shown.get() == Screen::Home {
+                            app.home.shown(&app, Screen::Home);
                         }
                     }
                 }
@@ -227,10 +232,11 @@ impl App {
                 _ => None,
             }
         };
-        if player.is_some()
-            && let Some(window) = self.window()
-        {
-            window.window().request_redraw();
+        if let Some((_, player)) = player {
+            crate::video::release_player(&self.runtime, player);
+            if let Some(window) = self.window() {
+                window.window().request_redraw();
+            }
         }
     }
 

@@ -37,7 +37,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let window = AppWindow::new()?;
     let app = App::new(&window, runtime.handle().clone(), paths, vault)?;
     #[cfg(feature = "mpv")]
-    oxyfin::video::install(&window, app.video_source())?;
+    oxyfin::video::install(&window, app.video_source(), runtime.handle().clone())?;
     window.show()?;
     slint::run_event_loop_until_quit()?;
     if let Err(error) = window.hide() {
