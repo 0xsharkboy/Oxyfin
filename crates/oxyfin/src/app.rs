@@ -145,6 +145,19 @@ impl App {
         Rc::clone(&self.video)
     }
 
+    /// Tells the user that the video of generation `id` cannot be shown, if it is still current.
+    #[cfg(feature = "mpv")]
+    pub fn video_failed(&self, id: GenerationId) {
+        let current = self
+            .generation
+            .borrow()
+            .as_ref()
+            .map(|generation| generation.id);
+        if current == Some(id) {
+            self.notify(Message::LoadFailed);
+        }
+    }
+
     /// Plays `item` on the player screen. Only the home screen starts playback.
     pub(crate) fn play(self: &Rc<Self>, item: ItemId) {
         if self.state.borrow().screen() != Screen::Home {

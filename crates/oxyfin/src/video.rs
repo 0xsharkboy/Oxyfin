@@ -62,11 +62,13 @@ fn step(held: Option<GenerationId>, wanted: Option<GenerationId>) -> Step {
 /// generation. Nothing is drawn outside the player screen. The window's
 /// `player-video-active` is set once the current renderer drew a frame, so the
 /// player screen keeps an opaque backdrop until then. Players are released on
-/// `runtime`.
+/// `runtime`. `on_failure` is called once for a generation whose renderer
+/// cannot be created.
 pub fn install(
     window: &AppWindow,
     current: VideoSource,
     runtime: Handle,
+    on_failure: impl Fn(GenerationId) + 'static,
 ) -> Result<(), SetRenderingNotifierError> {
     let weak = window.as_weak();
     let mut active: Option<Active> = None;
@@ -106,6 +108,7 @@ pub fn install(
                                 Err(error) => {
                                     log::error!("cannot create the video renderer: {error}");
                                     failed = Some(id);
+                                    on_failure(id);
                                 }
                             }
                         }
