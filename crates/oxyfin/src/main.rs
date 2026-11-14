@@ -38,7 +38,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let app = App::new(&window, runtime.handle().clone(), paths, vault)?;
     window.show()?;
     slint::run_event_loop_until_quit()?;
-    window.hide()?;
+    if let Err(error) = window.hide() {
+        log::warn!("cannot hide the window: {error}");
+    }
 
     let pending = app.take_pending_ends();
     runtime.block_on(async {

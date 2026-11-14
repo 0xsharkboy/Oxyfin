@@ -273,8 +273,14 @@ impl App {
                 );
             }
             Effect::EndGeneration { id, end } => {
-                let generation = self.generation.borrow_mut().take();
-                let Some(generation) = generation.filter(|generation| generation.id == id) else {
+                let generation = {
+                    let mut current = self.generation.borrow_mut();
+                    match &*current {
+                        Some(generation) if generation.id == id => current.take(),
+                        _ => None,
+                    }
+                };
+                let Some(generation) = generation else {
                     log::error!("generation {id:?} is not the current one");
                     return;
                 };
