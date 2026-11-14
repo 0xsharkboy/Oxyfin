@@ -2031,3 +2031,83 @@ async fn play_during_a_load_drops_the_queued_navigation() {
     );
     assert_eq!(h.loaded_ids().len(), 1, "{:?}", h.loaded_ids());
 }
+
+async fn mount_series(mock: &MockServer, next_up: Value) {
+    Mock::given(method("GET"))
+        .and(path(format!("/Items/{SERIES_ID}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("item_series")))
+        .mount(mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/Shows/NextUp"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(next_up))
+        .mount(mock)
+        .await;
+}
+
+#[tokio::test]
+async fn play_series_starts_the_next_episode_to_watch() {
+    let mock = MockServer::start().await;
+    mount_series(&mock, fixture("shows_next_up")).await;
+    let mut episode = fixture("item_episode");
+    episode["Id"] = json!(EPISODES[1]);
+    episode["UserData"]["PlaybackPositionTicks"] = json!(70_000_000);
+    Mock::given(method("GET"))
+        .and(path(format!("/Items/{}", EPISODES[1])))
+        .respond_with(ResponseTemplate::new(200).set_body_json(episode))
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(SERIES_ID),
+        mode: PlayMode::FromStart,
+    });
+    let event = wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::Loading { .. })
+    })
+    .await;
+    let PlaybackEvent::Loading { item, title } = event else {
+        unreachable!();
+    };
+    assert_eq!(item, ItemId::from(EPISODES[1]));
+    assert_eq!(title.series_name.as_deref(), Some("Test Show"));
+    assert_eq!(title.episode_label.as_deref(), Some("S01E01"));
+    let start = tokio::time::Instant::now();
+    while h.loads().is_empty() {
+        assert!(start.elapsed() < common::DEADLINE, "no load");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    let source = load_call(&h.player);
+    assert!(
+        source
+            .location
+            .contains(&format!("/Videos/{}/stream", EPISODES[1])),
+        "{}",
+        source.location
+    );
+    assert_eq!(source.start, Some(Duration::from_secs(7)));
+}
+
+#[tokio::test]
+async fn play_series_without_episode_reports_nothing_to_play() {
+    let mock = MockServer::start().await;
+    mount_series(&mock, json!({ "Items": [], "TotalRecordCount": 0 })).await;
+    let all_played = json!({ "Items": [], "TotalRecordCount": 0 });
+    Mock::given(method("GET"))
+        .and(path(format!("/Shows/{SERIES_ID}/Episodes")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(all_played))
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(SERIES_ID),
+        mode: PlayMode::Auto,
+    });
+    wait_event(&mut h.events, |e| {
+        *e == PlaybackEvent::Error(PlaybackError::NothingToPlay)
+    })
+    .await;
+    assert!(!h.player.calls().iter().any(|c| matches!(c, Call::Load(_))));
+}

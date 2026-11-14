@@ -64,6 +64,9 @@ pub enum PlayMode {
 #[derive(Clone, Debug, PartialEq)]
 pub enum PlaybackCommand {
     /// Play an item, replacing the current one.
+    ///
+    /// A series plays its next episode to watch, in [`PlayMode::Auto`]
+    /// whatever `mode` is; [`PlaybackError::NothingToPlay`] when it has none.
     Play {
         /// Item to play.
         item: ItemId,
@@ -195,6 +198,9 @@ pub enum PlaybackError {
     /// The server offers no source that can be played directly.
     #[error("no source can be played directly")]
     NoDirectPlaySource,
+    /// The series has no episode to watch.
+    #[error("the series has no episode to watch")]
+    NothingToPlay,
     /// The media could not be loaded or stopped playing on an error.
     #[error("the media could not be played: {detail}")]
     LoadFailed {

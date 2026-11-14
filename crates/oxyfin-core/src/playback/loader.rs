@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use oxyfin_api::{ItemId, MediaSourceInfo, PlaySessionId, Session};
+use oxyfin_api::{BaseItemKind, ItemId, MediaSourceInfo, PlaySessionId, Session};
 use oxyfin_player::MediaSource;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::task::JoinHandle;
@@ -29,6 +29,7 @@ pub(super) struct Prepared {
 pub(super) enum LoadFailure {
     Request(CoreError),
     NoDirectPlaySource,
+    NothingToPlay,
 }
 
 /// A step of a load, sent back to the controller.
@@ -99,7 +100,19 @@ async fn fetch(
     send: &impl Fn(LoadStage),
 ) -> Result<Prepared, LoadFailure> {
     let request = |error: oxyfin_api::Error| LoadFailure::Request(error.into());
-    let dto = session.item(&item).await.map_err(request)?;
+    let mut item = item;
+    let mut mode = mode;
+    let mut dto = session.item(&item).await.map_err(request)?;
+    if dto.r#type == BaseItemKind::Series {
+        let episode = Catalog::new(session.clone())
+            .next_episode_to_watch(&item)
+            .await
+            .map_err(LoadFailure::Request)?
+            .ok_or(LoadFailure::NothingToPlay)?;
+        item = episode.id;
+        mode = PlayMode::Auto;
+        dto = session.item(&item).await.map_err(request)?;
+    }
     let title = match ItemSummary::from_dto(&dto) {
         Some(summary) => PlaybackTitle {
             title: summary.title,
