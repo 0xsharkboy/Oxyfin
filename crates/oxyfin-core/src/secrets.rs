@@ -196,32 +196,42 @@ impl TokenVault {
     }
 
     /// Saves the token to the primary store, or to the fallback when that fails.
+    ///
+    /// The other store is cleaned on a best-effort basis so a stale token cannot shadow this one.
     pub fn save(&self, account: &str, token: &str) -> Result<TokenStorage> {
         match self.primary.set(account, token) {
-            Ok(()) => Ok(TokenStorage::Keyring),
+            Ok(()) => {
+                let _ = self.fallback.delete(account);
+                Ok(TokenStorage::Keyring)
+            }
             Err(_) => {
                 self.fallback.set(account, token)?;
+                let _ = self.primary.delete(account);
                 Ok(TokenStorage::File)
             }
         }
     }
 
     /// Loads the token from the primary store, then from the fallback.
+    ///
+    /// A primary error is returned only when the fallback holds no token either.
     pub fn load(&self, account: &str) -> Result<Option<(String, TokenStorage)>> {
-        if let Ok(Some(token)) = self.primary.get(account) {
+        let primary = self.primary.get(account);
+        if let Ok(Some(token)) = primary {
             return Ok(Some((token, TokenStorage::Keyring)));
         }
-        Ok(self
-            .fallback
-            .get(account)?
-            .map(|token| (token, TokenStorage::File)))
+        match self.fallback.get(account)? {
+            Some(token) => Ok(Some((token, TokenStorage::File))),
+            None => primary.map(|_| None),
+        }
     }
 
     /// Removes the token from both stores.
+    ///
+    /// A primary failure is ignored once the fallback is clean, since the keyring may be absent.
     pub fn clear(&self, account: &str) -> Result<()> {
-        let primary = self.primary.delete(account);
-        let fallback = self.fallback.delete(account);
-        primary.and(fallback)
+        let _ = self.primary.delete(account);
+        self.fallback.delete(account)
     }
 }
 
@@ -241,6 +251,58 @@ mod tests {
         fn delete(&self, _: &str) -> Result<()> {
             Err(CoreError::Storage("unavailable".into()))
         }
+    }
+
+    #[derive(Default)]
+    struct SetFailsStore(MemoryStore);
+
+    impl SecretStore for SetFailsStore {
+        fn get(&self, account: &str) -> Result<Option<String>> {
+            self.0.get(account)
+        }
+        fn set(&self, _: &str, _: &str) -> Result<()> {
+            Err(CoreError::Storage("read only".into()))
+        }
+        fn delete(&self, account: &str) -> Result<()> {
+            self.0.delete(account)
+        }
+    }
+
+    #[test]
+    fn clear_succeeds_when_only_the_primary_fails() {
+        let fallback = Arc::new(MemoryStore::default());
+        let vault = TokenVault::new(Arc::new(FailingStore), fallback.clone());
+        vault.save("a", "t").unwrap();
+        vault.clear("a").unwrap();
+        assert_eq!(fallback.get("a").unwrap(), None);
+    }
+
+    #[test]
+    fn primary_save_removes_the_stale_fallback_token() {
+        let primary = Arc::new(MemoryStore::default());
+        let fallback = Arc::new(MemoryStore::default());
+        fallback.set("a", "old").unwrap();
+        let vault = TokenVault::new(primary, fallback.clone());
+        vault.save("a", "new").unwrap();
+        assert_eq!(fallback.get("a").unwrap(), None);
+    }
+
+    #[test]
+    fn fallback_save_removes_the_stale_primary_token() {
+        let primary = Arc::new(SetFailsStore::default());
+        primary.0.set("a", "old").unwrap();
+        let vault = TokenVault::new(primary, Arc::new(MemoryStore::default()));
+        assert_eq!(vault.save("a", "new").unwrap(), TokenStorage::File);
+        assert_eq!(
+            vault.load("a").unwrap(),
+            Some(("new".into(), TokenStorage::File))
+        );
+    }
+
+    #[test]
+    fn load_reports_a_primary_error_when_nothing_else_has_a_token() {
+        let vault = TokenVault::new(Arc::new(FailingStore), Arc::new(MemoryStore::default()));
+        assert!(matches!(vault.load("a"), Err(CoreError::Storage(_))));
     }
 
     fn temp() -> (tempfile::TempDir, Paths) {
