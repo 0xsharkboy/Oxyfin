@@ -108,7 +108,7 @@ add_library() {
   options=$(jq -nc --arg path "$path" --argjson types "$types" \
     '{LibraryOptions: {PathInfos: [{Path: $path}], TypeOptions: ($types | map({Type: ., MetadataFetchers: [], ImageFetchers: []}))}}')
   curl -sf -X POST -H "$JSON" -H "$AUTH, Token=\"$TOKEN\"" \
-    "$BASE/Library/VirtualFolders?name=$name&collectionType=$type&refreshLibrary=true" \
+    "$BASE/Library/VirtualFolders?name=$name&collectionType=$type&refreshLibrary=false" \
     -d "$options" >/dev/null
 }
 
@@ -144,6 +144,8 @@ up() {
   log "creating libraries"
   add_library Movies movies /media/movies '["Movie"]'
   add_library Shows tvshows /media/shows '["Series","Season","Episode"]'
+  # A refresh asked while another library scans is dropped, so scan once after both exist.
+  curl -sf -X POST -H "$token_header" "$BASE/Library/Refresh" >/dev/null
 
   log "waiting for the library scan"
   local timeout=${OXYFIN_TEST_SCAN_TIMEOUT:-600} count=0 start=$SECONDS
