@@ -371,5 +371,7 @@ async fn failed_config_save_keeps_the_previous_token() {
     std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
 
     assert!(matches!(result, Err(CoreError::Storage(_))));
+    let restored = manager.restore().await.unwrap().unwrap();
+    assert_eq!(restored.session.user_id(), first.session.user_id());
     assert!(primary.get(&old_account).unwrap().is_some());
 }

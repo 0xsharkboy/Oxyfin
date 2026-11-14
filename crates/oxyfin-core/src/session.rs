@@ -75,8 +75,11 @@ impl SessionManager {
 
     fn update(&self, change: impl FnOnce(&mut Config)) -> Result<()> {
         let mut config = self.config();
-        change(&mut config);
-        config.save(&self.paths)
+        let mut next = config.clone();
+        change(&mut next);
+        next.save(&self.paths)?;
+        *config = next;
+        Ok(())
     }
 
     fn client_info(&self) -> ClientInfo {
