@@ -217,18 +217,23 @@ export component PlayerControls inherits Rectangle {
                     }
                 }
 
-                Scrubber {
-                    width: 80px;
-                    label: @tr("Volume");
-                    value: root.volume;
-                    maximum: 100;
-                    step: 5;
-                    opacity: root.muted ? Theme.disabled-opacity : 1;
-                    committed(value) => {
-                        root.set-volume(round(value));
-                    }
-                    stepped(direction) => {
-                        root.step-volume(direction);
+                // A layout places a fixed-height child at the top of the row, so this one centers it.
+                VerticalLayout {
+                    alignment: center;
+
+                    Scrubber {
+                        width: 80px;
+                        label: @tr("Volume");
+                        value: root.volume;
+                        maximum: 100;
+                        step: 5;
+                        opacity: root.muted ? Theme.disabled-opacity : 1;
+                        committed(value) => {
+                            root.set-volume(round(value));
+                        }
+                        stepped(direction) => {
+                            root.step-volume(direction);
+                        }
                     }
                 }
             }
