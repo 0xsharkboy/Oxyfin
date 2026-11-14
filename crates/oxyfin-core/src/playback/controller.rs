@@ -2,6 +2,7 @@
 //! the server informed.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use oxyfin_api::{ItemId, MediaStreamType, Session, Ticks};
@@ -9,6 +10,7 @@ use oxyfin_player::{
     MediaSource, PlayerError, PlayerEvent, SeekTarget, Track, TrackKind, UnloadReason,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tokio::sync::oneshot;
 use tokio::time::{Instant, sleep_until, timeout_at};
 
 use super::countdown::Countdown;
@@ -24,16 +26,40 @@ use crate::catalog::Catalog;
 use crate::error::CoreError;
 use crate::models::{Episode, ItemSummary, UserState};
 
+#[derive(Debug)]
+enum Message {
+    Command(PlaybackCommand),
+    Shutdown(oneshot::Sender<()>),
+}
+
 /// Sends commands to a running [`PlaybackController`].
 #[derive(Clone, Debug)]
 pub struct PlaybackHandle {
-    commands: UnboundedSender<PlaybackCommand>,
+    messages: UnboundedSender<Message>,
+    shutdown_timeout: Duration,
+    closing: Arc<AtomicBool>,
 }
 
 impl PlaybackHandle {
     /// Sends a command; ignored once the controller has ended.
     pub fn send(&self, command: PlaybackCommand) {
-        let _ = self.commands.send(command);
+        let _ = self.messages.send(Message::Command(command));
+    }
+
+    /// Ends the controller cleanly: reports the stop of the current item,
+    /// stops the player and waits for the queued reports to be sent.
+    ///
+    /// Returns after at most [`PlaybackTimings::shutdown_timeout`], even when
+    /// the controller is busy or the server is slow. The controller then
+    /// finishes on its own in the runtime, sending what it still can; an item
+    /// it was loading is never loaded. Other handles stop working.
+    pub async fn shutdown(self) {
+        self.closing.store(true, Ordering::SeqCst);
+        let (done, finished) = oneshot::channel();
+        if self.messages.send(Message::Shutdown(done)).is_err() {
+            return;
+        }
+        let _ = tokio::time::timeout(self.shutdown_timeout, finished).await;
     }
 }
 
@@ -56,6 +82,8 @@ pub struct PlaybackController {
     expired: bool,
     next_progress: Option<Instant>,
     countdown: Option<Countdown>,
+    /// Set by [`PlaybackHandle::shutdown`]: no new item is loaded.
+    closing: Arc<AtomicBool>,
 }
 
 impl PlaybackController {
@@ -63,8 +91,9 @@ impl PlaybackController {
     /// [`PlaybackTimings`].
     ///
     /// Returns the handle that sends commands and the receiver of the
-    /// controller's events. The task ends when every handle is dropped,
-    /// after the queued reports are sent.
+    /// controller's events. The task ends on [`PlaybackHandle::shutdown`], or
+    /// when every handle is dropped: it then does the same work (stop report,
+    /// player stopped, queued reports sent) with no one waiting for it.
     pub fn spawn(
         session: Session,
         player: Arc<dyn MediaPlayer>,
@@ -80,9 +109,10 @@ impl PlaybackController {
         events: PlayerEvents,
         timings: PlaybackTimings,
     ) -> (PlaybackHandle, UnboundedReceiver<PlaybackEvent>) {
-        let (commands, command_receiver) = unbounded_channel();
+        let (messages, message_receiver) = unbounded_channel();
         let (event_sender, event_receiver) = unbounded_channel();
         let (expired_sender, expired) = unbounded_channel();
+        let closing = Arc::new(AtomicBool::new(false));
         let controller = Self {
             reporter: Reporter::spawn(session.clone(), expired_sender),
             session,
@@ -96,22 +126,35 @@ impl PlaybackController {
             expired: false,
             next_progress: None,
             countdown: None,
+            closing: closing.clone(),
         };
-        tokio::spawn(controller.run(command_receiver, expired));
-        (PlaybackHandle { commands }, event_receiver)
+        tokio::spawn(controller.run(message_receiver, expired));
+        (
+            PlaybackHandle {
+                messages,
+                shutdown_timeout: timings.shutdown_timeout,
+                closing,
+            },
+            event_receiver,
+        )
     }
 
     async fn run(
         mut self,
-        mut commands: UnboundedReceiver<PlaybackCommand>,
+        mut messages: UnboundedReceiver<Message>,
         mut expired: UnboundedReceiver<()>,
     ) {
         loop {
             let deadline = self.next_progress;
             let countdown = self.countdown.as_ref().map(|countdown| countdown.deadline);
             tokio::select! {
-                command = commands.recv() => match command {
-                    Some(command) => self.on_command(command).await,
+                message = messages.recv() => match message {
+                    Some(Message::Command(command)) => self.on_command(command).await,
+                    Some(Message::Shutdown(done)) => {
+                        self.finish().await;
+                        let _ = done.send(());
+                        return;
+                    }
                     None => break,
                 },
                 event = self.player_events.recv(), if self.player_open => match event {
@@ -128,7 +171,19 @@ impl PlaybackController {
                 }
             }
         }
+        self.finish().await;
+    }
+
+    /// Reports the stop of the current item, stops the player and waits
+    /// until every queued report is sent.
+    async fn finish(mut self) {
+        self.countdown = None;
+        self.release(true);
         let _ = self.reporter.close().await;
+    }
+
+    fn closing(&self) -> bool {
+        self.closing.load(Ordering::SeqCst)
     }
 
     fn emit(&self, event: PlaybackEvent) {
@@ -336,6 +391,9 @@ impl PlaybackController {
             Ok(dto) => dto,
             Err(error) => return self.fail(error.into()),
         };
+        if self.closing() {
+            return;
+        }
         let title = match ItemSummary::from_dto(&dto) {
             Some(summary) => PlaybackTitle {
                 title: summary.title,
@@ -358,7 +416,11 @@ impl PlaybackController {
             None => Siblings::default(),
             Some(episode) => {
                 let catalog = Catalog::new(self.session.clone());
-                match catalog.all_episodes(&episode.series_id).await {
+                let list = catalog.all_episodes(&episode.series_id).await;
+                if self.closing() {
+                    return;
+                }
+                match list {
                     Ok(list) => {
                         let (previous, next) = neighbours(&list, &item);
                         Siblings { previous, next }
@@ -372,6 +434,9 @@ impl PlaybackController {
             Ok(info) => info,
             Err(error) => return self.fail(error.into()),
         };
+        if self.closing() {
+            return;
+        }
         let Some(source) = info
             .media_sources
             .into_iter()
@@ -390,6 +455,9 @@ impl PlaybackController {
             media = media.with_start(start);
         }
         self.wait_for_unload().await;
+        if self.closing() {
+            return;
+        }
         if let Err(error) = self.player.load(&media) {
             return self.emit(PlaybackEvent::Error(PlaybackError::load(error)));
         }
