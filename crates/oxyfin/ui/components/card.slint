@@ -86,12 +86,15 @@ export component MediaCard {
         enabled: root.enabled;
         mouse-cursor: root.enabled ? pointer : default;
         clicked => {
+            focus.focus();
             root.activate();
         }
     }
 
     focus := FocusScope {
         enabled: root.enabled;
+        // Clicks go to the TouchArea: a focusing FocusScope on top would swallow the first one.
+        focus-on-click: false;
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " {
                 root.activate();

@@ -27,6 +27,7 @@ mod page {
 
         export component ComponentsPage inherits Window {
             callback sign-in-clicked();
+            callback other-clicked(string);
 
             VerticalLayout {
                 TopBar { }
@@ -35,15 +36,15 @@ mod page {
                     Button { label: "Sign in"; clicked => { root.sign-in-clicked(); } }
                     Button { label: "Secondary"; style: ButtonStyle.secondary; }
                     Button { label: "Ghost"; style: ButtonStyle.ghost; icon: Icons.play; }
-                    IconButton { icon: Icons.search; label: "Search"; }
-                    NavItem { label: "Home"; active: true; }
-                    Chip { label: "Sci-Fi"; selected: true; }
+                    IconButton { icon: Icons.search; label: "Find"; clicked => { root.other-clicked("Find"); } }
+                    NavItem { label: "Start"; active: true; clicked => { root.other-clicked("Start"); } }
+                    Chip { label: "Sci-Fi"; selected: true; clicked => { root.other-clicked("Sci-Fi"); } }
                 }
                 TextField { label: "Server address"; }
                 ProgressBar { value: 0.5; }
                 HorizontalLayout {
                     PosterCard { title: "Movie"; subtitle: "2024"; status: CardStatus.watched; }
-                    LandscapeCard { title: "Series"; subtitle: "S02E05"; status: CardStatus.in-progress; progress: 0.75; }
+                    LandscapeCard { title: "Series"; subtitle: "S02E05"; status: CardStatus.in-progress; progress: 0.75; clicked => { root.other-clicked("Series"); } }
                 }
                 PlayerControls { width: 1280px; volume: 50; duration: 10; }
             }
@@ -66,6 +67,40 @@ fn button_runs_its_accessible_action_and_messages_are_translated() {
     assert_eq!(buttons.len(), 1);
     buttons[0].invoke_accessible_default_action();
     assert_eq!(clicks.get(), 1);
+
+    page.window()
+        .set_size(slint::LogicalSize::new(1280., 1400.));
+    page.show().unwrap();
+    let clicked = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let recorder = Rc::clone(&clicked);
+    page.on_other_clicked(move |label| recorder.borrow_mut().push(label.to_string()));
+    for (label, role) in [
+        ("Find", AccessibleRole::Button),
+        ("Start", AccessibleRole::Tab),
+        ("Sci-Fi", AccessibleRole::Button),
+        ("Series", AccessibleRole::Button),
+    ] {
+        let element = ElementHandle::find_by_accessible_label(&page, label)
+            .find(|element| element.accessible_role() == Some(role))
+            .unwrap_or_else(|| panic!("no {label} element"));
+        let position = element.absolute_position();
+        let size = element.size();
+        let position = slint::LogicalPosition::new(
+            position.x + size.width / 2.0,
+            position.y + size.height / 2.0,
+        );
+        let window = page.window();
+        window.dispatch_event(slint::platform::WindowEvent::PointerMoved { position });
+        window.dispatch_event(slint::platform::WindowEvent::PointerPressed {
+            position,
+            button: slint::platform::PointerEventButton::Left,
+        });
+        window.dispatch_event(slint::platform::WindowEvent::PointerReleased {
+            position,
+            button: slint::platform::PointerEventButton::Left,
+        });
+    }
+    assert_eq!(*clicked.borrow(), ["Find", "Start", "Sci-Fi", "Series"]);
 
     let inputs: Vec<_> = ElementHandle::find_by_accessible_label(&page, "Server address")
         .filter(|element| element.accessible_role() == Some(AccessibleRole::TextInput))
