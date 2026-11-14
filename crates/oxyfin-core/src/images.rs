@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, SystemTime};
 
@@ -88,6 +88,9 @@ struct Trimmer {
     budget: u64,
     running: AtomicBool,
     pending: AtomicBool,
+    requests: AtomicU64,
+    /// Bytes on disk: measured by each pass, raised by each write in between.
+    total: AtomicU64,
     pass: tokio::sync::Mutex<()>,
 }
 
@@ -96,6 +99,7 @@ impl Trimmer {
         let Ok(handle) = tokio::runtime::Handle::try_current() else {
             return;
         };
+        self.requests.fetch_add(1, Ordering::SeqCst);
         self.pending.store(true, Ordering::SeqCst);
         if self.running.swap(true, Ordering::SeqCst) {
             return;
@@ -115,6 +119,17 @@ impl Trimmer {
         });
     }
 
+    /// Counts a write of `len` bytes; requests a trim once over the budget.
+    fn wrote(self: &Arc<Self>, len: u64) {
+        let total = self
+            .total
+            .fetch_add(len, Ordering::SeqCst)
+            .saturating_add(len);
+        if total > self.budget {
+            self.request();
+        }
+    }
+
     async fn run(&self) {
         let _guard = self.pass.lock().await;
         let _ = self.trim().await;
@@ -123,7 +138,10 @@ impl Trimmer {
     async fn trim(&self) -> std::io::Result<()> {
         let mut entries = match tokio::fs::read_dir(&self.dir).await {
             Ok(entries) => entries,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                self.total.store(0, Ordering::SeqCst);
+                return Ok(());
+            }
             Err(error) => return Err(error),
         };
         let now = SystemTime::now();
@@ -149,15 +167,19 @@ impl Trimmer {
             total += meta.len();
             files.push((modified, entry.path(), meta.len()));
         }
-        files.sort();
-        for (_, path, len) in files {
-            if total <= self.budget {
-                break;
-            }
-            if tokio::fs::remove_file(&path).await.is_ok() {
-                total -= len;
+        if total > self.budget {
+            let low_water = self.budget - self.budget / 10;
+            files.sort();
+            for (_, path, len) in files {
+                if total <= low_water {
+                    break;
+                }
+                if tokio::fs::remove_file(&path).await.is_ok() {
+                    total -= len;
+                }
             }
         }
+        self.total.store(total, Ordering::SeqCst);
         Ok(())
     }
 }
@@ -166,12 +188,14 @@ impl Trimmer {
 ///
 /// Returns the raw encoded bytes; decoding is left to the UI.
 ///
-/// The disk part is trimmed to a byte budget in a background task, at
-/// construction and after each disk write, so `get` never waits for it. At most
-/// one trim runs at a time and a request made while one runs schedules one more
-/// pass. Files go oldest first by modification time, which is the write order:
-/// reading a file does not refresh it. Orphaned `.*.tmp` files older than a
-/// minute are removed by the same pass.
+/// The disk part is trimmed in a background task, so `get` never waits for it.
+/// A pass runs at construction and measures the disk usage; writes add to that
+/// measure, and a write that takes it over the budget requests a pass, which
+/// trims down to 90 % of the budget. At most one trim runs at a time and a
+/// request made while one runs schedules one more pass. Files go oldest first
+/// by modification time, which is the write order: reading a file does not
+/// refresh it. Orphaned `.*.tmp` files older than a minute are removed by the
+/// same pass.
 pub struct ImageCache {
     session: Session,
     dir: PathBuf,
@@ -191,6 +215,8 @@ impl ImageCache {
             budget: budgets.disk_bytes,
             running: AtomicBool::new(false),
             pending: AtomicBool::new(false),
+            requests: AtomicU64::new(0),
+            total: AtomicU64::new(0),
             pass: tokio::sync::Mutex::new(()),
         });
         trimmer.request();
@@ -207,6 +233,12 @@ impl ImageCache {
     #[doc(hidden)]
     pub async fn trim(&self) {
         self.trimmer.run().await;
+    }
+
+    /// Number of background trims requested so far, for deterministic tests.
+    #[doc(hidden)]
+    pub fn trim_requests(&self) -> u64 {
+        self.trimmer.requests.load(Ordering::SeqCst)
     }
 
     /// Returns the bytes of `image` scaled to fit `size`, from memory, disk or the server.
@@ -240,7 +272,7 @@ impl ImageCache {
 
     async fn write_disk(&self, name: &str, bytes: &[u8]) {
         if self.try_write_disk(name, bytes).await.is_ok() {
-            self.trimmer.request();
+            self.trimmer.wrote(bytes.len() as u64);
         }
     }
 
