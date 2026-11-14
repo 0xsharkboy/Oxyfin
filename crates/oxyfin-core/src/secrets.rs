@@ -214,16 +214,15 @@ impl TokenVault {
 
     /// Loads the token from the primary store, then from the fallback.
     ///
-    /// A primary error is returned only when the fallback holds no token either.
+    /// A primary error counts as a missing token so a machine without a keyring still works.
     pub fn load(&self, account: &str) -> Result<Option<(String, TokenStorage)>> {
-        let primary = self.primary.get(account);
-        if let Ok(Some(token)) = primary {
+        if let Ok(Some(token)) = self.primary.get(account) {
             return Ok(Some((token, TokenStorage::Keyring)));
         }
-        match self.fallback.get(account)? {
-            Some(token) => Ok(Some((token, TokenStorage::File))),
-            None => primary.map(|_| None),
-        }
+        Ok(self
+            .fallback
+            .get(account)?
+            .map(|token| (token, TokenStorage::File)))
     }
 
     /// Removes the token from both stores.
@@ -270,11 +269,10 @@ mod tests {
 
     #[test]
     fn clear_succeeds_when_only_the_primary_fails() {
-        let fallback = Arc::new(MemoryStore::default());
-        let vault = TokenVault::new(Arc::new(FailingStore), fallback.clone());
+        let vault = TokenVault::new(Arc::new(FailingStore), Arc::new(MemoryStore::default()));
         vault.save("a", "t").unwrap();
         vault.clear("a").unwrap();
-        assert_eq!(fallback.get("a").unwrap(), None);
+        assert_eq!(vault.load("a").unwrap(), None);
     }
 
     #[test]
@@ -297,12 +295,6 @@ mod tests {
             vault.load("a").unwrap(),
             Some(("new".into(), TokenStorage::File))
         );
-    }
-
-    #[test]
-    fn load_reports_a_primary_error_when_nothing_else_has_a_token() {
-        let vault = TokenVault::new(Arc::new(FailingStore), Arc::new(MemoryStore::default()));
-        assert!(matches!(vault.load("a"), Err(CoreError::Storage(_))));
     }
 
     fn temp() -> (tempfile::TempDir, Paths) {
