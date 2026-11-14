@@ -56,6 +56,8 @@ pub struct App {
     notice_timer: Timer,
     #[cfg(feature = "mpv")]
     video: crate::video::VideoSource,
+    #[cfg(feature = "mpv")]
+    creating_player: Cell<Option<GenerationId>>,
     pub(crate) sign_in: SignInController,
     pub(crate) home: HomeController,
 }
@@ -88,6 +90,8 @@ impl App {
             notice_timer: Timer::default(),
             #[cfg(feature = "mpv")]
             video: Default::default(),
+            #[cfg(feature = "mpv")]
+            creating_player: Cell::new(None),
             sign_in: SignInController::default(),
             home: HomeController::default(),
         });
@@ -153,53 +157,122 @@ impl App {
         }
         #[cfg(feature = "mpv")]
         {
-            let handle = match self.playback() {
-                Some(Ok(handle)) => handle,
-                Some(Err(error)) => {
-                    log::error!("cannot create the player: {error}");
-                    self.notify(Message::LoadFailed);
+            let (id, handle) = {
+                let current = self.generation.borrow();
+                let Some(generation) = current.as_ref() else {
                     return;
-                }
-                None => return,
+                };
+                let handle = generation
+                    .playback
+                    .as_ref()
+                    .map(|playback| playback.handle.clone());
+                (generation.id, handle)
             };
-            if let Some(window) = self.window() {
-                player::reset(&window);
+            match handle {
+                Some(handle) => self.start_playback(&handle, item),
+                None if self.creating_player.get() == Some(id) => {}
+                None => self.create_player(id, item),
             }
-            handle.send(PlaybackCommand::Play {
-                item,
-                mode: oxyfin_core::PlayMode::Auto,
-            });
-            self.dispatch(Msg::OpenPlayer);
         }
     }
 
-    /// The playback of the current generation, created at its first use.
+    /// Opens the player screen and plays `item` on `handle`.
     #[cfg(feature = "mpv")]
-    fn playback(&self) -> Option<Result<oxyfin_core::PlaybackHandle, oxyfin_player::PlayerError>> {
-        use oxyfin_core::{PlaybackController, player_events};
+    fn start_playback(self: &Rc<Self>, handle: &oxyfin_core::PlaybackHandle, item: ItemId) {
+        if let Some(window) = self.window() {
+            player::reset(&window);
+        }
+        handle.send(PlaybackCommand::Play {
+            item,
+            mode: oxyfin_core::PlayMode::Auto,
+        });
+        self.dispatch(Msg::OpenPlayer);
+    }
+
+    /// Builds the player of generation `id` off the Slint thread, then plays `item` with it.
+    #[cfg(feature = "mpv")]
+    fn create_player(&self, id: GenerationId, item: ItemId) {
+        use oxyfin_core::player_events;
         use oxyfin_player::{Player, PlayerOptions};
 
-        let mut current = self.generation.borrow_mut();
-        let generation = current.as_mut()?;
-        if let Some(playback) = &generation.playback {
-            return Some(Ok(playback.handle.clone()));
+        self.creating_player.set(Some(id));
+        let runtime = self.runtime.clone();
+        self.spawn(
+            async move {
+                runtime
+                    .spawn_blocking(move || {
+                        let (sink, events) = player_events();
+                        Player::new(PlayerOptions::default(), move |event| sink.send(event))
+                            .map(|player| (Arc::new(player), events))
+                            .map_err(|error| error.to_string())
+                    })
+                    .await
+                    .map_err(|error| error.to_string())
+                    .and_then(|built| built)
+            },
+            move |app, built| app.player_built(id, item, built),
+        );
+    }
+
+    /// Installs a player built for generation `id`, or releases it when that generation ended.
+    #[cfg(feature = "mpv")]
+    fn player_built(
+        self: &Rc<Self>,
+        id: GenerationId,
+        item: ItemId,
+        built: Result<(Arc<oxyfin_player::Player>, oxyfin_core::PlayerEvents), String>,
+    ) {
+        use crate::generation::{Built, Playback};
+        use oxyfin_core::PlaybackController;
+
+        if self.creating_player.get() == Some(id) {
+            self.creating_player.set(None);
         }
-        let _guard = self.runtime.enter();
-        let (sink, events) = player_events();
-        let player = match Player::new(PlayerOptions::default(), move |event| sink.send(event)) {
-            Ok(player) => Arc::new(player),
-            Err(error) => return Some(Err(error)),
+        let current = self
+            .generation
+            .borrow()
+            .as_ref()
+            .map(|generation| generation.id);
+        let (player, events) = match built {
+            Ok(built) => built,
+            Err(error) => {
+                log::error!("cannot create the player: {error}");
+                if current == Some(id) {
+                    self.notify(Message::LoadFailed);
+                }
+                return;
+            }
         };
-        let (handle, updates) =
-            PlaybackController::spawn(generation.session.clone(), player.clone(), events);
-        self.pending_stops.set(0);
-        self.relay(generation.id, updates);
-        *self.video.borrow_mut() = Some((generation.id, Arc::clone(&player)));
-        generation.playback = Some(crate::generation::Playback {
-            handle: handle.clone(),
-            player,
-        });
-        Some(Ok(handle))
+        let decision = crate::generation::built(id, current, self.state.borrow().screen());
+        let handle = {
+            let mut current = self.generation.borrow_mut();
+            match current.as_mut() {
+                Some(generation) if decision != Built::Release && generation.playback.is_none() => {
+                    let _guard = self.runtime.enter();
+                    let (handle, updates) = PlaybackController::spawn(
+                        generation.session.clone(),
+                        player.clone(),
+                        events,
+                    );
+                    self.pending_stops.set(0);
+                    self.relay(id, updates);
+                    *self.video.borrow_mut() = Some((id, Arc::clone(&player)));
+                    generation.playback = Some(Playback {
+                        handle: handle.clone(),
+                        player,
+                    });
+                    handle
+                }
+                _ => {
+                    drop(current);
+                    crate::video::release_player(&self.runtime, player);
+                    return;
+                }
+            }
+        };
+        if decision == Built::Play {
+            self.start_playback(&handle, item);
+        }
     }
 
     /// Delivers the events of the playback controller of generation `id` on the Slint thread.
