@@ -7,6 +7,14 @@ use oxyfin_player::PlayerError;
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CoreError {
     /// The stored session is no longer accepted by the server.
+    ///
+    /// The binary must then call [`SessionManager::expire`] and rebuild the
+    /// [`Catalog`], the [`ImageCache`] and the playback controller for the
+    /// next session.
+    ///
+    /// [`SessionManager::expire`]: crate::SessionManager::expire
+    /// [`Catalog`]: crate::Catalog
+    /// [`ImageCache`]: crate::ImageCache
     #[error("the session has expired")]
     SessionExpired,
     /// The server could not be reached.
@@ -44,7 +52,10 @@ pub enum CoreError {
     /// Local storage or the system keyring failed.
     #[error("storage error: {0}")]
     Storage(String),
-    /// The media player failed.
+    /// A media player call failed, for callers that use a
+    /// [`MediaPlayer`](crate::MediaPlayer) directly and convert its
+    /// [`PlayerError`]. The playback controller reports its failures as
+    /// [`PlaybackError`](crate::PlaybackError) instead.
     #[error("player error: {0}")]
     Player(String),
 }

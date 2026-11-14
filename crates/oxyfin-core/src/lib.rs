@@ -9,6 +9,22 @@
 //! mpv or the server directly. [`PlaybackHandle::shutdown`] flushes the last
 //! report when the window closes.
 //!
+//! The controller must run on a multi-thread tokio runtime: adding an external
+//! subtitle makes mpv download it on the controller's thread.
+//!
+//! # Session lifecycle
+//!
+//! The player, its event sink and the controller live for one signed-in
+//! session: a controller is bound to one [`oxyfin_api::Session`] and consumes
+//! the player's events. After a sign-out or an expiry, the binary shuts the
+//! controller down and creates a new `Player`, sink and controller, and
+//! therefore a new `VideoRenderer`, for the next session.
+//!
+//! On [`CoreError::SessionExpired`] or [`PlaybackEvent::SessionExpired`], the
+//! binary must call [`SessionManager::expire`] to forget the token, then
+//! rebuild the [`Catalog`], the [`ImageCache`] and the playback controller for
+//! the next session.
+//!
 //! ```no_run
 //! # #[cfg(feature = "mpv")]
 //! # async fn wire(session: oxyfin_api::Session, item: oxyfin_api::ItemId) -> Result<(), oxyfin_player::PlayerError> {
