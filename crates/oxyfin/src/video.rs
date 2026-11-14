@@ -7,6 +7,7 @@ use std::sync::Arc;
 use oxyfin_player::{Player, VideoRenderer};
 use raw_window_handle::HasDisplayHandle;
 use slint::{ComponentHandle, GraphicsAPI, RenderingState, SetRenderingNotifierError};
+use tokio::runtime::Handle;
 
 use crate::state::GenerationId;
 use crate::{AppWindow, Screen};
@@ -17,9 +18,25 @@ pub type VideoSource = Rc<RefCell<Option<(GenerationId, Arc<Player>)>>>;
 /// A renderer and the player it draws.
 struct Active {
     id: GenerationId,
-    // Fields drop in declaration order: the renderer goes before its player.
     renderer: VideoRenderer,
-    _player: Arc<Player>,
+    player: Arc<Player>,
+}
+
+impl Active {
+    /// Drops the renderer here, where the OpenGL context is current, then its player on `runtime`.
+    fn release(self, runtime: &Handle) {
+        let Active {
+            renderer, player, ..
+        } = self;
+        drop(renderer);
+        release_player(runtime, player);
+    }
+}
+
+/// Drops `player` on `runtime`: dropping the last `Player` joins mpv's event
+/// thread, which the Slint thread must never wait on.
+pub fn release_player(runtime: &Handle, player: Arc<Player>) {
+    runtime.spawn_blocking(move || drop(player));
 }
 
 /// What the notifier does with its renderer before a frame.
@@ -42,8 +59,15 @@ fn step(held: Option<GenerationId>, wanted: Option<GenerationId>) -> Step {
 ///
 /// `VideoRenderer::new` needs the OpenGL context current, so the renderer is
 /// created in the notifier, before the first frame that follows a change of
-/// generation. Nothing is drawn outside the player screen.
-pub fn install(window: &AppWindow, current: VideoSource) -> Result<(), SetRenderingNotifierError> {
+/// generation. Nothing is drawn outside the player screen. The window's
+/// `player-video-active` is set once the current renderer drew a frame, so the
+/// player screen keeps an opaque backdrop until then. Players are released on
+/// `runtime`.
+pub fn install(
+    window: &AppWindow,
+    current: VideoSource,
+    runtime: Handle,
+) -> Result<(), SetRenderingNotifierError> {
     let weak = window.as_weak();
     let mut active: Option<Active> = None;
     let mut failed: Option<GenerationId> = None;
@@ -57,9 +81,17 @@ pub fn install(window: &AppWindow, current: VideoSource) -> Result<(), SetRender
                 let wanted_id = wanted.as_ref().map(|(id, _)| *id);
                 match step(active.as_ref().map(|active| active.id), wanted_id) {
                     Step::Keep => {}
-                    Step::Drop => active = None,
+                    Step::Drop => {
+                        if let Some(old) = active.take() {
+                            old.release(&runtime);
+                        }
+                        set_video_active(&weak, false);
+                    }
                     Step::Replace => {
-                        active = None;
+                        if let Some(old) = active.take() {
+                            old.release(&runtime);
+                        }
+                        set_video_active(&weak, false);
                         if let Some((id, player)) = wanted
                             && failed != Some(id)
                         {
@@ -68,7 +100,7 @@ pub fn install(window: &AppWindow, current: VideoSource) -> Result<(), SetRender
                                     active = Some(Active {
                                         id,
                                         renderer,
-                                        _player: player,
+                                        player,
                                     });
                                 }
                                 Err(error) => {
@@ -87,7 +119,12 @@ pub fn install(window: &AppWindow, current: VideoSource) -> Result<(), SetRender
                 }
                 let size = window.window().size();
                 match active.renderer.render(size.width, size.height) {
-                    Ok(()) => rendered = true,
+                    Ok(()) => {
+                        rendered = true;
+                        if !window.get_player_video_active() {
+                            window.set_player_video_active(true);
+                        }
+                    }
                     Err(error) => log::warn!("cannot render the video: {error}"),
                 }
             }
@@ -97,11 +134,19 @@ pub fn install(window: &AppWindow, current: VideoSource) -> Result<(), SetRender
                 }
             }
             RenderingState::RenderingTeardown => {
-                active = None;
+                if let Some(old) = active.take() {
+                    old.release(&runtime);
+                }
                 failed = None;
             }
             _ => {}
         })
+}
+
+fn set_video_active(weak: &slint::Weak<AppWindow>, value: bool) {
+    if let Some(window) = weak.upgrade() {
+        window.set_player_video_active(value);
+    }
 }
 
 fn create(

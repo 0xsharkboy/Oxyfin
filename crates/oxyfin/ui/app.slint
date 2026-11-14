@@ -47,6 +47,7 @@ export component AppWindow inherits Window {
     in property <bool> player-loading;
     in property <bool> player-has-error;
     in property <Message> player-error;
+    in property <bool> player-video-active;
     callback player-stop();
     callback close-player();
 
@@ -117,6 +118,7 @@ export component AppWindow inherits Window {
         loading: root.player-loading;
         has-error: root.player-has-error;
         error: root.player-error;
+        video-active: root.player-video-active;
         back => {
             root.player-stop();
             root.close-player();

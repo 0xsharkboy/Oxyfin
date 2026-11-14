@@ -11,13 +11,15 @@ export component PlayerScreen inherits Rectangle {
     in property <bool> loading;
     in property <bool> has-error;
     in property <Message> error;
+    // Whether the video renderer drew a frame for the current session.
+    in property <bool> video-active;
     callback back();
 
     accessible-role: groupbox;
     accessible-label: @tr("Player");
 
     // Covers the window until the first frame, so the desktop never shows through.
-    background: root.loading || root.has-error ? Theme.video-backdrop : transparent;
+    background: root.loading || root.has-error || !root.video-active ? Theme.video-backdrop : transparent;
 
     if root.loading && !root.has-error: Spinner {
         indeterminate: true;
