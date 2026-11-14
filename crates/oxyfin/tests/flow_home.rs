@@ -143,12 +143,20 @@ fn home_shows_every_row_that_loads() {
         if banner.title != "Test Movie (2020)" || banner.year != 2020 {
             return Err(format!("unexpected banner: {}", banner.title));
         }
+        #[cfg(not(feature = "mpv"))]
         window.invoke_play(banner.card.id.clone());
 
+        if resume_calls.load(Ordering::SeqCst) != 1 {
+            return Err("Continue Watching reloaded before leaving the player".into());
+        }
         app.dispatch(Msg::OpenPlayer);
         app.dispatch(Msg::ClosePlayer);
         wait_until("the reload", || resume_calls.load(Ordering::SeqCst) == 2).await?;
         wait_until("the rows after the reload", || titles(&window).len() == 3).await?;
+        #[cfg(feature = "mpv")]
+        if app.video_source().borrow().is_some() {
+            return Err("the home flow created a real player".into());
+        }
         Ok(())
     });
 }
