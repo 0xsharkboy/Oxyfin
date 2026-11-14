@@ -147,15 +147,6 @@ impl SessionManager {
             .vault_call(move |vault| vault.save(&saved_account, &token))
             .await?;
 
-        if let Some(old) = previous {
-            let old_account = account_key(&old.server_url, &old.user_id);
-            if old_account != account {
-                let _ = self
-                    .vault_call(move |vault| vault.clear(&old_account))
-                    .await;
-            }
-        }
-
         let saved = SavedSession {
             server_url: server_url.clone(),
             user_id: session.user_id().to_string(),
@@ -170,6 +161,14 @@ impl SessionManager {
         if let Err(error) = result {
             let _ = self.vault_call(move |vault| vault.clear(&account)).await;
             return Err(error);
+        }
+        if let Some(old) = previous {
+            let old_account = account_key(&old.server_url, &old.user_id);
+            if old_account != account {
+                let _ = self
+                    .vault_call(move |vault| vault.clear(&old_account))
+                    .await;
+            }
         }
         let show_file_token_warning =
             token_storage == TokenStorage::File && !self.config().file_token_warning_shown;
