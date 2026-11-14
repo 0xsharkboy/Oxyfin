@@ -238,7 +238,7 @@ async fn disk_cache_is_trimmed_to_its_budget() {
         serve(&mock, item, body).await;
     }
     let dir = TempDir::new().unwrap();
-    let cache = with_budgets(&mock, &dir, 0, 30);
+    let cache = with_budgets(&mock, &dir, 0, 35);
     for (item, _) in &bodies[..3] {
         cache.get(&image(item, "t"), SIZE).await.unwrap();
     }
@@ -276,4 +276,56 @@ async fn stale_tmp_files_are_removed() {
     cache.trim().await;
     assert!(!stale.exists());
     assert!(fresh.exists());
+}
+
+#[allow(clippy::unwrap_used)]
+fn disk_bytes(dir: &TempDir) -> u64 {
+    files_in(dir)
+        .iter()
+        .map(|(_, bytes)| bytes.len() as u64)
+        .sum()
+}
+
+#[tokio::test]
+async fn writes_under_the_disk_budget_request_no_trim() {
+    let mock = MockServer::start().await;
+    for item in ["aaa", "bbb", "ccc"] {
+        serve(&mock, item, b"0123456789").await;
+    }
+    let dir = TempDir::new().unwrap();
+    let cache = with_budgets(&mock, &dir, 0, 100);
+    cache.trim().await;
+    let requests = cache.trim_requests();
+    for item in ["aaa", "bbb", "ccc"] {
+        cache.get(&image(item, "t"), SIZE).await.unwrap();
+    }
+    assert_eq!(cache.trim_requests(), requests);
+}
+
+#[tokio::test]
+async fn going_over_the_disk_budget_trims_to_ninety_percent() {
+    let mock = MockServer::start().await;
+    let items: Vec<String> = (0..11).map(|n| format!("i{n:02}")).collect();
+    for item in &items {
+        serve(&mock, item, b"0123456789").await;
+    }
+    let dir = TempDir::new().unwrap();
+    let cache = with_budgets(&mock, &dir, 0, 100);
+    cache.trim().await;
+    let requests = cache.trim_requests();
+    for item in &items[..10] {
+        cache.get(&image(item, "t"), SIZE).await.unwrap();
+    }
+    assert_eq!(cache.trim_requests(), requests);
+    cache.get(&image(&items[10], "t"), SIZE).await.unwrap();
+    assert_eq!(cache.trim_requests(), requests + 1);
+    let start = std::time::Instant::now();
+    while disk_bytes(&dir) > 90 {
+        assert!(
+            start.elapsed() < common::DEADLINE,
+            "{} bytes",
+            disk_bytes(&dir)
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
 }
