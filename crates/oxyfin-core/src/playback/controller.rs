@@ -81,6 +81,11 @@ pub struct PlaybackController {
     /// A fetched item waiting for the unload of the previous media, until
     /// the deadline.
     pending: Option<(Prepared, Instant)>,
+    /// An item is being fetched or waits to load: there is no current item yet.
+    loading: bool,
+    /// The latest `Previous` or `Next` sent while `loading`, applied once the
+    /// item is ready.
+    navigation: Option<PlaybackCommand>,
     /// Set by [`PlaybackHandle::shutdown`]: no new item is loaded.
     closing: Arc<AtomicBool>,
 }
@@ -135,6 +140,8 @@ impl PlaybackController {
             next_progress: None,
             countdown: None,
             loader,
+            loading: false,
+            navigation: None,
             pending: None,
             closing: closing.clone(),
         };
@@ -367,6 +374,9 @@ impl PlaybackController {
                 self.release(true);
                 self.emit(PlaybackEvent::Stopped);
             }
+            PlaybackCommand::Previous | PlaybackCommand::Next if self.loading => {
+                self.navigation = Some(command);
+            }
             PlaybackCommand::Previous => {
                 let Some(siblings) = self.siblings() else {
                     return;
@@ -412,6 +422,8 @@ impl PlaybackController {
     fn play(&mut self, item: ItemId, mode: PlayMode) {
         self.cancel_countdown();
         self.release(true);
+        self.navigation = None;
+        self.loading = true;
         self.pending = None;
         self.loader.start(self.session.clone(), item, mode);
     }
@@ -420,6 +432,14 @@ impl PlaybackController {
     fn cancel_load(&mut self) {
         self.loader.cancel();
         self.pending = None;
+        self.loading = false;
+        self.navigation = None;
+    }
+
+    /// The load ended without an item: a navigation waiting for it is dropped.
+    fn load_failed(&mut self) {
+        self.loading = false;
+        self.navigation = None;
     }
 
     fn on_load(&mut self, message: LoadMessage) {
@@ -435,8 +455,12 @@ impl PlaybackController {
                     self.pending = Some((prepared, deadline));
                     self.load_pending();
                 }
-                Err(LoadFailure::Request(error)) => self.fail(error),
+                Err(LoadFailure::Request(error)) => {
+                    self.load_failed();
+                    self.fail(error);
+                }
                 Err(LoadFailure::NoDirectPlaySource) => {
+                    self.load_failed();
                     self.emit(PlaybackEvent::Error(PlaybackError::NoDirectPlaySource));
                 }
             },
@@ -458,6 +482,7 @@ impl PlaybackController {
         };
         self.awaiting_unload = false;
         if let Err(error) = self.player.load(&prepared.media) {
+            self.load_failed();
             return self.emit(PlaybackEvent::Error(PlaybackError::load(error)));
         }
         self.current = Some(Current::new(
@@ -467,6 +492,7 @@ impl PlaybackController {
             prepared.start.unwrap_or_default(),
             prepared.siblings,
         ));
+        self.loading = false;
     }
 
     fn on_player_event(&mut self, event: PlayerEvent) {
@@ -517,6 +543,7 @@ impl PlaybackController {
                 if current.reporting() {
                     self.reporter.send(ReportKind::Stopped, current.report());
                 }
+                self.navigation = None;
                 self.emit(PlaybackEvent::Error(PlaybackError::load(message)));
             }
             PlayerEvent::Unloaded(_) => {}
@@ -635,6 +662,9 @@ impl PlaybackController {
         });
         self.schedule_progress();
         self.report(ReportKind::Start);
+        if let Some(command) = self.navigation.take() {
+            self.on_command(command);
+        }
     }
 
     fn on_tracks(&mut self, tracks: &[Track]) {

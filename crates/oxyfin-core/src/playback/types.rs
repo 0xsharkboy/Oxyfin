@@ -74,9 +74,16 @@ pub enum PlaybackCommand {
     SetPaused(bool),
     /// Seek in the current item.
     Seek(SeekTarget),
-    /// Go to the previous item.
+    /// Go to the previous episode, or restart the current item when there is
+    /// none.
+    ///
+    /// Sent while an item loads, it waits for that item to be ready, then
+    /// applies to it; only the latest `Previous` or `Next` waits, and a later
+    /// `Play` or `Stop` drops it.
     Previous,
-    /// Go to the next item.
+    /// Go to the next episode, if any.
+    ///
+    /// Sent while an item loads, it waits like [`PlaybackCommand::Previous`].
     Next,
     /// Start the next episode without waiting for the countdown.
     PlayNextNow,
