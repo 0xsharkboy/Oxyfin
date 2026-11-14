@@ -66,6 +66,25 @@ export global Theme {
     }
 }
 
+export struct CardData {
+    id: string,
+    title: string,
+    subtitle: string,
+    progress: float,
+    watched: bool,
+    image: image,
+    has-image: bool,
+}
+
+export struct TrackRow {
+    index: int,
+    label: string,
+    detail: string,
+    forced: bool,
+    external: bool,
+    selected: bool,
+}
+
 // Every message the interface can show, mapped from core errors and events.
 export enum Message {
     server-unreachable,
