@@ -49,6 +49,7 @@ pub fn memory_vault() -> TokenVault {
 /// A manager storing its files under `dir`. The mock is not used: servers come from `connect`.
 pub fn manager(_mock: &MockServer, dir: &TempDir, vault: TokenVault) -> SessionManager {
     SessionManager::new(Paths::under(dir.path()), vault, "Test Device")
+        .map(|manager| manager.with_quick_connect_interval(std::time::Duration::from_millis(20)))
         .unwrap_or_else(|err| panic!("cannot create the session manager: {err}"))
 }
 
