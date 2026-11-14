@@ -45,8 +45,10 @@ pub struct PlaybackController {
     timings: PlaybackTimings,
     current: Option<Current>,
     /// The player was told to stop a media and has not reported its unload:
-    /// its events are stale.
+    /// its events are stale, except the global volume, mute and speed.
     awaiting_unload: bool,
+    /// `SessionExpired` was emitted; it is emitted once per controller.
+    expired: bool,
     next_progress: Option<Instant>,
 }
 
@@ -85,6 +87,7 @@ impl PlaybackController {
             timings,
             current: None,
             awaiting_unload: false,
+            expired: false,
             next_progress: None,
         };
         tokio::spawn(controller.run(command_receiver, expired));
@@ -152,7 +155,10 @@ impl PlaybackController {
 
     fn expire(&mut self) {
         self.release(false);
-        self.emit(PlaybackEvent::SessionExpired);
+        if !self.expired {
+            self.expired = true;
+            self.emit(PlaybackEvent::SessionExpired);
+        }
     }
 
     /// Queues a report for the current item.
@@ -302,7 +308,11 @@ impl PlaybackController {
     }
 
     fn on_player_event(&mut self, event: PlayerEvent) {
-        if self.awaiting_unload {
+        let global = matches!(
+            event,
+            PlayerEvent::Volume(_) | PlayerEvent::Muted(_) | PlayerEvent::Speed(_)
+        );
+        if self.awaiting_unload && !global {
             if matches!(event, PlayerEvent::Unloaded(_)) {
                 self.awaiting_unload = false;
             }
