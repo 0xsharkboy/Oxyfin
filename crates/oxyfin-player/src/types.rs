@@ -151,7 +151,8 @@ pub enum PlayerEvent {
     /// A seek started.
     Seeking,
     /// A seek finished. mpv also reports it when playback first starts, so it
-    /// can arrive without a preceding [`PlayerEvent::Seeking`].
+    /// can arrive without a preceding [`PlayerEvent::Seeking`]. The position
+    /// reached is reported just before it.
     Seeked,
     /// Playback reached the end of the media.
     ///

@@ -154,6 +154,14 @@ fn position_secs(event: &PlayerEvent) -> Option<f64> {
     }
 }
 
+/// Waits for `Seeked` and returns the position reported right before it.
+fn position_before_seeked(events: &Events) -> Option<f64> {
+    events.wait_for(TIMEOUT, |e| *e == PlayerEvent::Seeked);
+    let seen = events.drain();
+    let seeked = seen.iter().rposition(|e| *e == PlayerEvent::Seeked)?;
+    position_secs(seen.get(seeked.checked_sub(1)?)?)
+}
+
 #[test]
 fn start_position_is_honoured() {
     let (events, on_event) = Events::new();
@@ -200,18 +208,20 @@ fn absolute_and_relative_seeks_move_the_position() {
         .seek(SeekTarget::Absolute(Duration::from_secs(2)))
         .unwrap();
     events.wait_for(TIMEOUT, |e| *e == PlayerEvent::Seeking);
-    events.wait_for(TIMEOUT, |e| *e == PlayerEvent::Seeked);
-    events.wait_for(TIMEOUT, |e| {
-        position_secs(e).is_some_and(|s| (s - 2.0).abs() <= 0.15)
-    });
+    let position = position_before_seeked(&events);
+    assert!(
+        position.is_some_and(|s| (s - 2.0).abs() <= 0.15),
+        "{position:?}"
+    );
 
     player
         .seek(SeekTarget::Backward(Duration::from_secs(1)))
         .unwrap();
-    events.wait_for(TIMEOUT, |e| *e == PlayerEvent::Seeked);
-    events.wait_for(TIMEOUT, |e| {
-        position_secs(e).is_some_and(|s| (s - 1.0).abs() <= 0.15)
-    });
+    let position = position_before_seeked(&events);
+    assert!(
+        position.is_some_and(|s| (s - 1.0).abs() <= 0.15),
+        "{position:?}"
+    );
 }
 
 #[test]
@@ -516,4 +526,27 @@ fn dropping_the_player_from_its_own_callback_does_not_hang() {
         .unwrap();
 
     assert!(done_rx.recv_timeout(TIMEOUT).is_ok());
+}
+
+#[test]
+fn small_seek_reports_the_position_before_seeked() {
+    let (events, on_event) = Events::new();
+    let player = headless(on_event);
+    player.load(&sample()).unwrap();
+    events.wait_for(TIMEOUT, is_file_loaded);
+    player.set_paused(true).unwrap();
+    events.wait_for(TIMEOUT, |e| *e == PlayerEvent::Paused(true));
+    player
+        .seek(SeekTarget::Absolute(Duration::from_secs(2)))
+        .unwrap();
+    position_before_seeked(&events);
+
+    player
+        .seek(SeekTarget::Absolute(Duration::from_millis(2100)))
+        .unwrap();
+    let position = position_before_seeked(&events);
+    assert!(
+        position.is_some_and(|s| (s - 2.1).abs() <= 0.05),
+        "{position:?}"
+    );
 }
