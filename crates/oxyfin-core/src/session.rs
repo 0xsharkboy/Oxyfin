@@ -1,11 +1,13 @@
 //! Sign-in, session restoration and sign-out.
 
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Duration;
 
 use oxyfin_api::{ClientInfo, Server, Session, UserId};
 
 use crate::{
-    Config, CoreError, Paths, Result, SavedSession, TokenStorage, TokenVault, account_key,
+    Config, CoreError, Paths, QUICK_CONNECT_POLL_INTERVAL, Result, SavedSession, TokenStorage,
+    TokenVault, account_key,
 };
 
 /// A server that passed the version check.
@@ -41,6 +43,7 @@ pub struct SessionManager {
     vault: Arc<TokenVault>,
     config: Mutex<Config>,
     device_name: String,
+    pub(crate) quick_connect_interval: Duration,
 }
 
 fn blocking<E: std::fmt::Display>(error: E) -> CoreError {
@@ -56,7 +59,14 @@ impl SessionManager {
             vault: Arc::new(vault),
             config: Mutex::new(config),
             device_name: device_name.into(),
+            quick_connect_interval: QUICK_CONNECT_POLL_INTERVAL,
         })
+    }
+
+    /// Overrides the delay between Quick Connect checks, mainly for tests.
+    pub fn with_quick_connect_interval(mut self, interval: Duration) -> Self {
+        self.quick_connect_interval = interval;
+        self
     }
 
     fn config(&self) -> MutexGuard<'_, Config> {
@@ -121,7 +131,7 @@ impl SessionManager {
         self.remember(&server.server, session, user_name).await
     }
 
-    async fn remember(
+    pub(crate) async fn remember(
         &self,
         server: &Server,
         session: Session,
@@ -136,6 +146,7 @@ impl SessionManager {
         let token_storage = self
             .vault_call(move |vault| vault.save(&saved_account, &token))
             .await?;
+
         if let Some(old) = previous {
             let old_account = account_key(&old.server_url, &old.user_id);
             if old_account != account {

@@ -174,3 +174,141 @@ async fn file_fallback_warns_once() {
     assert_eq!(restored.token_storage, TokenStorage::File);
     assert!(!restored.show_file_token_warning);
 }
+
+mod quick_connect {
+    use std::time::Duration;
+
+    use super::*;
+    use wiremock::matchers::query_param;
+
+    async fn mount_enabled(mock: &MockServer, enabled: bool) {
+        Mock::given(method("GET"))
+            .and(path("/QuickConnect/Enabled"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!(enabled)))
+            .mount(mock)
+            .await;
+    }
+
+    async fn mount_initiate(mock: &MockServer) {
+        Mock::given(method("POST"))
+            .and(path("/QuickConnect/Initiate"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(fixture("quick_connect_initiate")),
+            )
+            .mount(mock)
+            .await;
+    }
+
+    fn state(authenticated: bool) -> serde_json::Value {
+        let mut body = fixture("quick_connect_connect");
+        body["Authenticated"] = json!(authenticated);
+        body
+    }
+
+    async fn poll_count(mock: &MockServer) -> usize {
+        mock.received_requests()
+            .await
+            .unwrap_or_default()
+            .iter()
+            .filter(|request| request.url.path() == "/QuickConnect/Connect")
+            .count()
+    }
+
+    #[tokio::test]
+    async fn quick_connect_waits_for_approval() {
+        let mock = MockServer::start().await;
+        mount_public_info(&mock).await;
+        mount_sign_in(&mock).await;
+        mount_enabled(&mock, true).await;
+        mount_initiate(&mock).await;
+        for (body, times) in [(state(false), 2), (state(true), 1)] {
+            Mock::given(method("GET"))
+                .and(path("/QuickConnect/Connect"))
+                .and(query_param(
+                    "secret",
+                    fixture("quick_connect_connect")["Secret"].as_str().unwrap(),
+                ))
+                .respond_with(ResponseTemplate::new(200).set_body_json(body))
+                .up_to_n_times(times)
+                .expect(times)
+                .mount(&mock)
+                .await;
+        }
+        Mock::given(method("POST"))
+            .and(path("/Users/AuthenticateWithQuickConnect"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(fixture("authenticate_by_name")))
+            .mount(&mock)
+            .await;
+        let dir = TempDir::new().unwrap();
+        let manager = manager(&mock, &dir, memory_vault());
+        let handle = manager.connect(&mock.uri()).await.unwrap();
+        let flow = manager.start_quick_connect(&handle).await.unwrap();
+        assert_eq!(flow.code, "668908");
+        let signed = manager.finish_quick_connect(&handle, flow).await.unwrap();
+        assert_eq!(signed.user_name, "oxyfin");
+        assert_eq!(poll_count(&mock).await, 3);
+        assert!(manager.restore().await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn quick_connect_disabled() {
+        let mock = MockServer::start().await;
+        mount_public_info(&mock).await;
+        mount_enabled(&mock, false).await;
+        let dir = TempDir::new().unwrap();
+        let manager = manager(&mock, &dir, memory_vault());
+        let handle = manager.connect(&mock.uri()).await.unwrap();
+        let error = manager.start_quick_connect(&handle).await.unwrap_err();
+        assert_eq!(error, CoreError::QuickConnectDisabled);
+    }
+
+    #[tokio::test]
+    async fn quick_connect_expired() {
+        for status in [401, 404] {
+            let mock = MockServer::start().await;
+            mount_public_info(&mock).await;
+            mount_enabled(&mock, true).await;
+            mount_initiate(&mock).await;
+            Mock::given(method("GET"))
+                .and(path("/QuickConnect/Connect"))
+                .respond_with(ResponseTemplate::new(status))
+                .mount(&mock)
+                .await;
+            let dir = TempDir::new().unwrap();
+            let manager = manager(&mock, &dir, memory_vault());
+            let handle = manager.connect(&mock.uri()).await.unwrap();
+            let flow = manager.start_quick_connect(&handle).await.unwrap();
+            let error = manager
+                .finish_quick_connect(&handle, flow)
+                .await
+                .unwrap_err();
+            assert_eq!(error, CoreError::QuickConnectExpired, "status {status}");
+        }
+    }
+
+    #[tokio::test]
+    async fn dropping_the_flow_stops_polling() {
+        let mock = MockServer::start().await;
+        mount_public_info(&mock).await;
+        mount_enabled(&mock, true).await;
+        mount_initiate(&mock).await;
+        Mock::given(method("GET"))
+            .and(path("/QuickConnect/Connect"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(state(false)))
+            .mount(&mock)
+            .await;
+        let dir = TempDir::new().unwrap();
+        let manager = manager(&mock, &dir, memory_vault())
+            .with_quick_connect_interval(Duration::from_millis(200));
+        let handle = manager.connect(&mock.uri()).await.unwrap();
+        let flow = manager.start_quick_connect(&handle).await.unwrap();
+        let waited = tokio::time::timeout(
+            Duration::from_millis(100),
+            manager.finish_quick_connect(&handle, flow),
+        )
+        .await;
+        assert!(waited.is_err());
+        tokio::time::sleep(Duration::from_millis(700)).await;
+        assert_eq!(poll_count(&mock).await, 1);
+    }
+}
