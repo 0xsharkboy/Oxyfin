@@ -161,3 +161,32 @@ async fn fetch(
         siblings,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn loading(generation: u64) -> LoadMessage {
+        LoadMessage {
+            generation,
+            stage: LoadStage::Loading {
+                item: ItemId::from("0000000000000000000000000000000a"),
+                title: PlaybackTitle {
+                    title: "Item".into(),
+                    series_name: None,
+                    episode_label: None,
+                },
+            },
+        }
+    }
+
+    #[test]
+    fn a_cancelled_load_is_stale() {
+        let (mut loader, _receiver) = Loader::new();
+        let before = loading(loader.generation);
+        assert!(loader.is_current(&before));
+        loader.cancel();
+        assert!(!loader.is_current(&before));
+        assert!(loader.is_current(&loading(loader.generation)));
+    }
+}

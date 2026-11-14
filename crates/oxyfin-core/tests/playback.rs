@@ -1023,10 +1023,15 @@ async fn session_expired_is_emitted_once() {
         item: ItemId::from(OTHER_ID),
         mode: PlayMode::Auto,
     });
-    // A stop cancels the load, so it waits for the item request to go out.
     wait_requests(&h.mock, &format!("/Items/{OTHER_ID}"), 1).await;
-    h.handle.send(PlaybackCommand::Stop);
-    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::Stopped)).await;
+    // Long enough for the 401 to come back and be handled.
+    let mut seen = Vec::new();
+    let _ = tokio::time::timeout(Duration::from_millis(500), async {
+        while let Some(event) = h.events.recv().await {
+            seen.push(event);
+        }
+    })
+    .await;
     assert!(
         !seen
             .iter()
@@ -1898,7 +1903,7 @@ async fn second_play_supersedes_the_first() {
 #[tokio::test]
 async fn episode_list_and_playback_info_run_concurrently() {
     let mock = MockServer::start().await;
-    let delay = Duration::from_secs(1);
+    let delay = Duration::from_secs(2);
     let episodes = format!("/Shows/{SERIES_ID}/Episodes");
     mount_slow(&mock, "GET", &episodes, "shows_episodes", delay).await;
     let info = format!("/Items/{}/PlaybackInfo", EPISODES[0]);
@@ -1908,8 +1913,41 @@ async fn episode_list_and_playback_info_run_concurrently() {
     h.play_item(EPISODES[0], PlayMode::Auto).await;
     h.file_loaded().await;
     assert!(
-        started.elapsed() < Duration::from_millis(1800),
+        started.elapsed() < Duration::from_millis(3500),
         "{:?}",
         started.elapsed()
     );
+}
+
+#[tokio::test]
+async fn no_load_once_shutdown_is_requested() {
+    // The controller picks its ready inputs at random: repeat to catch the
+    // unload winning over the shutdown message.
+    for _ in 0..12 {
+        let mut h = harness(PlaybackTimings {
+            unload_grace: Duration::from_secs(5),
+            shutdown_timeout: Duration::from_millis(200),
+            ..quiet()
+        })
+        .await;
+        h.start().await;
+        h.handle.send(PlaybackCommand::Play {
+            item: ItemId::from(OTHER_ID),
+            mode: PlayMode::FromStart,
+        });
+        h.player.wait_call(|c| *c == Call::Stop).await;
+        wait_requests(&h.mock, &format!("/Items/{OTHER_ID}/PlaybackInfo"), 1).await;
+        // Lets the fetch result reach the controller and wait for the unload.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let mut shutdown = Box::pin(h.handle.clone().shutdown());
+        tokio::select! {
+            biased;
+            () = &mut shutdown => {}
+            () = std::future::ready(()) => {}
+        }
+        h.sink.send(PlayerEvent::Unloaded(UnloadReason::Stopped));
+        shutdown.await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(h.loads().len(), 1, "{:?}", h.loads());
+    }
 }

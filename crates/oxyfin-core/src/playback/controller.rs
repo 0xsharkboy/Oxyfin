@@ -446,6 +446,10 @@ impl PlaybackController {
     /// Loads the fetched item, once the previous media has unloaded or its
     /// grace has passed.
     fn load_pending(&mut self) {
+        if self.closing() {
+            self.pending = None;
+            return;
+        }
         if self.awaiting_unload && self.player_open {
             return;
         }
