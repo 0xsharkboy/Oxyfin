@@ -25,6 +25,11 @@ export global Theme {
     out property <color> card-shadow: #00000066;
     // Behind the video until its first frame.
     out property <color> video-backdrop: #000000;
+    // Player overlays, readable over any video.
+    out property <brush> player-scrim-top: @linear-gradient(180deg, #000000bf 0%, #00000000 100%);
+    out property <brush> player-scrim-bottom: @linear-gradient(180deg, #00000000 0%, #000000d9 100%);
+    out property <brush> next-up-placeholder: @linear-gradient(157deg, #335966 14%, #0f1a1f 86%);
+    out property <color> menu-shadow: #00000080;
 
     out property <length> space-2xs: 2px;
     out property <length> space-xs: 4px;
@@ -92,6 +97,16 @@ export struct TrackRow {
     forced: bool,
     external: bool,
     selected: bool,
+}
+
+// The next episode toast of the player.
+export struct NextUp {
+    visible: bool,
+    id: string,
+    title: string,
+    remaining: int,
+    image: image,
+    has-image: bool,
 }
 
 // Every message the interface can show, mapped from core errors and events.

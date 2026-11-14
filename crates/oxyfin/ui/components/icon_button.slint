@@ -5,6 +5,8 @@ export component IconButton inherits Rectangle {
     in property <image> icon;
     in property <string> label;
     in property <bool> enabled: true;
+    // Highlighted while what it opens is shown.
+    in property <bool> active;
     in property <color> icon-color: Theme.text-primary;
     callback clicked();
 
@@ -19,7 +21,7 @@ export component IconButton inherits Rectangle {
     width: 24px + 2 * Theme.space-sm;
     height: self.width;
     border-radius: Theme.radius-full;
-    background: (touch.has-hover || focus.has-focus) && enabled ? Theme.bg-hover : transparent;
+    background: (root.active || touch.has-hover || focus.has-focus) && enabled ? Theme.bg-hover : transparent;
     border-width: focus.has-focus ? Theme.border-focus : 0;
     border-color: Theme.accent;
     opacity: enabled ? 1 : Theme.disabled-opacity;

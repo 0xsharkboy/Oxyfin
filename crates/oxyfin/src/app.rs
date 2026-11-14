@@ -25,6 +25,12 @@ use crate::screens::sign_in::SignInController;
 use crate::state::{AppState, Effect, GenerationId, Msg, Notice, Screen, SessionInfo};
 use crate::{AppWindow, Message};
 
+/// Logical size of the next episode thumbnail, as laid out by the toast.
+#[cfg(feature = "mpv")]
+const NEXT_UP_THUMB_WIDTH: f32 = 160.0;
+#[cfg(feature = "mpv")]
+const NEXT_UP_THUMB_HEIGHT: f32 = 90.0;
+
 /// The running application, living on the Slint thread.
 ///
 /// Work runs on the Tokio runtime; its results come back to the Slint event
@@ -41,6 +47,7 @@ pub struct App {
     incoming: RefCell<Option<Session>>,
     ending: RefCell<Vec<JoinHandle<()>>>,
     quitting: Cell<bool>,
+    pending_stops: Cell<u32>,
     #[cfg(feature = "mpv")]
     video: crate::video::VideoSource,
     pub(crate) sign_in: SignInController,
@@ -71,6 +78,7 @@ impl App {
             incoming: RefCell::new(None),
             ending: RefCell::new(Vec::new()),
             quitting: Cell::new(false),
+            pending_stops: Cell::new(0),
             #[cfg(feature = "mpv")]
             video: Default::default(),
             sign_in: SignInController::default(),
@@ -177,6 +185,7 @@ impl App {
         };
         let (handle, updates) =
             PlaybackController::spawn(generation.session.clone(), player.clone(), events);
+        self.pending_stops.set(0);
         self.relay(generation.id, updates);
         *self.video.borrow_mut() = Some((generation.id, Arc::clone(&player)));
         generation.playback = Some(crate::generation::Playback {
@@ -204,16 +213,7 @@ impl App {
                 match route(current, id, event) {
                     Route::Ignore => {}
                     Route::Expire(id) => app.dispatch(Msg::Expired(id)),
-                    Route::Show(event) => {
-                        let stopped = event == oxyfin_core::PlaybackEvent::Stopped;
-                        if let Some(window) = app.window() {
-                            player::apply(&window, event);
-                        }
-                        // The stop report is queued before this event: Continue Watching catches up.
-                        if stopped && app.shown.get() == Screen::Home {
-                            app.home.shown(&app, Screen::Home);
-                        }
-                    }
+                    Route::Show(event) => app.show_playback(event),
                 }
             }
         });
@@ -240,6 +240,67 @@ impl App {
         }
     }
 
+    /// Shows an event of the current playback, then leaves the player when playback is over.
+    #[cfg(feature = "mpv")]
+    fn show_playback(self: &Rc<Self>, event: oxyfin_core::PlaybackEvent) {
+        use oxyfin_core::PlaybackEvent;
+
+        let Some(window) = self.window() else { return };
+        let stopped = event == PlaybackEvent::Stopped;
+        let ended = event == PlaybackEvent::Ended;
+        if let PlaybackEvent::NextUpCountdown { episode, .. } = &event {
+            self.load_next_up_image(&window, episode);
+        }
+        player::apply(&window, event);
+
+        let on_player = self.state.borrow().screen() == Screen::Player;
+        if stopped {
+            let expected = self.pending_stops.get();
+            if expected > 0 {
+                self.pending_stops.set(expected - 1);
+            } else if on_player {
+                self.dispatch(Msg::ClosePlayer);
+                return;
+            }
+            // The stop report is queued before this event: Continue Watching catches up.
+            if self.shown.get() == Screen::Home {
+                self.home.shown(self, Screen::Home);
+            }
+        } else if ended && on_player && !window.get_player_has_next() {
+            self.send_playback(PlaybackCommand::Stop);
+            self.dispatch(Msg::ClosePlayer);
+        }
+    }
+
+    /// Loads the thumbnail of the next episode toast, once per episode.
+    #[cfg(feature = "mpv")]
+    fn load_next_up_image(&self, window: &AppWindow, episode: &oxyfin_core::Episode) {
+        let id = slint::SharedString::from(episode.id.as_str());
+        if window.get_player_next_up().id == id {
+            return;
+        }
+        let (Some(thumb), Some((_, _, images))) = (episode.thumb.clone(), self.services()) else {
+            return;
+        };
+        let size = crate::present::image_size(
+            NEXT_UP_THUMB_WIDTH,
+            NEXT_UP_THUMB_HEIGHT,
+            window.window().scale_factor(),
+        );
+        let weak = window.as_weak();
+        crate::images::load_into(&images, &self.runtime, thumb, size, move |image| {
+            let Some(window) = weak.upgrade() else { return };
+            let mut next = window.get_player_next_up();
+            if next.id == id {
+                next.image = image;
+                next.has_image = true;
+                window.set_player_next_up(next);
+            }
+        });
+    }
+
+    /// Sends `command` to the current playback. The `Stopped` that answers a
+    /// stop sent here is expected: the screen already left the player.
     fn send_playback(&self, command: PlaybackCommand) {
         if let Some(playback) = self
             .generation
@@ -247,6 +308,9 @@ impl App {
             .as_ref()
             .and_then(|generation| generation.playback.as_ref())
         {
+            if command == PlaybackCommand::Stop {
+                self.pending_stops.set(self.pending_stops.get() + 1);
+            }
             playback.handle.send(command);
         }
     }
@@ -456,6 +520,9 @@ impl App {
                 let previous = self.shown.replace(screen);
                 if let Some(window) = self.window() {
                     window.set_notice_visible(false);
+                    if screen != Screen::Player {
+                        player::leave(&window);
+                    }
                     window.set_screen(slint_screen(screen));
                 }
                 self.sign_in.shown(self, screen, previous);
