@@ -32,10 +32,12 @@ export component TextField {
             HorizontalLayout {
                 padding-left: Theme.space-lg;
                 padding-right: Theme.space-lg;
-                padding-top: Theme.space-md;
-                padding-bottom: Theme.space-md;
+                padding-top: Theme.space-md + Theme.border-thin;
+                padding-bottom: Theme.space-md + Theme.border-thin;
 
+                // Children of a plain Rectangle give it no height, so the line height is set here.
                 Rectangle {
+                    height: Theme.body-line-height;
                     if root.text.is-empty: BodyText {
                         width: 100%;
                         height: 100%;
