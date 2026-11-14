@@ -26,7 +26,7 @@ export component TextField {
             border-radius: Theme.radius-md;
             border-width: input.has-focus ? Theme.border-focus : Theme.border-thin;
             border-color: input.has-focus ? Theme.accent : Theme.border-default;
-            opacity: root.enabled ? 1 : 0.4;
+            opacity: root.enabled ? 1 : Theme.disabled-opacity;
             clip: true;
 
             HorizontalLayout {

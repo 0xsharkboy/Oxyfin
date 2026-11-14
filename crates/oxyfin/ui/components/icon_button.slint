@@ -22,7 +22,7 @@ export component IconButton inherits Rectangle {
     background: (touch.has-hover || focus.has-focus) && enabled ? Theme.bg-hover : transparent;
     border-width: focus.has-focus ? Theme.border-focus : 0;
     border-color: Theme.accent;
-    opacity: enabled ? 1 : 0.4;
+    opacity: enabled ? 1 : Theme.disabled-opacity;
 
     function activate() {
         if enabled {

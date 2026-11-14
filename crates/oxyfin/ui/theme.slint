@@ -42,6 +42,8 @@ export global Theme {
     out property <length> border-thin: 1px;
     out property <length> border-focus: 2px;
 
+    out property <float> disabled-opacity: 0.4;
+
     out property <length> display-size: 40px;
     out property <int> display-weight: 700;
     out property <length> display-line-height: 48px;
@@ -165,6 +167,9 @@ export global Messages {
         if m == Message.command-failed {
             return @tr("The player could not complete that action.");
         }
-        @tr("Playback is not available in this build of Oxyfin.")
+        if m == Message.playback-unavailable {
+            return @tr("Playback is not available in this build of Oxyfin.");
+        }
+        ""
     }
 }
