@@ -2,11 +2,42 @@ import "fonts/Inter-Regular.ttf";
 import "fonts/Inter-Medium.ttf";
 import "fonts/Inter-SemiBold.ttf";
 import "fonts/Inter-Bold.ttf";
-import { Theme } from "theme.slint";
+import { Theme, Message, Messages } from "theme.slint";
+import { LabelText } from "components/text.slint";
+import { StartingScreen } from "screens/starting.slint";
+import { SignInScreen, ServerState, ServerStatus } from "screens/sign_in.slint";
+import { QuickConnectScreen } from "screens/quick_connect.slint";
 
 export { CardData, Message, Messages, TrackRow } from "theme.slint";
+export { ServerState, ServerStatus }
+
+// Mirrors the Rust `state::Screen` one to one.
+export enum Screen { starting, sign-in, quick-connect, home, player, settings }
 
 export component AppWindow inherits Window {
+    in property <Screen> screen: Screen.starting;
+
+    in-out property <string> server-address;
+    in-out property <string> username;
+    in property <ServerStatus> server-status;
+    in property <bool> busy;
+    in property <string> form-error;
+    callback server-changed(address: string);
+    callback server-confirmed(address: string);
+    callback sign-in(username: string, password: string);
+    callback open-quick-connect();
+
+    in property <string> quick-connect-code;
+    in property <[string]> quick-connect-digits;
+    in property <string> quick-connect-error;
+    in property <bool> quick-connect-can-retry;
+    callback cancel-quick-connect();
+    callback retry-quick-connect();
+
+    in property <Message> notice;
+    in property <string> notice-detail;
+    in property <bool> notice-visible;
+
     title: "Oxyfin";
     background: transparent;
     default-font-family: "Inter";
@@ -15,5 +46,61 @@ export component AppWindow inherits Window {
 
     Rectangle {
         background: Theme.bg-base;
+    }
+
+    if root.screen == Screen.starting: StartingScreen { }
+
+    if root.screen == Screen.sign-in: SignInScreen {
+        server-address <=> root.server-address;
+        username <=> root.username;
+        server-status: root.server-status;
+        busy: root.busy;
+        form-error: root.form-error;
+        server-changed(address) => {
+            root.server-changed(address);
+        }
+        server-confirmed(address) => {
+            root.server-confirmed(address);
+        }
+        sign-in(username, password) => {
+            root.sign-in(username, password);
+        }
+        open-quick-connect => {
+            root.open-quick-connect();
+        }
+    }
+
+    if root.screen == Screen.quick-connect: QuickConnectScreen {
+        code: root.quick-connect-code;
+        digits: root.quick-connect-digits;
+        error: root.quick-connect-error;
+        can-retry: root.quick-connect-can-retry;
+        cancel => {
+            root.cancel-quick-connect();
+        }
+        retry => {
+            root.retry-quick-connect();
+        }
+    }
+
+    if root.notice-visible: Rectangle {
+        y: Theme.space-lg;
+        x: (parent.width - self.width) / 2;
+        width: min(parent.width - 2 * Theme.space-lg, 560px);
+        height: notice-text.preferred-height + 2 * Theme.space-md;
+        background: Theme.bg-hover;
+        border-radius: Theme.radius-md;
+        border-width: Theme.border-thin;
+        border-color: Theme.border-default;
+
+        notice-text := LabelText {
+            accessible-role: text;
+            x: Theme.space-lg;
+            width: parent.width - 2 * Theme.space-lg;
+            text: Messages.message-text(root.notice, root.notice-detail);
+            color: Theme.text-primary;
+            wrap: word-wrap;
+            vertical-alignment: center;
+        }
     }
 }

@@ -1,0 +1,15 @@
+import { Theme } from "../theme.slint";
+import { Brand } from "../components/auth_card.slint";
+
+// Shown while the saved session is restored.
+export component StartingScreen inherits Rectangle {
+    accessible-role: groupbox;
+    accessible-label: @tr("Starting");
+
+    background: Theme.bg-base;
+
+    VerticalLayout {
+        alignment: center;
+        Brand { }
+    }
+}
