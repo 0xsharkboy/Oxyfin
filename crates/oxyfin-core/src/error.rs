@@ -102,6 +102,19 @@ mod tests {
         assert!(matches!(CoreError::from(error), CoreError::Network(_)));
     }
 
+    #[tokio::test]
+    async fn network_message_never_carries_the_url_query() {
+        let server = Server::new("http://127.0.0.1:1", ClientInfo::new("test", "id")).unwrap();
+        let error = server
+            .quick_connect_poll(&"abc-secret".to_owned().into())
+            .await
+            .unwrap_err();
+        let CoreError::Network(message) = CoreError::from(error) else {
+            panic!("expected a network error");
+        };
+        assert!(!message.contains("abc-secret"), "{message}");
+    }
+
     #[test]
     fn api_unsupported_keeps_versions() {
         let error = ApiError::UnsupportedServer {

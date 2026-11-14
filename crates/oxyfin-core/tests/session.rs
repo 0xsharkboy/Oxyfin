@@ -5,7 +5,10 @@ mod common;
 use std::sync::Arc;
 
 use common::{FailingStore, fixture, manager, memory_vault};
-use oxyfin_core::{CoreError, MemoryStore, Paths, SessionManager, TokenStorage, TokenVault};
+use oxyfin_core::{
+    CoreError, MemoryStore, Paths, SecretStore, SessionManager, SignedIn, TokenStorage, TokenVault,
+    account_key,
+};
 use serde_json::json;
 use tempfile::TempDir;
 use wiremock::matchers::{method, path};
@@ -30,6 +33,12 @@ async fn mount_sign_in(mock: &MockServer) {
         .respond_with(ResponseTemplate::new(200).set_body_json(fixture("users_me")))
         .mount(mock)
         .await;
+}
+
+fn assert_token_gone(primary: &MemoryStore, fallback: &MemoryStore, signed: &SignedIn) {
+    let account = account_key(&signed.server_url, signed.session.user_id().as_str());
+    assert_eq!(primary.get(&account), Ok(None));
+    assert_eq!(fallback.get(&account), Ok(None));
 }
 
 #[tokio::test]
@@ -119,7 +128,13 @@ async fn validate_401_expires_the_session() {
     mount_public_info(&mock).await;
     mount_sign_in(&mock).await;
     let dir = TempDir::new().unwrap();
-    let manager = manager(&mock, &dir, memory_vault());
+    let primary = Arc::new(MemoryStore::default());
+    let fallback = Arc::new(MemoryStore::default());
+    let manager = manager(
+        &mock,
+        &dir,
+        TokenVault::new(primary.clone(), fallback.clone()),
+    );
     let handle = manager.connect(&mock.uri()).await.unwrap();
     let signed = manager.sign_in(&handle, "oxyfin", "pw").await.unwrap();
 
@@ -132,7 +147,8 @@ async fn validate_401_expires_the_session() {
     let error = manager.validate(&signed.session).await.unwrap_err();
     assert_eq!(error, CoreError::SessionExpired);
     assert!(manager.restore().await.unwrap().is_none());
-    assert_eq!(manager.last_server_url(), Some(signed.server_url));
+    assert_eq!(manager.last_server_url(), Some(signed.server_url.clone()));
+    assert_token_gone(&primary, &fallback, &signed);
 }
 
 #[tokio::test]
@@ -146,11 +162,18 @@ async fn sign_out_clears_even_if_logout_fails() {
         .mount(&mock)
         .await;
     let dir = TempDir::new().unwrap();
-    let manager = manager(&mock, &dir, memory_vault());
+    let primary = Arc::new(MemoryStore::default());
+    let fallback = Arc::new(MemoryStore::default());
+    let manager = manager(
+        &mock,
+        &dir,
+        TokenVault::new(primary.clone(), fallback.clone()),
+    );
     let handle = manager.connect(&mock.uri()).await.unwrap();
     let signed = manager.sign_in(&handle, "oxyfin", "pw").await.unwrap();
     manager.sign_out(&signed.session).await.unwrap();
     assert!(manager.restore().await.unwrap().is_none());
+    assert_token_gone(&primary, &fallback, &signed);
 }
 
 #[tokio::test]
@@ -311,4 +334,42 @@ mod quick_connect {
         tokio::time::sleep(Duration::from_millis(700)).await;
         assert_eq!(poll_count(&mock).await, 1);
     }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn failed_config_save_keeps_the_previous_token() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mock = MockServer::start().await;
+    mount_public_info(&mock).await;
+    mount_sign_in(&mock).await;
+    let dir = TempDir::new().unwrap();
+    let primary = Arc::new(MemoryStore::default());
+    let fallback = Arc::new(MemoryStore::default());
+    let manager = manager(&mock, &dir, TokenVault::new(primary.clone(), fallback));
+    let handle = manager.connect(&mock.uri()).await.unwrap();
+    let first = manager.sign_in(&handle, "oxyfin", "pw").await.unwrap();
+    let old_account = account_key(&first.server_url, first.session.user_id().as_str());
+
+    let mut other = fixture("authenticate_by_name");
+    other["User"]["Id"] = json!("ffffffffffffffffffffffffffffffff");
+    mock.reset().await;
+    Mock::given(method("POST"))
+        .and(path("/Users/AuthenticateByName"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(other))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/Users/Me"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("users_me")))
+        .mount(&mock)
+        .await;
+    let config_dir = Paths::under(dir.path()).config_dir;
+    std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let result = manager.sign_in(&handle, "other", "pw").await;
+    std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+
+    assert!(matches!(result, Err(CoreError::Storage(_))));
+    assert!(primary.get(&old_account).unwrap().is_some());
 }
