@@ -1483,6 +1483,118 @@ async fn absolute_seek_back_cancels_the_countdown() {
 }
 
 #[tokio::test]
+async fn shutdown_sends_final_report() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(7)));
+    wait_event(&mut h.events, |e| {
+        *e == PlaybackEvent::Position(Duration::from_secs(7))
+    })
+    .await;
+    h.handle.clone().shutdown().await;
+    // The final report is sent before shutdown returns.
+    let stopped = bodies(&h.mock, STOPPED).await;
+    assert_eq!(stopped.len(), 1, "{stopped:?}");
+    assert_eq!(stopped[0]["PositionTicks"], json!(70_000_000));
+    assert!(h.player.calls().contains(&Call::Stop));
+    // The controller has ended: its event channel closes.
+    let closed = tokio::time::timeout(common::DEADLINE, async {
+        while h.events.recv().await.is_some() {}
+    })
+    .await;
+    assert!(closed.is_ok());
+}
+
+#[tokio::test]
+async fn shutdown_gives_up_after_the_timeout() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(STOPPED))
+        .respond_with(ResponseTemplate::new(204).set_delay(Duration::from_secs(10)))
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    let mut h = harness_on(
+        mock,
+        PlaybackTimings {
+            shutdown_timeout: Duration::from_millis(200),
+            ..quiet()
+        },
+    )
+    .await;
+    h.start().await;
+    let started = tokio::time::Instant::now();
+    h.handle.clone().shutdown().await;
+    let elapsed = started.elapsed();
+    assert!(elapsed >= Duration::from_millis(150), "{elapsed:?}");
+    assert!(elapsed < Duration::from_millis(1500), "{elapsed:?}");
+}
+
+#[tokio::test]
+async fn shutdown_returns_while_a_fetch_is_slow() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/Items/{OTHER_ID}")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(fixture("item_movie"))
+                .set_delay(Duration::from_secs(10)),
+        )
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    let h = harness_on(
+        mock,
+        PlaybackTimings {
+            shutdown_timeout: Duration::from_millis(200),
+            ..quiet()
+        },
+    )
+    .await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(OTHER_ID),
+        mode: PlayMode::Auto,
+    });
+    let started = tokio::time::Instant::now();
+    h.handle.clone().shutdown().await;
+    assert!(started.elapsed() < Duration::from_millis(1500));
+}
+
+#[tokio::test]
+async fn shutdown_without_an_item_reports_nothing() {
+    let h = harness(quiet()).await;
+    h.handle.clone().shutdown().await;
+    assert!(
+        h.mock
+            .received_requests()
+            .await
+            .unwrap_or_default()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn dropping_every_handle_reports_the_stop() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(8)));
+    wait_event(&mut h.events, |e| {
+        *e == PlaybackEvent::Position(Duration::from_secs(8))
+    })
+    .await;
+    let Harness {
+        mock,
+        player,
+        handle,
+        ..
+    } = h;
+    drop(handle);
+    let stopped = wait_requests(&mock, STOPPED, 1).await;
+    assert_eq!(stopped[0]["PositionTicks"], json!(80_000_000));
+    player.wait_call(|c| *c == Call::Stop).await;
+}
+
+#[tokio::test]
 async fn tracks_from_before_the_default_selection_are_ignored() {
     let mut h = harness(quiet()).await;
     h.start().await;
@@ -1597,4 +1709,36 @@ async fn user_pick_keeps_the_other_kind_expected() {
         "{seen:?}"
     );
     assert!(bodies(&h.mock, PROGRESS).await.is_empty());
+}
+
+#[tokio::test]
+async fn no_load_after_shutdown() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/Items/{OTHER_ID}")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(fixture("item_movie"))
+                .set_delay(Duration::from_millis(500)),
+        )
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    let h = harness_on(
+        mock,
+        PlaybackTimings {
+            shutdown_timeout: Duration::from_millis(100),
+            ..quiet()
+        },
+    )
+    .await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(OTHER_ID),
+        mode: PlayMode::Auto,
+    });
+    h.handle.clone().shutdown().await;
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert!(h.loads().is_empty(), "{:?}", h.loads());
+    let info = bodies(&h.mock, &format!("/Items/{OTHER_ID}/PlaybackInfo")).await;
+    assert!(info.is_empty());
 }

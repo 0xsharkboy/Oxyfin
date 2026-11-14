@@ -1,4 +1,37 @@
 //! Application logic for Oxyfin: session, use cases, progress sync and caching.
+//!
+//! # Wiring playback
+//!
+//! The binary creates the player with a callback that forwards its events to
+//! a [`PlayerEventSink`], keeps one `Arc<Player>` to create the video renderer
+//! and gives another to the [`PlaybackController`]. The UI then sends
+//! [`PlaybackCommand`]s and renders the [`PlaybackEvent`]s; it never talks to
+//! mpv or the server directly. [`PlaybackHandle::shutdown`] flushes the last
+//! report when the window closes.
+//!
+//! ```no_run
+//! # #[cfg(feature = "mpv")]
+//! # async fn wire(session: oxyfin_api::Session, item: oxyfin_api::ItemId) -> Result<(), oxyfin_player::PlayerError> {
+//! use std::sync::Arc;
+//!
+//! use oxyfin_core::{PlayMode, PlaybackCommand, PlaybackController, PlaybackEvent, player_events};
+//! use oxyfin_player::{Player, PlayerOptions};
+//!
+//! let (sink, events) = player_events();
+//! let player = Arc::new(Player::new(PlayerOptions::default(), move |event| sink.send(event))?);
+//! // Keep `player` to create the `VideoRenderer` in the UI's rendering notifier.
+//! let (handle, mut updates) = PlaybackController::spawn(session, player.clone(), events);
+//!
+//! handle.send(PlaybackCommand::Play { item, mode: PlayMode::Auto });
+//! while let Some(update) = updates.recv().await {
+//!     if let PlaybackEvent::Stopped = update {
+//!         break;
+//!     }
+//! }
+//! handle.shutdown().await;
+//! # Ok(())
+//! # }
+//! ```
 
 mod catalog;
 mod config;
