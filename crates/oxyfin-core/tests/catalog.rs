@@ -265,28 +265,67 @@ async fn movie_fetches_details() {
     assert_eq!(movie.genres, ["Drama", "Comedy"]);
 }
 
-#[tokio::test]
-async fn series_fetches_details_then_seasons() {
-    let mock = MockServer::start().await;
+async fn mount_series(mock: &MockServer) {
     mount(
-        &mock,
+        mock,
         "GET",
         &format!("/Items/{SERIES_ID}"),
         fixture("item_series"),
     )
     .await;
     mount(
-        &mock,
+        mock,
         "GET",
         &format!("/Shows/{SERIES_ID}/Seasons"),
         fixture("shows_seasons"),
     )
     .await;
+}
+
+#[tokio::test]
+async fn series_includes_the_next_episode() {
+    let mock = MockServer::start().await;
+    mount_series(&mock).await;
+    mount(&mock, "GET", "/Shows/NextUp", fixture("shows_next_up")).await;
     let series = catalog(&mock)
         .series(&ItemId::from(SERIES_ID))
         .await
         .unwrap();
     assert_eq!(series.seasons.len(), 2);
+    assert_eq!(series.next_episode.unwrap().title, "Test Show S01E02");
+}
+
+#[tokio::test]
+async fn series_survives_a_failed_next_episode_lookup() {
+    let mock = MockServer::start().await;
+    mount_series(&mock).await;
+    Mock::given(method("GET"))
+        .and(path("/Shows/NextUp"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&mock)
+        .await;
+    let series = catalog(&mock)
+        .series(&ItemId::from(SERIES_ID))
+        .await
+        .unwrap();
+    assert_eq!(series.seasons.len(), 2);
+    assert_eq!(series.next_episode, None);
+}
+
+#[tokio::test]
+async fn series_next_episode_401_is_session_expired() {
+    let mock = MockServer::start().await;
+    mount_series(&mock).await;
+    Mock::given(method("GET"))
+        .and(path("/Shows/NextUp"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&mock)
+        .await;
+    let error = catalog(&mock)
+        .series(&ItemId::from(SERIES_ID))
+        .await
+        .unwrap_err();
+    assert_eq!(error, CoreError::SessionExpired);
 }
 
 #[tokio::test]

@@ -41,6 +41,11 @@ pub struct UserState {
 }
 
 impl UserState {
+    /// Whether playback can resume from a saved position: started and not finished.
+    pub fn can_resume(&self) -> bool {
+        !self.position.is_zero() && !self.played
+    }
+
     pub(crate) fn from_dto(data: Option<&UserItemDataDto>) -> Self {
         let Some(data) = data else {
             return Self::default();
@@ -220,7 +225,7 @@ impl MovieDetails {
     /// Converts a DTO; returns `None` when it is not a movie.
     pub fn from_dto(dto: &BaseItemDto) -> Option<Self> {
         let summary = ItemSummary::from_dto(dto).filter(|s| s.kind == ItemKind::Movie)?;
-        let can_resume = !summary.user.position.is_zero() && !summary.user.played;
+        let can_resume = summary.user.can_resume();
         Some(Self {
             summary,
             overview: dto.overview.clone(),
@@ -312,6 +317,11 @@ impl Episode {
             user: UserState::from_dto(dto.user_data.as_ref()),
         })
     }
+
+    /// Whether playback can resume from a saved position.
+    pub fn can_resume(&self) -> bool {
+        self.user.can_resume()
+    }
 }
 
 /// Full description of a series with its seasons.
@@ -327,11 +337,17 @@ pub struct SeriesDetails {
     pub cast: Vec<Person>,
     /// Seasons of the series.
     pub seasons: Vec<Season>,
+    /// Episode to play next, `None` when there is none or the lookup failed.
+    pub next_episode: Option<Episode>,
 }
 
 impl SeriesDetails {
     /// Converts a DTO; returns `None` when it is not a series.
-    pub fn from_dto(dto: &BaseItemDto, seasons: Vec<Season>) -> Option<Self> {
+    pub fn from_dto(
+        dto: &BaseItemDto,
+        seasons: Vec<Season>,
+        next_episode: Option<Episode>,
+    ) -> Option<Self> {
         let summary = ItemSummary::from_dto(dto).filter(|s| s.kind == ItemKind::Series)?;
         Some(Self {
             summary,
@@ -339,6 +355,7 @@ impl SeriesDetails {
             genres: dto.genres.clone(),
             cast: cast(dto),
             seasons,
+            next_episode,
         })
     }
 }
@@ -494,7 +511,7 @@ mod tests {
         assert_eq!(seasons[0].user.unplayed_count, Some(1));
 
         let series = item(include_str!("../tests/fixtures/item_series.json"));
-        let details = SeriesDetails::from_dto(&series, seasons).unwrap();
+        let details = SeriesDetails::from_dto(&series, seasons, None).unwrap();
         assert_eq!(details.summary.title, "Test Show");
         assert_eq!(details.genres, ["Animation"]);
         assert_eq!(details.seasons.len(), 2);
@@ -563,5 +580,18 @@ mod tests {
         assert!(details.can_resume);
         dto.user_data.as_mut().unwrap().played = true;
         assert!(!MovieDetails::from_dto(&dto).unwrap().can_resume);
+    }
+
+    #[test]
+    fn episode_can_resume_needs_position_and_unplayed() {
+        let mut episode =
+            Episode::from_dto(&item(include_str!("../tests/fixtures/item_episode.json"))).unwrap();
+        episode.user.position = Duration::ZERO;
+        episode.user.played = false;
+        assert!(!episode.can_resume());
+        episode.user.position = Duration::from_secs(60);
+        assert!(episode.can_resume());
+        episode.user.played = true;
+        assert!(!episode.can_resume());
     }
 }

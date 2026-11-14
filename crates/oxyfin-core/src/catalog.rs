@@ -194,12 +194,22 @@ impl Catalog {
             .ok_or_else(|| CoreError::Decode(format!("item {id} is not a movie")))
     }
 
-    /// Fetches the details of a series with its seasons.
+    /// Fetches the details of a series with its seasons and next episode.
+    ///
+    /// A failed next-episode lookup leaves `next_episode` empty instead of
+    /// failing the page, except when the session expired.
     pub async fn series(&self, id: &ItemId) -> Result<SeriesDetails> {
         let dto = self.session.item(id).await?;
-        let seasons = self.session.seasons(id).await?;
+        let (seasons, next) =
+            tokio::join!(self.session.seasons(id), self.next_episode_to_watch(id));
+        let seasons = seasons?;
         let seasons: Vec<Season> = seasons.items.iter().filter_map(Season::from_dto).collect();
-        SeriesDetails::from_dto(&dto, seasons)
+        let next_episode = match next {
+            Ok(episode) => episode,
+            Err(CoreError::SessionExpired) => return Err(CoreError::SessionExpired),
+            Err(_) => None,
+        };
+        SeriesDetails::from_dto(&dto, seasons, next_episode)
             .ok_or_else(|| CoreError::Decode(format!("item {id} is not a series")))
     }
 
