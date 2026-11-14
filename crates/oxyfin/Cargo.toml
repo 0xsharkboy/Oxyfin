@@ -20,12 +20,13 @@ undocumented_unsafe_blocks = "warn"
 
 [features]
 default = ["mpv"]
-mpv = ["oxyfin-core/mpv", "dep:oxyfin-player", "oxyfin-player/mpv"]
+mpv = ["oxyfin-core/mpv", "dep:oxyfin-player", "oxyfin-player/mpv", "dep:raw-window-handle"]
 
 [dependencies]
 oxyfin-api = { path = "../oxyfin-api" }
 oxyfin-core = { path = "../oxyfin-core", default-features = false }
 oxyfin-player = { path = "../oxyfin-player", default-features = false, optional = true }
+raw-window-handle = { version = "0.6", optional = true }
 slint = { version = "=1.18.1", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-femtovg", "raw-window-handle-06"] }
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }

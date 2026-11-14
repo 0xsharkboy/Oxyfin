@@ -3736,6 +3736,7 @@ dependencies = [
  "oxyfin-api",
  "oxyfin-core",
  "oxyfin-player",
+ "raw-window-handle",
  "slint",
  "slint-build",
  "tempfile",

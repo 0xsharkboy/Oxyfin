@@ -9,8 +9,10 @@ pub mod app;
 pub mod generation;
 pub mod images;
 pub mod present;
-mod screens;
+pub mod screens;
 pub mod state;
+#[cfg(feature = "mpv")]
+pub mod video;
 
 pub use app::App;
 pub use generated::*;

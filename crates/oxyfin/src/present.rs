@@ -3,7 +3,8 @@
 use std::time::Duration;
 
 use oxyfin_core::{
-    AudioOption, CoreError, ImageSize, ItemKind, ItemSummary, PlaybackError, SubtitleOption,
+    AudioOption, CoreError, ImageSize, ItemKind, ItemSummary, PlaybackError, PlaybackTitle,
+    SubtitleOption,
 };
 use slint::SharedString;
 
@@ -146,6 +147,24 @@ pub fn subtitle_rows(options: &[SubtitleOption]) -> Vec<TrackRow> {
             selected: option.selected,
         }))
         .collect()
+}
+
+/// Title and subtitle of the player: the series and `S01E02 · episode title`
+/// for an episode, the title alone otherwise.
+pub fn playback_title(title: &PlaybackTitle) -> (SharedString, SharedString) {
+    match &title.series_name {
+        Some(series) => {
+            let subtitle = join_detail(
+                title
+                    .episode_label
+                    .clone()
+                    .into_iter()
+                    .chain(std::iter::once(title.title.clone())),
+            );
+            (series.as_str().into(), subtitle)
+        }
+        None => (title.title.as_str().into(), SharedString::default()),
+    }
 }
 
 /// Name this device registers with the server.
@@ -369,5 +388,29 @@ mod tests {
         assert_eq!(device_name(Some("  laptop \n"), "abcdef123"), "laptop");
         assert_eq!(device_name(Some("  "), "abcdef123"), "Oxyfin abcdef");
         assert_eq!(device_name(None, "abc"), "Oxyfin abc");
+    }
+
+    fn playing(series: Option<&str>, label: Option<&str>) -> PlaybackTitle {
+        PlaybackTitle {
+            title: "Pilot".into(),
+            series_name: series.map(Into::into),
+            episode_label: label.map(Into::into),
+        }
+    }
+
+    #[test]
+    fn episode_title_shows_series_then_label_and_episode() {
+        let (title, subtitle) = playback_title(&playing(Some("Show"), Some("S01E01")));
+        assert_eq!(title, "Show");
+        assert_eq!(subtitle, "S01E01 \u{b7} Pilot");
+        let (_, subtitle) = playback_title(&playing(Some("Show"), None));
+        assert_eq!(subtitle, "Pilot");
+    }
+
+    #[test]
+    fn movie_title_stands_alone() {
+        let (title, subtitle) = playback_title(&playing(None, None));
+        assert_eq!(title, "Pilot");
+        assert!(subtitle.is_empty());
     }
 }
