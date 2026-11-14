@@ -65,6 +65,16 @@ fn button_runs_its_accessible_action_and_messages_are_translated() {
     buttons[0].invoke_accessible_default_action();
     assert_eq!(clicks.get(), 1);
 
+    let inputs: Vec<_> = ElementHandle::find_by_accessible_label(&page, "Server address")
+        .filter(|element| element.accessible_role() == Some(AccessibleRole::TextInput))
+        .collect();
+    assert_eq!(inputs.len(), 1);
+    assert!(
+        inputs[0].size().height >= 22.0,
+        "an empty text field must keep a clickable line height, got {}",
+        inputs[0].size().height
+    );
+
     let window = AppWindow::new().unwrap();
     let text = window
         .global::<Messages>()
