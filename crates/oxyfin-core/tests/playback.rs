@@ -1951,3 +1951,83 @@ async fn no_load_once_shutdown_is_requested() {
         assert_eq!(h.loads().len(), 1, "{:?}", h.loads());
     }
 }
+
+/// Plays `EPISODES[1]` behind a slow item fetch, sends `command` during the
+/// fetch, then loads it; returns the harness once the first item is `Ready`.
+async fn navigate_during_fetch(command: PlaybackCommand) -> Harness {
+    let mock = MockServer::start().await;
+    let route = format!("/Items/{}", EPISODES[1]);
+    mount_slow(
+        &mock,
+        "GET",
+        &route,
+        "item_episode",
+        Duration::from_millis(500),
+    )
+    .await;
+    let mut h = harness_on(mock, episode_timings(Duration::from_secs(3600))).await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(EPISODES[1]),
+        mode: PlayMode::Auto,
+    });
+    wait_requests(&h.mock, &route, 1).await;
+    h.handle.send(command);
+    wait_loads(&h, 1).await;
+    assert!(h.loaded_ids()[0].contains(EPISODES[1]));
+    h.file_loaded().await;
+    h
+}
+
+#[tokio::test]
+async fn next_during_a_load_plays_the_next_episode_once_loaded() {
+    let h = navigate_during_fetch(PlaybackCommand::Next).await;
+    wait_loads(&h, 2).await;
+    assert!(
+        h.loaded_ids()[1].contains(EPISODES[2]),
+        "{:?}",
+        h.loaded_ids()
+    );
+}
+
+#[tokio::test]
+async fn previous_during_a_load_plays_the_previous_episode_once_loaded() {
+    let h = navigate_during_fetch(PlaybackCommand::Previous).await;
+    wait_loads(&h, 2).await;
+    assert!(
+        h.loaded_ids()[1].contains(EPISODES[0]),
+        "{:?}",
+        h.loaded_ids()
+    );
+}
+
+#[tokio::test]
+async fn play_during_a_load_drops_the_queued_navigation() {
+    let mock = MockServer::start().await;
+    let route = format!("/Items/{}", EPISODES[1]);
+    mount_slow(
+        &mock,
+        "GET",
+        &route,
+        "item_episode",
+        Duration::from_millis(500),
+    )
+    .await;
+    let mut h = harness_on(mock, episode_timings(Duration::from_secs(3600))).await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(EPISODES[1]),
+        mode: PlayMode::Auto,
+    });
+    wait_requests(&h.mock, &route, 1).await;
+    h.handle.send(PlaybackCommand::Next);
+    h.play_item(EPISODES[0], PlayMode::Auto).await;
+    h.file_loaded().await;
+    let marker = Duration::from_millis(999);
+    h.sink.send(PlayerEvent::Position(marker));
+    wait_event(&mut h.events, |e| *e == PlaybackEvent::Position(marker)).await;
+    assert!(
+        !h.player.calls().contains(&Call::Stop),
+        "{:?}",
+        h.player.calls()
+    );
+    assert_eq!(h.loaded_ids().len(), 1, "{:?}", h.loaded_ids());
+}
