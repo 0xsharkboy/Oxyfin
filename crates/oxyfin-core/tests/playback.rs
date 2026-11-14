@@ -809,6 +809,41 @@ async fn switching_items_drops_stale_events() {
 }
 
 #[tokio::test]
+async fn next_item_does_not_inherit_the_pause() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::SetPaused(true));
+    h.player.wait_call(|c| *c == Call::SetPaused(true)).await;
+    assert!(h.player.state().paused);
+    h.sink.send(PlayerEvent::Paused(true));
+    wait_event(&mut h.events, |e| *e == PlaybackEvent::Paused(true)).await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(OTHER_ID),
+        mode: PlayMode::FromStart,
+    });
+    h.player.wait_call(|c| *c == Call::Stop).await;
+    h.sink.send(PlayerEvent::Unloaded(UnloadReason::Stopped));
+    wait_loads(&h, 2).await;
+    h.file_loaded().await;
+    let starts = wait_requests(&h.mock, START, 2).await;
+    assert_eq!(starts[1]["ItemId"], json!(OTHER_ID));
+    assert_eq!(starts[1]["IsPaused"], json!(false));
+    let calls = h.player.calls();
+    let second_load = calls
+        .iter()
+        .enumerate()
+        .filter(|(_, call)| matches!(call, Call::Load(_)))
+        .nth(1)
+        .map(|(index, _)| index)
+        .unwrap_or_else(|| panic!("no second load in {calls:?}"));
+    assert!(
+        calls[second_load..].contains(&Call::SetPaused(false)),
+        "{calls:?}"
+    );
+    assert!(!h.player.state().paused);
+}
+
+#[tokio::test]
 async fn switching_items_loads_after_the_grace_without_unload() {
     let mut h = harness(PlaybackTimings {
         unload_grace: Duration::from_millis(50),
