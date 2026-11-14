@@ -907,3 +907,60 @@ async fn start_report_401_is_session_expired() {
     assert!(h.player.calls().contains(&Call::Stop));
     assert!(bodies(&h.mock, STOPPED).await.is_empty());
 }
+
+#[tokio::test]
+async fn global_player_state_passes_the_stale_gate() {
+    let mut h = harness(PlaybackTimings {
+        unload_grace: Duration::from_secs(5),
+        ..quiet()
+    })
+    .await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(OTHER_ID),
+        mode: PlayMode::FromStart,
+    });
+    h.player.wait_call(|c| *c == Call::Stop).await;
+    h.sink.send(PlayerEvent::Volume(30.0));
+    h.sink.send(PlayerEvent::Muted(true));
+    h.sink.send(PlayerEvent::Speed(1.25));
+    h.sink.send(PlayerEvent::Unloaded(UnloadReason::Stopped));
+    let seen = events_until(&mut h.events, |e| *e == PlaybackEvent::Speed(1.25)).await;
+    assert!(seen.contains(&PlaybackEvent::Volume(30.0)), "{seen:?}");
+    assert!(seen.contains(&PlaybackEvent::Muted(true)), "{seen:?}");
+}
+
+#[tokio::test]
+async fn session_expired_is_emitted_once() {
+    let mock = MockServer::start().await;
+    mount_status(&mock, "POST", PROGRESS, 401).await;
+    mount_status(&mock, "GET", &format!("/Items/{OTHER_ID}"), 401).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.sink.send(PlayerEvent::Paused(true));
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::SessionExpired)
+    })
+    .await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(OTHER_ID),
+        mode: PlayMode::Auto,
+    });
+    h.handle.send(PlaybackCommand::Stop);
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::Stopped)).await;
+    assert!(
+        !seen
+            .iter()
+            .any(|e| matches!(e, PlaybackEvent::SessionExpired)),
+        "{seen:?}"
+    );
+    let item_requests = h
+        .mock
+        .received_requests()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|r| r.url.path() == format!("/Items/{OTHER_ID}"))
+        .count();
+    assert_eq!(item_requests, 1);
+}
