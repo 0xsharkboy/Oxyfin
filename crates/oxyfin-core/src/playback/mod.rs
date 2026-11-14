@@ -1,6 +1,7 @@
 //! Playback of a media: track selection and episode navigation.
 
 mod controller;
+mod countdown;
 mod current;
 mod media_player;
 mod queue;
