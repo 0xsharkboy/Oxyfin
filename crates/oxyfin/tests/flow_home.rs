@@ -109,8 +109,8 @@ fn home_shows_every_row_that_loads() {
             titles(&window)
                 == [
                     "Continue Watching",
-                    "Recently Added: Movies",
-                    "Recently Added: Shows",
+                    "Recently Added in Movies",
+                    "Recently Added in Shows",
                 ]
         })
         .await
@@ -122,18 +122,18 @@ fn home_shows_every_row_that_loads() {
             return Err(format!("unexpected Continue Watching row: {resumed:?}"));
         }
 
-        let shows = row(&window, "Recently Added: Shows").ok_or("no Shows row")?;
+        let shows = row(&window, "Recently Added in Shows").ok_or("no Shows row")?;
         if shows.error.is_empty() || shows.items.row_count() != 0 {
             return Err("the failed library row shows no error".into());
         }
 
         wait_until("the poster image", || {
-            row(&window, "Recently Added: Movies")
+            row(&window, "Recently Added in Movies")
                 .and_then(|row| row.items.row_data(0))
                 .is_some_and(|card| card.has_image)
         })
         .await?;
-        let movies = row(&window, "Recently Added: Movies").ok_or("no Movies row")?;
+        let movies = row(&window, "Recently Added in Movies").ok_or("no Movies row")?;
         if movies.kind != HomeRowKind::Poster || !movies.error.is_empty() {
             return Err("unexpected Movies row".into());
         }
