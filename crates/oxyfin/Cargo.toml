@@ -4,6 +4,38 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+build = "build.rs"
 
-[lints]
-workspace = true
+[lints.rust]
+# Slint generated code needs `allow(unsafe_code)`, which `forbid` rejects.
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+print_stdout = "warn"
+undocumented_unsafe_blocks = "warn"
+
+[features]
+default = ["mpv"]
+mpv = ["oxyfin-core/mpv", "dep:oxyfin-player", "oxyfin-player/mpv"]
+
+[dependencies]
+oxyfin-core = { path = "../oxyfin-core", default-features = false }
+oxyfin-player = { path = "../oxyfin-player", default-features = false, optional = true }
+slint = { version = "=1.18.1", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-femtovg", "raw-window-handle-06"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+gethostname = "1"
+log = "0.4"
+env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
+
+[build-dependencies]
+slint-build = "=1.18.1"
+
+[dev-dependencies]
+i-slint-backend-testing = "=1.18.1"
+wiremock = "0.6"
+tempfile = "3"
