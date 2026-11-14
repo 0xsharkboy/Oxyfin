@@ -400,6 +400,8 @@ fn selecting_tracks_is_reported() {
 fn selection_restored_before_the_next_read_is_reported() {
     let (events, on_event, gate) = Events::gated();
     let player = headless(on_event);
+    // Rebound so it drops before the player, which joins the held thread.
+    let gate = gate;
     player.load(&sample()).unwrap();
     let sub = subtitle(&loaded_tracks(&events));
     player.set_paused(true).unwrap();
@@ -574,4 +576,20 @@ fn small_seek_reports_the_position_before_seeked() {
         position.is_some_and(|s| (s - 2.1).abs() <= 0.05),
         "{position:?}"
     );
+}
+
+#[test]
+#[should_panic(expected = "failure while the event thread is held")]
+fn a_gated_test_failing_while_held_does_not_hang() {
+    let (events, on_event, gate) = Events::gated();
+    let player = headless(on_event);
+    // Rebound so it drops before the player, which joins the held thread.
+    let gate = gate;
+    player.load(&sample()).unwrap();
+    loaded_tracks(&events);
+
+    gate.arm();
+    player.set_volume(50.0).unwrap();
+    gate.hold_at(TIMEOUT, |e| *e == PlayerEvent::Volume(50.0));
+    panic!("failure while the event thread is held");
 }

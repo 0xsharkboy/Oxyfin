@@ -82,8 +82,9 @@ pub(crate) fn observe(mpv: &Mpv) -> libmpv2::Result<()> {
 #[allow(unsafe_code)]
 fn observe_changes(mpv: &Mpv, name: &str) -> libmpv2::Result<()> {
     let name = CString::new(name)?;
-    // SAFETY: `mpv.ctx` is a live handle for the lifetime of `mpv`, `name` is a
-    // valid C string that mpv copies, and the NONE format needs no data buffer.
+    // SAFETY: called before the event thread starts; `mpv.ctx` is a live handle
+    // for the lifetime of `mpv`, `name` is a valid C string that mpv copies,
+    // and the NONE format needs no data buffer.
     let code = unsafe {
         libmpv2_sys::mpv_observe_property(mpv.ctx.as_ptr(), 0, name.as_ptr(), mpv_format::None)
     };

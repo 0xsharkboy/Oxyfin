@@ -84,6 +84,9 @@ impl Events {
 }
 
 /// Holds the player event thread after each event it emits while armed.
+///
+/// Declare it after the player so it drops first: the player joins its event
+/// thread on drop, which a held gate would block.
 pub struct Gate {
     armed: Arc<AtomicBool>,
     steps: mpsc::Sender<()>,
@@ -99,8 +102,10 @@ impl Gate {
     /// Steps past held events until one matches `pred`, and keeps the event
     /// thread held on it.
     pub fn hold_at(&self, timeout: Duration, pred: impl Fn(&PlayerEvent) -> bool) {
+        let deadline = Instant::now() + timeout;
         loop {
-            match self.held.recv_timeout(timeout) {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            match self.held.recv_timeout(remaining) {
                 Ok(event) if pred(&event) => return,
                 Ok(_) => self.step(),
                 Err(_) => panic!("no matching held event within {timeout:?}"),
@@ -117,6 +122,12 @@ impl Gate {
     pub fn release(&self) {
         self.armed.store(false, Ordering::SeqCst);
         self.step();
+    }
+}
+
+impl Drop for Gate {
+    fn drop(&mut self) {
+        self.release();
     }
 }
 
