@@ -15,7 +15,7 @@ mpv = ["oxyfin-player/mpv"]
 [dependencies]
 oxyfin-api = { path = "../oxyfin-api" }
 oxyfin-player = { path = "../oxyfin-player", default-features = false }
-tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+tokio = { version = "1", features = ["rt", "sync", "time", "macros", "fs"] }
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 directories = "6"
 uuid = { version = "1", features = ["v4"] }

@@ -3,6 +3,7 @@
 mod catalog;
 mod config;
 mod error;
+mod images;
 mod models;
 mod paths;
 mod quick_connect;
@@ -12,6 +13,7 @@ mod session;
 pub use catalog::{BrowseQuery, BrowseSource, Catalog, SortField};
 pub use config::{Config, SavedSession};
 pub use error::{CoreError, Result};
+pub use images::{ImageCache, ImageSize};
 pub use models::{
     Episode, ImageRef, ItemKind, ItemSummary, Library, LibraryKind, MovieDetails, Page, Person,
     Season, SeriesDetails, UserState,
