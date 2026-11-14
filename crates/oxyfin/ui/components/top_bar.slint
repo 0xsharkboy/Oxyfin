@@ -1,0 +1,109 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { HeadingText } from "text.slint";
+import { NavItem } from "nav_item.slint";
+import { IconButton } from "icon_button.slint";
+
+export enum TopBarPage { home, movies, shows, favorites, none }
+
+// Top navigation drawn over the home banner. Only the pages built so far are enabled.
+export component TopBar inherits Rectangle {
+    in property <TopBarPage> current: TopBarPage.home;
+    in property <bool> library-pages-enabled;
+    in property <bool> search-enabled;
+    callback home-clicked();
+    callback movies-clicked();
+    callback shows-clicked();
+    callback favorites-clicked();
+    callback search-clicked();
+    callback settings-clicked();
+
+    accessible-role: tab-list;
+    accessible-label: @tr("Navigation");
+
+    background: Theme.top-bar-scrim;
+
+    HorizontalLayout {
+        padding-left: Theme.space-2xl;
+        padding-right: Theme.space-2xl;
+        spacing: Theme.space-sm;
+
+        HorizontalLayout {
+            padding-right: Theme.space-xl;
+            spacing: Theme.space-sm;
+            alignment: start;
+
+            VerticalLayout {
+                alignment: center;
+                Image {
+                    source: Icons.logo;
+                    width: 22px;
+                    height: 22px;
+                }
+            }
+            HeadingText {
+                // Brand name, not translated.
+                text: "Oxyfin";
+                vertical-alignment: center;
+            }
+        }
+
+        NavItem {
+            label: @tr("Home");
+            active: root.current == TopBarPage.home;
+            clicked => {
+                root.home-clicked();
+            }
+        }
+        NavItem {
+            label: @tr("Movies");
+            active: root.current == TopBarPage.movies;
+            enabled: root.library-pages-enabled;
+            clicked => {
+                root.movies-clicked();
+            }
+        }
+        NavItem {
+            label: @tr("Shows");
+            active: root.current == TopBarPage.shows;
+            enabled: root.library-pages-enabled;
+            clicked => {
+                root.shows-clicked();
+            }
+        }
+        NavItem {
+            label: @tr("Favorites");
+            active: root.current == TopBarPage.favorites;
+            enabled: root.library-pages-enabled;
+            clicked => {
+                root.favorites-clicked();
+            }
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            IconButton {
+                icon: Icons.search;
+                label: @tr("Search");
+                enabled: root.search-enabled;
+                clicked => {
+                    root.search-clicked();
+                }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            IconButton {
+                icon: Icons.settings;
+                label: @tr("Settings");
+                clicked => {
+                    root.settings-clicked();
+                }
+            }
+        }
+    }
+}

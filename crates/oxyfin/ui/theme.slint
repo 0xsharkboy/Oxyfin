@@ -1,0 +1,139 @@
+// Design tokens of the reference design, named after the Figma variables in kebab-case.
+
+export global Theme {
+    out property <color> bg-base: #0b0d12;
+    out property <color> bg-hover: #1f2430;
+    out property <color> bg-elevated: #181c25;
+    out property <color> border-default: #2b3242;
+    out property <color> text-primary: #e8ebf1;
+    out property <color> text-secondary: #a9b0bf;
+    out property <color> text-muted: #6b7385;
+    out property <color> text-on-accent: #0b0d12;
+    out property <color> accent: #4cc9f0;
+    out property <color> watched: #4ade80;
+    out property <color> progress-track: #6b7385;
+
+    // Gradients drawn in the design without a variable.
+    out property <brush> top-bar-scrim: @linear-gradient(180deg, #0b0d12f2 0%, #0b0d1200 100%);
+    out property <brush> hero-scrim-bottom: @linear-gradient(180deg, #0b0d1200 55%, #0b0d12 100%);
+    out property <brush> hero-scrim-left: @linear-gradient(90deg, #0b0d12f2 0%, #0b0d1200 60%);
+    out property <brush> hero-placeholder: @linear-gradient(154deg, #1f4761 7%, #141f33 46%, #331a38 79%);
+    out property <brush> poster-placeholder: @linear-gradient(132deg, #384573 14%, #141a29 86%);
+    out property <brush> landscape-placeholder: @linear-gradient(157deg, #59384d 14%, #1a1424 86%);
+
+    out property <length> space-2xs: 2px;
+    out property <length> space-xs: 4px;
+    out property <length> space-chip-y: 6px;
+    out property <length> space-sm: 8px;
+    out property <length> space-md: 12px;
+    out property <length> space-lg: 16px;
+    out property <length> space-xl: 24px;
+    out property <length> space-2xl: 32px;
+    out property <length> space-3xl: 48px;
+
+    out property <length> radius-indicator: 2px;
+    out property <length> radius-md: 8px;
+    out property <length> radius-full: 999px;
+
+    out property <length> border-thin: 1px;
+    out property <length> border-focus: 2px;
+
+    out property <length> display-size: 40px;
+    out property <int> display-weight: 700;
+    out property <length> display-line-height: 48px;
+    out property <length> heading-size: 20px;
+    out property <int> heading-weight: 600;
+    out property <length> heading-line-height: 26px;
+    out property <length> body-size: 15px;
+    out property <int> body-weight: 400;
+    out property <length> body-line-height: 22px;
+    out property <length> body-strong-size: 15px;
+    out property <int> body-strong-weight: 600;
+    out property <length> body-strong-line-height: 22px;
+    out property <length> label-size: 13px;
+    out property <int> label-weight: 500;
+    out property <length> label-line-height: 18px;
+    out property <length> caption-size: 12px;
+    out property <int> caption-weight: 400;
+    out property <length> caption-line-height: 16px;
+
+    // Inter's natural line height per em: (ascender 1984 + descender 494) / 2048.
+    out property <float> inter-line-height: 1.21;
+
+    // Slint only knows a line height relative to the font's natural one.
+    public pure function line-height-factor(size: length, line-height: length) -> float {
+        line-height / (size * inter-line-height)
+    }
+}
+
+// Every message the interface can show, mapped from core errors and events.
+export enum Message {
+    server-unreachable,
+    invalid-server-url,
+    unsupported-server,
+    invalid-credentials,
+    quick-connect-disabled,
+    quick-connect-expired,
+    server-error,
+    unexpected-response,
+    storage-error,
+    session-expired,
+    file-token-warning,
+    no-direct-play,
+    nothing-to-play,
+    load-failed,
+    command-failed,
+    playback-unavailable,
+}
+
+export global Messages {
+    // `detail` is only used by `unsupported-server` and carries "<installed> / <required>" versions.
+    public pure function message-text(m: Message, detail: string) -> string {
+        if m == Message.server-unreachable {
+            return @tr("Cannot reach the server. Check the address and your connection.");
+        }
+        if m == Message.invalid-server-url {
+            return @tr("This server address is not valid.");
+        }
+        if m == Message.unsupported-server {
+            return @tr("This Jellyfin version is not supported (installed / required: {}).", detail);
+        }
+        if m == Message.invalid-credentials {
+            return @tr("Incorrect username or password.");
+        }
+        if m == Message.quick-connect-disabled {
+            return @tr("Quick Connect is disabled on this server.");
+        }
+        if m == Message.quick-connect-expired {
+            return @tr("The Quick Connect code has expired.");
+        }
+        if m == Message.server-error {
+            return @tr("The server ran into an error. Please try again later.");
+        }
+        if m == Message.unexpected-response {
+            return @tr("The server sent a response Oxyfin does not understand.");
+        }
+        if m == Message.storage-error {
+            return @tr("Oxyfin could not read or save its settings.");
+        }
+        if m == Message.session-expired {
+            return @tr("Your session has expired. Please sign in again.");
+        }
+        if m == Message.file-token-warning {
+            return @tr("The system keyring is unavailable, so your sign-in token is stored in a file only you can read.");
+        }
+        if m == Message.no-direct-play {
+            return @tr("Oxyfin cannot play this item directly.");
+        }
+        if m == Message.nothing-to-play {
+            return @tr("There is nothing left to play in this series.");
+        }
+        if m == Message.load-failed {
+            return @tr("This item could not be loaded.");
+        }
+        if m == Message.command-failed {
+            return @tr("The player could not complete that action.");
+        }
+        @tr("Playback is not available in this build of Oxyfin.")
+    }
+}

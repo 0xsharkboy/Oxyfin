@@ -1,0 +1,132 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { ProgressBar } from "progress_bar.slint";
+import { BodyStrongText, CaptionText } from "text.slint";
+
+export enum CardStatus { default, in-progress, watched }
+
+// Artwork of a card with its resume bar, watched badge and hover outline.
+component CardArtwork inherits Rectangle {
+    in property <image> image;
+    in property <brush> placeholder;
+    in property <CardStatus> status;
+    in property <float> progress;
+    in property <bool> highlighted;
+
+    border-radius: Theme.radius-md;
+    background: placeholder;
+    clip: true;
+
+    Image {
+        width: 100%;
+        height: 100%;
+        source: root.image;
+        image-fit: cover;
+    }
+
+    if root.status == CardStatus.in-progress: ProgressBar {
+        x: Theme.space-sm;
+        y: parent.height - Theme.space-sm - self.height;
+        width: parent.width - 2 * Theme.space-sm;
+        value: root.progress;
+    }
+
+    if root.status == CardStatus.watched: Rectangle {
+        x: parent.width - Theme.space-md - self.width;
+        y: Theme.space-sm;
+        width: 16px + 2 * Theme.space-xs;
+        height: self.width;
+        border-radius: Theme.radius-full;
+        background: Theme.watched;
+
+        Image {
+            width: 16px;
+            height: 16px;
+            source: Icons.check;
+            colorize: Theme.text-on-accent;
+        }
+    }
+
+    Rectangle {
+        border-radius: Theme.radius-md;
+        border-width: root.highlighted ? Theme.border-focus : 0;
+        border-color: Theme.accent;
+    }
+}
+
+// Card made of an artwork and a title with a subtitle below it.
+export component MediaCard {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <image> image;
+    in property <CardStatus> status: CardStatus.default;
+    in property <float> progress;
+    in property <bool> enabled: true;
+    in property <length> artwork-height;
+    in property <brush> placeholder;
+    in property <color> subtitle-color: Theme.text-muted;
+    callback clicked();
+
+    accessible-role: button;
+    accessible-label: title;
+    accessible-description: subtitle;
+    accessible-enabled: enabled;
+    accessible-action-default => {
+        activate();
+    }
+    forward-focus: focus;
+
+    function activate() {
+        if enabled {
+            clicked();
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            root.activate();
+        }
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.activate();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    VerticalLayout {
+        spacing: Theme.space-sm;
+
+        CardArtwork {
+            height: root.artwork-height;
+            image: root.image;
+            placeholder: root.placeholder;
+            status: root.status;
+            progress: root.progress;
+            highlighted: root.enabled && (touch.has-hover || focus.has-focus);
+        }
+
+        VerticalLayout {
+            spacing: Theme.space-2xs;
+
+            BodyStrongText {
+                accessible-role: none;
+                text: root.title;
+                overflow: elide;
+            }
+            CaptionText {
+                accessible-role: none;
+                text: root.subtitle;
+                color: root.subtitle-color;
+                overflow: elide;
+            }
+        }
+    }
+}

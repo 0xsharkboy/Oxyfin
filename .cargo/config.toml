@@ -1,0 +1,3 @@
+[env]
+# Element debug info lets the headless UI tests find elements by accessible label.
+SLINT_EMIT_DEBUG_INFO = "1"

@@ -1,0 +1,70 @@
+import { Theme } from "../theme.slint";
+import { BodyText } from "text.slint";
+
+// Top navigation entry; the active one is the current page and carries the accent indicator.
+export component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    accessible-role: tab;
+    accessible-label: label;
+    accessible-enabled: enabled;
+    accessible-item-selected: active;
+    accessible-action-default => {
+        activate();
+    }
+    forward-focus: focus;
+
+    function activate() {
+        if enabled {
+            clicked();
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => {
+            root.activate();
+        }
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.activate();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    VerticalLayout {
+        padding-left: Theme.space-md;
+        padding-right: Theme.space-md;
+        padding-top: Theme.space-sm;
+        padding-bottom: Theme.space-xs;
+        spacing: Theme.space-xs;
+        alignment: start;
+
+        BodyText {
+            accessible-role: none;
+            text: root.label;
+            horizontal-alignment: center;
+            font-weight: root.active ? Theme.body-strong-weight : Theme.body-weight;
+            color: root.active || (touch.has-hover && root.enabled) || focus.has-focus ? Theme.text-primary : Theme.text-secondary;
+        }
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: 20px;
+                height: 3px;
+                border-radius: Theme.radius-indicator;
+                background: root.active ? Theme.accent : transparent;
+            }
+        }
+    }
+}

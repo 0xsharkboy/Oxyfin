@@ -1,0 +1,76 @@
+import { Theme } from "../theme.slint";
+import { BodyStrongText } from "text.slint";
+
+export enum ButtonStyle { primary, secondary, ghost }
+
+// Action button of the reference design: primary for the main action, secondary and ghost for the others.
+export component Button inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <ButtonStyle> style: ButtonStyle.primary;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    property <color> foreground: style == ButtonStyle.primary ? Theme.text-on-accent : Theme.text-primary;
+
+    accessible-role: button;
+    accessible-label: label;
+    accessible-enabled: enabled;
+    accessible-action-default => {
+        activate();
+    }
+    forward-focus: focus;
+
+    border-radius: Theme.radius-md;
+    background: style == ButtonStyle.primary ? Theme.accent : style == ButtonStyle.secondary ? Theme.bg-hover : (touch.has-hover && enabled ? Theme.bg-hover : transparent);
+    border-width: focus.has-focus ? Theme.border-focus : style == ButtonStyle.ghost ? Theme.border-thin : 0;
+    border-color: focus.has-focus ? (style == ButtonStyle.primary ? Theme.text-primary : Theme.accent) : Theme.border-default;
+    opacity: enabled ? 1 : 0.4;
+
+    function activate() {
+        if enabled {
+            clicked();
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => {
+            root.activate();
+        }
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.activate();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: Theme.space-xl;
+        padding-right: Theme.space-xl;
+        padding-top: Theme.space-md;
+        padding-bottom: Theme.space-md;
+        spacing: Theme.space-sm;
+        alignment: center;
+
+        if icon.width > 0: Image {
+            source: root.icon;
+            width: 24px;
+            height: 24px;
+            colorize: root.foreground;
+        }
+        BodyStrongText {
+            accessible-role: none;
+            text: root.label;
+            color: root.foreground;
+            vertical-alignment: center;
+        }
+    }
+}
