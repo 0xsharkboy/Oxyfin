@@ -5,7 +5,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 /// The player commands the playback controller uses.
 ///
-/// Implemented for [`oxyfin_player::Player`] with the `mpv` feature; tests use
+/// Implemented for `oxyfin_player::Player` with the `mpv` feature; tests use
 /// a fake that records the calls.
 pub trait MediaPlayer: Send + Sync + 'static {
     /// Loads a media, replacing the current one.
