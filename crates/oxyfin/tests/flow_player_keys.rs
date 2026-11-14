@@ -2,14 +2,15 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::Duration;
 
 use i_slint_backend_testing::{AccessibleRole, ElementHandle};
 use oxyfin::screens::player;
-use oxyfin::{AppWindow, Screen};
+use oxyfin::{AppWindow, NextUp, Screen};
 use oxyfin_core::{PlaybackCommand, SEEK_STEP};
 use oxyfin_player::SeekTarget;
-use slint::platform::{Key, WindowEvent};
-use slint::{ComponentHandle, LogicalSize};
+use slint::platform::{Key, PointerEventButton, WindowEvent};
+use slint::{ComponentHandle, LogicalPosition, LogicalSize};
 
 fn press(window: &AppWindow, text: impl Into<slint::SharedString>) {
     let text = text.into();
@@ -21,6 +22,32 @@ fn press(window: &AppWindow, text: impl Into<slint::SharedString>) {
         .dispatch_event(WindowEvent::KeyReleased { text });
 }
 
+fn center(element: &ElementHandle) -> LogicalPosition {
+    let position = element.absolute_position();
+    let size = element.size();
+    LogicalPosition::new(position.x + size.width / 2., position.y + size.height / 2.)
+}
+
+/// Clicks `element`. The first move can reveal the controls and shift the
+/// element, so the click lands where the element is after it.
+fn click(window: &AppWindow, element: &ElementHandle) {
+    window.window().dispatch_event(WindowEvent::PointerMoved {
+        position: center(element),
+    });
+    let position = center(element);
+    for event in [
+        WindowEvent::PointerPressed {
+            position,
+            button: PointerEventButton::Left,
+        },
+        WindowEvent::PointerReleased {
+            position,
+            button: PointerEventButton::Left,
+        },
+    ] {
+        window.window().dispatch_event(event);
+    }
+}
 fn find(window: &AppWindow, label: &str, role: AccessibleRole) -> ElementHandle {
     ElementHandle::find_by_accessible_label(window, label)
         .find(|element| element.accessible_role() == Some(role))
@@ -64,6 +91,30 @@ fn player_shortcuts_send_commands_and_sign_in_typing_does_not() {
 
     press(&window, Key::Escape);
     assert!(!window.window().is_fullscreen());
+    sent.borrow_mut().clear();
+
+    window.set_player_loading(false);
+    click(&window, &find(&window, "Pause", AccessibleRole::Button));
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(3100));
+    press(&window, " ");
+    window.set_player_next_up(NextUp {
+        visible: true,
+        title: "S01E02".into(),
+        remaining: 5,
+        ..NextUp::default()
+    });
+    click(&window, &find(&window, "Cancel", AccessibleRole::Button));
+    window.set_player_next_up(NextUp::default());
+    press(&window, " ");
+    assert_eq!(
+        *sent.borrow(),
+        vec![
+            PlaybackCommand::SetPaused(true),
+            PlaybackCommand::SetPaused(true),
+            PlaybackCommand::CancelNextUp,
+            PlaybackCommand::SetPaused(true),
+        ]
+    );
     sent.borrow_mut().clear();
 
     window.set_screen(Screen::SignIn);

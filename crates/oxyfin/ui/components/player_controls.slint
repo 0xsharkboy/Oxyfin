@@ -143,6 +143,8 @@ export component PlayerControls inherits Rectangle {
             alignment: stretch;
 
             IconButton {
+
+                focus-on-click: false;
                 icon: Icons.skip-prev;
                 label: @tr("Previous");
                 clicked => {
@@ -151,6 +153,8 @@ export component PlayerControls inherits Rectangle {
             }
 
             IconButton {
+
+                focus-on-click: false;
                 icon: Icons.rewind-10;
                 label: @tr("Back 10 seconds");
                 clicked => {
@@ -159,6 +163,8 @@ export component PlayerControls inherits Rectangle {
             }
 
             IconButton {
+
+                focus-on-click: false;
                 icon: root.paused ? Icons.play : Icons.pause;
                 label: root.paused ? @tr("Play") : @tr("Pause");
                 clicked => {
@@ -167,6 +173,8 @@ export component PlayerControls inherits Rectangle {
             }
 
             IconButton {
+
+                focus-on-click: false;
                 icon: Icons.forward-10;
                 label: @tr("Forward 10 seconds");
                 clicked => {
@@ -175,6 +183,8 @@ export component PlayerControls inherits Rectangle {
             }
 
             IconButton {
+
+                focus-on-click: false;
                 icon: Icons.skip-next;
                 label: @tr("Next");
                 enabled: root.has-next;
@@ -197,6 +207,8 @@ export component PlayerControls inherits Rectangle {
                 alignment: center;
 
                 IconButton {
+
+                    focus-on-click: false;
                     icon: Icons.volume;
                     label: root.muted ? @tr("Unmute") : @tr("Mute");
                     icon-color: root.muted ? Theme.text-muted : Theme.text-primary;
@@ -222,6 +234,8 @@ export component PlayerControls inherits Rectangle {
             }
 
             IconButton {
+
+                focus-on-click: false;
                 icon: Icons.subtitles;
                 label: @tr("Audio and subtitles");
                 active: root.tracks-open;
@@ -231,6 +245,8 @@ export component PlayerControls inherits Rectangle {
             }
 
             IconButton {
+
+                focus-on-click: false;
                 icon: Icons.settings;
                 label: @tr("Playback speed");
                 active: root.speed-open;
@@ -240,6 +256,8 @@ export component PlayerControls inherits Rectangle {
             }
 
             IconButton {
+
+                focus-on-click: false;
                 icon: Icons.fullscreen;
                 label: root.fullscreen ? @tr("Exit fullscreen") : @tr("Fullscreen");
                 clicked => {
