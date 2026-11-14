@@ -1,10 +1,11 @@
 //! The thread that turns mpv events into [`PlayerEvent`]s.
 
+use std::ffi::CString;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use libmpv2::events::{Event, PropertyData};
-use libmpv2::{Format, Mpv, mpv_end_file_reason};
+use libmpv2::{Format, Mpv, mpv_end_file_reason, mpv_format};
 
 use crate::error::describe;
 use crate::{PlayerEvent, UnloadReason, tracks};
@@ -71,9 +72,26 @@ pub(crate) fn observe(mpv: &Mpv) -> libmpv2::Result<()> {
     mpv.observe_property(VOLUME, Format::Double, 0)?;
     mpv.observe_property(SPEED, Format::Double, 0)?;
     mpv.observe_property(MUTE, Format::Flag, 0)?;
-    mpv.observe_property(TRACK_COUNT, Format::Int64, 0)?;
-    mpv.observe_property(AID, Format::String, 0)?;
-    mpv.observe_property(SID, Format::String, 0)
+    observe_changes(mpv, TRACK_COUNT)?;
+    observe_changes(mpv, AID)?;
+    observe_changes(mpv, SID)
+}
+
+/// Observes `name` without a value, so mpv reports every change it flags
+/// instead of only those that differ from the last value it read.
+#[allow(unsafe_code)]
+fn observe_changes(mpv: &Mpv, name: &str) -> libmpv2::Result<()> {
+    let name = CString::new(name)?;
+    // SAFETY: `mpv.ctx` is a live handle for the lifetime of `mpv`, `name` is a
+    // valid C string that mpv copies, and the NONE format needs no data buffer.
+    let code = unsafe {
+        libmpv2_sys::mpv_observe_property(mpv.ctx.as_ptr(), 0, name.as_ptr(), mpv_format::None)
+    };
+    if code < 0 {
+        Err(libmpv2::Error::Raw(code))
+    } else {
+        Ok(())
+    }
 }
 
 /// Runs the event loop until mpv shuts down.

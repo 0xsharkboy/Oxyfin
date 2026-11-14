@@ -397,6 +397,31 @@ fn selecting_tracks_is_reported() {
 }
 
 #[test]
+fn selection_restored_before_the_next_read_is_reported() {
+    let (events, on_event, gate) = Events::gated();
+    let player = headless(on_event);
+    player.load(&sample()).unwrap();
+    let sub = subtitle(&loaded_tracks(&events));
+    player.set_paused(true).unwrap();
+    events.wait_for(TIMEOUT, |e| *e == PlayerEvent::Paused(true));
+
+    gate.arm();
+    player.set_volume(50.0).unwrap();
+    gate.hold_at(TIMEOUT, |e| *e == PlayerEvent::Volume(50.0));
+    player.select_subtitle(Some(sub.id)).unwrap();
+    player.select_subtitle(None).unwrap();
+    gate.release();
+
+    events.wait_for(TIMEOUT, |e| *e == PlayerEvent::Volume(50.0));
+    events.wait_for(TIMEOUT, |e| match e {
+        PlayerEvent::Tracks(tracks) => tracks
+            .iter()
+            .any(|t| t.kind == TrackKind::Subtitle && t.id == sub.id && !t.is_selected),
+        _ => false,
+    });
+}
+
+#[test]
 fn external_subtitle_is_added_and_selectable() {
     let (events, on_event) = Events::new();
     let player = headless(on_event);

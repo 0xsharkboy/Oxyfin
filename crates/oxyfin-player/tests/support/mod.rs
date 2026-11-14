@@ -32,6 +32,28 @@ impl Events {
         (events, callback)
     }
 
+    /// Like [`Events::new`], with a [`Gate`] that can hold the event thread
+    /// inside the callback.
+    pub fn gated() -> (Self, impl Fn(PlayerEvent) + Send + 'static, Gate) {
+        let (events, forward) = Self::new();
+        let (steps, step_receiver) = mpsc::channel();
+        let (held_sender, held) = mpsc::channel();
+        let armed = Arc::new(AtomicBool::new(false));
+        let gate = Gate {
+            armed: Arc::clone(&armed),
+            steps,
+            held,
+        };
+        let callback = move |event: PlayerEvent| {
+            forward(event.clone());
+            if armed.load(Ordering::SeqCst) {
+                let _ = held_sender.send(event);
+                let _ = step_receiver.recv();
+            }
+        };
+        (events, callback, gate)
+    }
+
     /// Waits for the first event matching `pred`, panicking with every event
     /// received so far if `timeout` expires.
     pub fn wait_for(&self, timeout: Duration, pred: impl Fn(&PlayerEvent) -> bool) -> PlayerEvent {
@@ -58,6 +80,43 @@ impl Events {
         let mut seen = self.seen.lock().unwrap();
         seen.extend(self.receiver.try_iter());
         seen.clone()
+    }
+}
+
+/// Holds the player event thread after each event it emits while armed.
+pub struct Gate {
+    armed: Arc<AtomicBool>,
+    steps: mpsc::Sender<()>,
+    held: Receiver<PlayerEvent>,
+}
+
+impl Gate {
+    /// Makes the event thread wait for a [`Gate::step`] after each event.
+    pub fn arm(&self) {
+        self.armed.store(true, Ordering::SeqCst);
+    }
+
+    /// Steps past held events until one matches `pred`, and keeps the event
+    /// thread held on it.
+    pub fn hold_at(&self, timeout: Duration, pred: impl Fn(&PlayerEvent) -> bool) {
+        loop {
+            match self.held.recv_timeout(timeout) {
+                Ok(event) if pred(&event) => return,
+                Ok(_) => self.step(),
+                Err(_) => panic!("no matching held event within {timeout:?}"),
+            }
+        }
+    }
+
+    /// Lets the event thread go past the held event.
+    pub fn step(&self) {
+        let _ = self.steps.send(());
+    }
+
+    /// Stops holding the event thread and frees it if it is held.
+    pub fn release(&self) {
+        self.armed.store(false, Ordering::SeqCst);
+        self.step();
     }
 }
 

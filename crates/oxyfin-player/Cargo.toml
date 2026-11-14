@@ -7,10 +7,11 @@ repository.workspace = true
 
 [features]
 default = ["mpv"]
-mpv = ["dep:libmpv2", "dep:raw-window-handle", "dep:glow"]
+mpv = ["dep:libmpv2", "dep:libmpv2-sys", "dep:raw-window-handle", "dep:glow"]
 
 [dependencies]
 libmpv2 = { version = "=7.0.1", optional = true }
+libmpv2-sys = { version = "=4.0.1", optional = true }
 raw-window-handle = { version = "0.6", optional = true }
 glow = { version = "0.18", optional = true }
 thiserror = "2"
