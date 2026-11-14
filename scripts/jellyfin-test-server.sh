@@ -9,7 +9,8 @@ if [ "${1:-}" = up ] && ! command -v ffmpeg >/dev/null 2>&1; then
   if [ -z "${OXYFIN_TEST_IN_NIX:-}" ] && command -v nix >/dev/null 2>&1; then
     echo "ffmpeg not found, re-running under nix develop" >&2
     export OXYFIN_TEST_IN_NIX=1
-    exec nix develop --quiet "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" -c "${BASH_SOURCE[0]}" "$@"
+    self=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")
+    exec nix develop --quiet "$(dirname "$(dirname "$self")")" -c "$self" "$@"
   fi
   echo "ffmpeg not found: install it or run inside nix develop" >&2
   exit 1
@@ -113,7 +114,12 @@ add_library() {
 
 up() {
   local tag=${1:-12.4}
+  if [[ ! ${OXYFIN_TEST_SCAN_TIMEOUT:-600} =~ ^[0-9]+$ ]]; then
+    log "OXYFIN_TEST_SCAN_TIMEOUT must be a number of seconds, got: $OXYFIN_TEST_SCAN_TIMEOUT"
+    return 2
+  fi
   down_quiet
+  trap cleanup_on_failure EXIT
   log "generating media in $MEDIA"
   gen_media
   log "starting jellyfin/jellyfin:$tag"
@@ -164,6 +170,11 @@ up() {
 }
 
 down_quiet() { docker rm -f "$NAME" >/dev/null 2>&1 || true; }
+
+cleanup_on_failure() {
+  local rc=$?
+  if [ "$rc" -ne 0 ]; then down_quiet; fi
+}
 
 case ${1:-} in
   up) up "${2:-12.4}" ;;
