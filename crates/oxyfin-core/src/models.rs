@@ -41,7 +41,7 @@ pub struct UserState {
 }
 
 impl UserState {
-    fn from_dto(data: Option<&UserItemDataDto>) -> Self {
+    pub(crate) fn from_dto(data: Option<&UserItemDataDto>) -> Self {
         let Some(data) = data else {
             return Self::default();
         };
@@ -292,7 +292,7 @@ pub struct Episode {
 }
 
 impl Episode {
-    /// Converts a DTO; returns `None` when it is not an episode or lacks its series.
+    /// Converts a DTO; returns `None` when it is not an episode or lacks its series id.
     pub fn from_dto(dto: &BaseItemDto) -> Option<Self> {
         if dto.r#type != BaseItemKind::Episode {
             return None;

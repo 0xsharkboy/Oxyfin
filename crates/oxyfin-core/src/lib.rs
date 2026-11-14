@@ -1,5 +1,6 @@
 //! Application logic for Oxyfin: session, use cases, progress sync and caching.
 
+mod catalog;
 mod config;
 mod error;
 mod models;
@@ -8,6 +9,7 @@ mod quick_connect;
 mod secrets;
 mod session;
 
+pub use catalog::{BrowseQuery, BrowseSource, Catalog, SortField};
 pub use config::{Config, SavedSession};
 pub use error::{CoreError, Result};
 pub use models::{
