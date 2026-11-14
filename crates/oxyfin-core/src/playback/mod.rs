@@ -8,14 +8,16 @@ mod media_player;
     expect(dead_code, reason = "used by the next-episode logic")
 )]
 mod queue;
+mod reporter;
 mod tracks;
+mod types;
 
-pub use controller::{
-    NEXT_UP_COUNTDOWN, PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackController,
-    PlaybackEvent, PlaybackHandle, PlaybackTimings, PlaybackTitle, SEEK_STEP, SHUTDOWN_TIMEOUT,
-    SPEEDS,
-};
+pub use controller::{PlaybackController, PlaybackHandle};
 pub use media_player::{MediaPlayer, PlayerEventSink, PlayerEvents, player_events};
+pub use types::{
+    NEXT_UP_COUNTDOWN, PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent,
+    PlaybackTimings, PlaybackTitle, SEEK_STEP, SHUTDOWN_TIMEOUT, SPEEDS, UNLOAD_GRACE,
+};
 
 /// An audio track the user can pick.
 #[derive(Clone, Debug, PartialEq, Eq)]

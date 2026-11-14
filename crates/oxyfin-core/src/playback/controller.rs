@@ -4,176 +4,20 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use oxyfin_api::{ItemId, MediaStreamType, PlaybackReport, Session, Ticks};
-use oxyfin_player::{MediaSource, PlayerError, PlayerEvent, SeekTarget, Track, TrackKind};
+use oxyfin_api::{ItemId, MediaStreamType, Session, Ticks};
+use oxyfin_player::{MediaSource, PlayerError, PlayerEvent, Track, TrackKind, UnloadReason};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
-use tokio::time::{Instant, sleep_until};
+use tokio::time::{Instant, sleep_until, timeout_at};
 
 use super::current::{Current, mark_selected};
 use super::media_player::{MediaPlayer, PlayerEvents};
+use super::reporter::{ReportKind, Reporter};
 use super::tracks::{TrackMap, subtitle_format};
-use super::{AudioOption, SubtitleOption};
+use super::types::{
+    PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent, PlaybackTimings, PlaybackTitle,
+};
 use crate::error::CoreError;
-use crate::models::{Episode, ItemSummary, UserState};
-
-/// Interval between two progress reports while playing.
-pub const PROGRESS_INTERVAL: Duration = Duration::from_secs(10);
-/// Step of the skip backward and skip forward buttons.
-pub const SEEK_STEP: Duration = Duration::from_secs(10);
-/// Length of the countdown before the next episode starts.
-pub const NEXT_UP_COUNTDOWN: Duration = Duration::from_secs(10);
-/// Longest wait for the last report when shutting down.
-pub const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
-/// Playback speeds offered to the user.
-pub const SPEEDS: [f64; 6] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
-
-const NO_DIRECT_PLAY: &str = "the server offers no source that can be played directly";
-
-/// Durations driving the controller's timers.
-///
-/// [`Default`] gives the production values; tests shorten them.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct PlaybackTimings {
-    /// Interval between two progress reports while playing.
-    pub progress_interval: Duration,
-    /// Duration of one step of the next episode countdown.
-    pub next_up_countdown_tick: Duration,
-    /// Longest wait for the last report when shutting down.
-    pub shutdown_timeout: Duration,
-}
-
-impl Default for PlaybackTimings {
-    fn default() -> Self {
-        Self {
-            progress_interval: PROGRESS_INTERVAL,
-            next_up_countdown_tick: Duration::from_secs(1),
-            shutdown_timeout: SHUTDOWN_TIMEOUT,
-        }
-    }
-}
-
-/// Where playback of an item starts.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PlayMode {
-    /// Resume at the saved position, if any.
-    Auto,
-    /// Start at the beginning.
-    FromStart,
-}
-
-/// A request sent to the playback controller.
-#[derive(Clone, Debug, PartialEq)]
-pub enum PlaybackCommand {
-    /// Play an item, replacing the current one.
-    Play {
-        /// Item to play.
-        item: ItemId,
-        /// Where playback starts.
-        mode: PlayMode,
-    },
-    /// Pause or resume.
-    SetPaused(bool),
-    /// Seek in the current item.
-    Seek(SeekTarget),
-    /// Go to the previous item.
-    Previous,
-    /// Go to the next item.
-    Next,
-    /// Start the next episode without waiting for the countdown.
-    PlayNextNow,
-    /// Cancel the next episode countdown.
-    CancelNextUp,
-    /// Set the playback speed.
-    SetSpeed(f64),
-    /// Set the volume, in percent.
-    SetVolume(f64),
-    /// Mute or unmute.
-    SetMuted(bool),
-    /// Select the audio track with this Jellyfin stream index.
-    SelectAudio(i32),
-    /// Select the subtitle track with this Jellyfin stream index, or none.
-    SelectSubtitle(Option<i32>),
-    /// Stop playback.
-    Stop,
-}
-
-/// What the UI shows while an item plays.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PlaybackTitle {
-    /// Title of the item.
-    pub title: String,
-    /// Name of the series, for an episode.
-    pub series_name: Option<String>,
-    /// Label such as `S01E02`, for an episode.
-    pub episode_label: Option<String>,
-}
-
-/// A change reported by the playback controller.
-#[derive(Clone, Debug, PartialEq)]
-#[expect(
-    clippy::large_enum_variant,
-    reason = "events are moved through a channel, never stored in bulk"
-)]
-pub enum PlaybackEvent {
-    /// An item is being loaded.
-    Loading {
-        /// Item being loaded.
-        item: ItemId,
-        /// Titles to display.
-        title: PlaybackTitle,
-    },
-    /// The item is loaded and playing.
-    Ready {
-        /// Duration, when known.
-        duration: Option<Duration>,
-        /// Audio tracks.
-        audio: Vec<AudioOption>,
-        /// Subtitle tracks.
-        subtitles: Vec<SubtitleOption>,
-        /// Whether a previous item exists.
-        has_previous: bool,
-        /// Whether a next item exists.
-        has_next: bool,
-    },
-    /// The position changed.
-    Position(Duration),
-    /// The paused state changed.
-    Paused(bool),
-    /// The playback speed changed.
-    Speed(f64),
-    /// The volume changed.
-    Volume(f64),
-    /// The muted state changed.
-    Muted(bool),
-    /// A seek requested by the user started.
-    Seeking,
-    /// A seek requested by the user finished.
-    Seeked,
-    /// The tracks or their selection changed.
-    TracksChanged {
-        /// Audio tracks.
-        audio: Vec<AudioOption>,
-        /// Subtitle tracks.
-        subtitles: Vec<SubtitleOption>,
-    },
-    /// The item played to its end.
-    Ended,
-    /// The next episode starts in `remaining` seconds.
-    NextUpCountdown {
-        /// Episode about to start.
-        episode: Episode,
-        /// Seconds left.
-        remaining: u32,
-    },
-    /// The next episode countdown was cancelled.
-    NextUpCancelled,
-    /// Playback stopped.
-    Stopped,
-    /// Playback failed, with a message to display.
-    Error(String),
-    /// The server no longer accepts the session; playback stopped.
-    SessionExpired,
-}
+use crate::models::{ItemSummary, UserState};
 
 /// Sends commands to a running [`PlaybackController`].
 #[derive(Clone, Debug)]
@@ -188,22 +32,21 @@ impl PlaybackHandle {
     }
 }
 
-#[derive(Clone, Copy)]
-enum Report {
-    Start,
-    Progress,
-    Stopped,
-}
-
 /// A task that plays one item at a time: it loads the media, applies the
 /// default tracks, relays the player events and reports playback to the
 /// server.
 pub struct PlaybackController {
     session: Session,
     player: Arc<dyn MediaPlayer>,
+    player_events: UnboundedReceiver<PlayerEvent>,
+    player_open: bool,
     events: UnboundedSender<PlaybackEvent>,
+    reporter: Reporter,
     timings: PlaybackTimings,
     current: Option<Current>,
+    /// The player was told to stop a media and has not reported its unload:
+    /// its events are stale.
+    awaiting_unload: bool,
     next_progress: Option<Instant>,
 }
 
@@ -212,7 +55,8 @@ impl PlaybackController {
     /// [`PlaybackTimings`].
     ///
     /// Returns the handle that sends commands and the receiver of the
-    /// controller's events. The task ends when every handle is dropped.
+    /// controller's events. The task ends when every handle is dropped,
+    /// after the queued reports are sent.
     pub fn spawn(
         session: Session,
         player: Arc<dyn MediaPlayer>,
@@ -230,24 +74,28 @@ impl PlaybackController {
     ) -> (PlaybackHandle, UnboundedReceiver<PlaybackEvent>) {
         let (commands, command_receiver) = unbounded_channel();
         let (event_sender, event_receiver) = unbounded_channel();
+        let (expired_sender, expired) = unbounded_channel();
         let controller = Self {
+            reporter: Reporter::spawn(session.clone(), expired_sender),
             session,
             player,
+            player_events: events.0,
+            player_open: true,
             events: event_sender,
             timings,
             current: None,
+            awaiting_unload: false,
             next_progress: None,
         };
-        tokio::spawn(controller.run(command_receiver, events.0));
+        tokio::spawn(controller.run(command_receiver, expired));
         (PlaybackHandle { commands }, event_receiver)
     }
 
     async fn run(
         mut self,
         mut commands: UnboundedReceiver<PlaybackCommand>,
-        mut player_events: UnboundedReceiver<PlayerEvent>,
+        mut expired: UnboundedReceiver<()>,
     ) {
-        let mut player_open = true;
         loop {
             let deadline = self.next_progress;
             tokio::select! {
@@ -255,16 +103,18 @@ impl PlaybackController {
                     Some(command) => self.on_command(command).await,
                     None => break,
                 },
-                event = player_events.recv(), if player_open => match event {
-                    Some(event) => self.on_player_event(event).await,
-                    None => player_open = false,
+                event = self.player_events.recv(), if self.player_open => match event {
+                    Some(event) => self.on_player_event(event),
+                    None => self.player_open = false,
                 },
+                Some(()) = expired.recv() => self.expire(),
                 () = sleep_until(deadline.unwrap_or_else(Instant::now)), if deadline.is_some() => {
-                    self.report(Report::Progress).await;
+                    self.report(ReportKind::Progress);
                     self.schedule_progress();
                 }
             }
         }
+        let _ = self.reporter.close().await;
     }
 
     fn emit(&self, event: PlaybackEvent) {
@@ -277,7 +127,7 @@ impl PlaybackController {
             Ok(()) => true,
             Err(PlayerError::NoMediaLoaded) => false,
             Err(error) => {
-                self.emit(PlaybackEvent::Error(CoreError::from(error).to_string()));
+                self.emit(PlaybackEvent::Error(PlaybackError::command(&error)));
                 false
             }
         }
@@ -296,37 +146,33 @@ impl PlaybackController {
         if error == CoreError::SessionExpired {
             self.expire();
         } else {
-            self.emit(PlaybackEvent::Error(error.to_string()));
+            self.emit(PlaybackEvent::Error(PlaybackError::request(error)));
         }
     }
 
     fn expire(&mut self) {
-        self.current = None;
-        self.next_progress = None;
-        let _ = self.player.stop();
+        self.release(false);
         self.emit(PlaybackEvent::SessionExpired);
     }
 
-    /// Sends a report for the current item; returns `false` when the session expired.
-    async fn report(&mut self, kind: Report) -> bool {
-        match &self.current {
-            Some(current) => self.send_report(kind, current.report()).await,
-            None => true,
+    /// Queues a report for the current item.
+    fn report(&self, kind: ReportKind) {
+        if let Some(current) = &self.current {
+            self.reporter.send(kind, current.report());
         }
     }
 
-    async fn send_report(&mut self, kind: Report, report: PlaybackReport) -> bool {
-        let result = match kind {
-            Report::Start => self.session.report_playback_start(&report).await,
-            Report::Progress => self.session.report_playback_progress(&report).await,
-            Report::Stopped => self.session.report_playback_stopped(&report).await,
+    /// Stops the player and forgets the current item, reporting its stop
+    /// when `report` is set and its start was reported.
+    fn release(&mut self, report: bool) {
+        self.next_progress = None;
+        let Some(current) = self.current.take() else {
+            return;
         };
-        match result.map_err(CoreError::from) {
-            Err(CoreError::SessionExpired) => {
-                self.expire();
-                false
-            }
-            _ => true,
+        let _ = self.player.stop();
+        self.awaiting_unload = true;
+        if report && current.loaded {
+            self.reporter.send(ReportKind::Stopped, current.report());
         }
     }
 
@@ -367,7 +213,10 @@ impl PlaybackController {
                     self.call(self.player.select_subtitle(Some(track)));
                 }
             }
-            PlaybackCommand::Stop => self.stop().await,
+            PlaybackCommand::Stop => {
+                self.release(true);
+                self.emit(PlaybackEvent::Stopped);
+            }
             PlaybackCommand::Previous
             | PlaybackCommand::Next
             | PlaybackCommand::PlayNextNow
@@ -381,24 +230,8 @@ impl PlaybackController {
             .and_then(|current| current.map.as_ref())
     }
 
-    async fn stop(&mut self) {
-        self.next_progress = None;
-        let _ = self.player.stop();
-        if let Some(current) = self.current.take()
-            && !self.send_report(Report::Stopped, current.report()).await
-        {
-            return;
-        }
-        self.emit(PlaybackEvent::Stopped);
-    }
-
     async fn play(&mut self, item: ItemId, mode: PlayMode) {
-        self.next_progress = None;
-        if let Some(current) = self.current.take()
-            && !self.send_report(Report::Stopped, current.report()).await
-        {
-            return;
-        }
+        self.release(true);
         let dto = match self.session.item(&item).await {
             Ok(dto) => dto,
             Err(error) => return self.fail(error.into()),
@@ -430,7 +263,7 @@ impl PlaybackController {
             .into_iter()
             .find(|source| source.supports_direct_play)
         else {
-            return self.emit(PlaybackEvent::Error(NO_DIRECT_PLAY.to_owned()));
+            return self.emit(PlaybackEvent::Error(PlaybackError::NoDirectPlaySource));
         };
         let stream = self.session.stream_source(&item, &source.id);
         let mut media = MediaSource::new(stream.url.as_str())
@@ -442,8 +275,9 @@ impl PlaybackController {
         if let Some(start) = start {
             media = media.with_start(start);
         }
+        self.wait_for_unload().await;
         if let Err(error) = self.player.load(&media) {
-            return self.emit(PlaybackEvent::Error(CoreError::from(error).to_string()));
+            return self.emit(PlaybackEvent::Error(PlaybackError::load(error)));
         }
         self.current = Some(Current::new(
             item,
@@ -453,19 +287,37 @@ impl PlaybackController {
         ));
     }
 
-    async fn on_player_event(&mut self, event: PlayerEvent) {
-        match event {
-            PlayerEvent::FileLoaded { duration, tracks } => {
-                self.on_file_loaded(duration, tracks).await;
+    /// Drops the stale events of the stopped media until its unload, waiting
+    /// at most the unload grace.
+    async fn wait_for_unload(&mut self) {
+        let deadline = Instant::now() + self.timings.unload_grace;
+        while self.awaiting_unload && self.player_open {
+            match timeout_at(deadline, self.player_events.recv()).await {
+                Ok(Some(event)) => self.on_player_event(event),
+                Ok(None) => self.player_open = false,
+                Err(_) => break,
             }
-            PlayerEvent::Tracks(tracks) => self.on_tracks(&tracks).await,
+        }
+        self.awaiting_unload = false;
+    }
+
+    fn on_player_event(&mut self, event: PlayerEvent) {
+        if self.awaiting_unload {
+            if matches!(event, PlayerEvent::Unloaded(_)) {
+                self.awaiting_unload = false;
+            }
+            return;
+        }
+        match event {
+            PlayerEvent::FileLoaded { duration, tracks } => self.on_file_loaded(duration, tracks),
+            PlayerEvent::Tracks(tracks) => self.on_tracks(&tracks),
             PlayerEvent::Position(position) => {
                 if let Some(current) = self.current.as_mut() {
                     current.position = position;
                     self.emit(PlaybackEvent::Position(position));
                 }
             }
-            PlayerEvent::Paused(paused) => self.on_paused(paused).await,
+            PlayerEvent::Paused(paused) => self.on_paused(paused),
             PlayerEvent::Speed(speed) => self.emit(PlaybackEvent::Speed(speed)),
             PlayerEvent::Volume(volume) => self.emit(PlaybackEvent::Volume(volume)),
             PlayerEvent::Muted(muted) => self.emit(PlaybackEvent::Muted(muted)),
@@ -478,25 +330,26 @@ impl PlaybackController {
                 if let Some(current) = self.current.as_mut().filter(|c| c.seek_pending) {
                     current.seek_pending = false;
                     self.emit(PlaybackEvent::Seeked);
-                    self.report(Report::Progress).await;
+                    self.report(ReportKind::Progress);
                     self.schedule_progress();
                 }
             }
             PlayerEvent::Ended => {}
-            PlayerEvent::Unloaded(oxyfin_player::UnloadReason::Error(message)) => {
+            PlayerEvent::Unloaded(UnloadReason::Error(message)) => {
                 let Some(current) = self.current.take() else {
                     return;
                 };
                 self.next_progress = None;
-                if self.send_report(Report::Stopped, current.report()).await {
-                    self.emit(PlaybackEvent::Error(message));
+                if current.loaded {
+                    self.reporter.send(ReportKind::Stopped, current.report());
                 }
+                self.emit(PlaybackEvent::Error(PlaybackError::load(message)));
             }
             PlayerEvent::Unloaded(_) => {}
         }
     }
 
-    async fn on_file_loaded(&mut self, duration: Option<Duration>, mut tracks: Vec<Track>) {
+    fn on_file_loaded(&mut self, duration: Option<Duration>, mut tracks: Vec<Track>) {
         let Some(current) = self.current.as_mut().filter(|c| !c.loaded) else {
             return;
         };
@@ -574,10 +427,10 @@ impl PlaybackController {
             has_next: false,
         });
         self.schedule_progress();
-        self.report(Report::Start).await;
+        self.report(ReportKind::Start);
     }
 
-    async fn on_tracks(&mut self, tracks: &[Track]) {
+    fn on_tracks(&mut self, tracks: &[Track]) {
         let Some(current) = self.current.as_mut().filter(|c| c.loaded) else {
             return;
         };
@@ -586,12 +439,12 @@ impl PlaybackController {
             self.emit(PlaybackEvent::TracksChanged { audio, subtitles });
         }
         if changed {
-            self.report(Report::Progress).await;
+            self.report(ReportKind::Progress);
             self.schedule_progress();
         }
     }
 
-    async fn on_paused(&mut self, paused: bool) {
+    fn on_paused(&mut self, paused: bool) {
         self.emit(PlaybackEvent::Paused(paused));
         let Some(current) = self.current.as_mut() else {
             return;
@@ -601,7 +454,7 @@ impl PlaybackController {
         }
         current.paused = paused;
         if current.loaded {
-            self.report(Report::Progress).await;
+            self.report(ReportKind::Progress);
             self.schedule_progress();
         }
     }

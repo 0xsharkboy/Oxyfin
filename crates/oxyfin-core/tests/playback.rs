@@ -10,8 +10,9 @@ use common::{
 };
 use oxyfin_api::ItemId;
 use oxyfin_core::{
-    PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackController, PlaybackEvent,
-    PlaybackHandle, PlaybackTimings, PlayerEventSink, SHUTDOWN_TIMEOUT, player_events,
+    PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackController, PlaybackError, PlaybackEvent,
+    PlaybackHandle, PlaybackTimings, PlayerEventSink, SHUTDOWN_TIMEOUT, UNLOAD_GRACE,
+    player_events,
 };
 use oxyfin_player::{PlayerEvent, SeekTarget, Track, TrackId, TrackKind, UnloadReason};
 use serde_json::{Value, json};
@@ -20,6 +21,8 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const MOVIE_ID: &str = "76282b1c408f374beeee50519e9157a4";
+/// A second item, served with the same fixtures.
+const OTHER_ID: &str = "0000000000000000000000000000000b";
 const PLAY_SESSION_ID: &str = "8050f69acbe34027b28b38f406d4fe49";
 const START: &str = "/Sessions/Playing";
 const PROGRESS: &str = "/Sessions/Playing/Progress";
@@ -63,16 +66,18 @@ async fn mount_playback_info(mock: &MockServer, body: Value) {
 
 /// Spawns a controller on `mock`, after mounting the default routes (lowest priority).
 async fn harness_on(mock: MockServer, timings: PlaybackTimings) -> Harness {
-    Mock::given(method("GET"))
-        .and(path(format!("/Items/{MOVIE_ID}")))
-        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("item_movie")))
-        .mount(&mock)
-        .await;
-    Mock::given(method("POST"))
-        .and(path(format!("/Items/{MOVIE_ID}/PlaybackInfo")))
-        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("playback_info")))
-        .mount(&mock)
-        .await;
+    for id in [MOVIE_ID, OTHER_ID] {
+        Mock::given(method("GET"))
+            .and(path(format!("/Items/{id}")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(fixture("item_movie")))
+            .mount(&mock)
+            .await;
+        Mock::given(method("POST"))
+            .and(path(format!("/Items/{id}/PlaybackInfo")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(fixture("playback_info")))
+            .mount(&mock)
+            .await;
+    }
     for route in [START, PROGRESS, STOPPED] {
         Mock::given(method("POST"))
             .and(path(route))
@@ -129,28 +134,60 @@ fn file_tracks() -> Vec<Track> {
 
 impl Harness {
     async fn play(&mut self, mode: PlayMode) {
+        self.play_item(MOVIE_ID, mode).await;
+    }
+
+    /// Plays `id` and waits until the player receives its `load`.
+    async fn play_item(&mut self, id: &str, mode: PlayMode) {
+        let loads = self.loads().len();
         self.handle.send(PlaybackCommand::Play {
-            item: ItemId::from(MOVIE_ID),
+            item: ItemId::from(id),
             mode,
         });
         wait_event(&mut self.events, |e| {
             matches!(e, PlaybackEvent::Loading { .. })
         })
         .await;
-        self.player.wait_call(|c| matches!(c, Call::Load(_))).await;
+        let start = tokio::time::Instant::now();
+        while self.loads().len() <= loads {
+            assert!(start.elapsed() < common::DEADLINE, "no load for {id}");
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    }
+
+    fn loads(&self) -> Vec<oxyfin_player::MediaSource> {
+        self.player
+            .calls()
+            .into_iter()
+            .filter_map(|call| match call {
+                Call::Load(source) => Some(source),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Sends `FileLoaded` with the fixture tracks and waits for `Ready`.
+    async fn file_loaded(&mut self) -> PlaybackEvent {
+        let mut seen = self.file_loaded_events().await;
+        seen.pop().unwrap_or_else(|| panic!("no Ready event"))
+    }
+
+    /// Sends `FileLoaded` and returns every event received up to `Ready`.
+    async fn file_loaded_events(&mut self) -> Vec<PlaybackEvent> {
+        self.sink.send(PlayerEvent::FileLoaded {
+            duration: Some(Duration::from_millis(10_023)),
+            tracks: file_tracks(),
+        });
+        events_until(&mut self.events, |e| {
+            matches!(e, PlaybackEvent::Ready { .. })
+        })
+        .await
     }
 
     /// Plays the movie in auto mode and loads it; returns the `Ready` event.
     async fn start(&mut self) -> PlaybackEvent {
         self.play(PlayMode::Auto).await;
-        self.sink.send(PlayerEvent::FileLoaded {
-            duration: Some(Duration::from_millis(10_023)),
-            tracks: file_tracks(),
-        });
-        let ready = wait_event(&mut self.events, |e| {
-            matches!(e, PlaybackEvent::Ready { .. })
-        })
-        .await;
+        let ready = self.file_loaded().await;
         wait_requests(&self.mock, START, 1).await;
         ready
     }
@@ -159,14 +196,17 @@ impl Harness {
     /// playback; returns every event received up to `Stopped`.
     ///
     /// Player events and commands travel on separate channels, hence the
-    /// marker event before the command.
+    /// marker event before the command. Reports are sent in order, so once the
+    /// stop report arrives every earlier report has arrived too.
     async fn stop(&mut self) -> Vec<PlaybackEvent> {
+        let stopped = bodies(&self.mock, STOPPED).await.len();
         let marker = PlaybackEvent::Position(Duration::from_millis(999));
         self.sink
             .send(PlayerEvent::Position(Duration::from_millis(999)));
         let mut seen = events_until(&mut self.events, |e| *e == marker).await;
         self.handle.send(PlaybackCommand::Stop);
         seen.extend(events_until(&mut self.events, |e| matches!(e, PlaybackEvent::Stopped)).await);
+        wait_requests(&self.mock, STOPPED, stopped + 1).await;
         seen
     }
 }
@@ -196,6 +236,8 @@ fn default_timings_follow_the_spec() {
     assert_eq!(timings.next_up_countdown_tick, Duration::from_secs(1));
     assert_eq!(timings.shutdown_timeout, SHUTDOWN_TIMEOUT);
     assert_eq!(timings.shutdown_timeout, Duration::from_secs(2));
+    assert_eq!(timings.unload_grace, UNLOAD_GRACE);
+    assert_eq!(timings.unload_grace, Duration::from_millis(500));
 }
 
 #[tokio::test]
@@ -511,7 +553,10 @@ async fn no_direct_play_source_is_an_error() {
         item: ItemId::from(MOVIE_ID),
         mode: PlayMode::Auto,
     });
-    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Error(_))).await;
+    wait_event(&mut h.events, |e| {
+        *e == PlaybackEvent::Error(PlaybackError::NoDirectPlaySource)
+    })
+    .await;
     assert!(!h.player.calls().iter().any(|c| matches!(c, Call::Load(_))));
 
     let mock = MockServer::start().await;
@@ -521,7 +566,10 @@ async fn no_direct_play_source_is_an_error() {
         item: ItemId::from(MOVIE_ID),
         mode: PlayMode::Auto,
     });
-    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Error(_))).await;
+    wait_event(&mut h.events, |e| {
+        *e == PlaybackEvent::Error(PlaybackError::NoDirectPlaySource)
+    })
+    .await;
     assert!(h.player.calls().is_empty());
 }
 
@@ -533,7 +581,10 @@ async fn load_error_is_reported() {
         item: ItemId::from(MOVIE_ID),
         mode: PlayMode::Auto,
     });
-    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Error(_))).await;
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::Error(PlaybackError::LoadFailed { .. }))
+    })
+    .await;
     assert!(bodies(&h.mock, START).await.is_empty());
 }
 
@@ -545,7 +596,9 @@ async fn playback_error_is_reported_with_a_stop_report() {
         "loading failed".into(),
     )));
     wait_event(&mut h.events, |e| {
-        *e == PlaybackEvent::Error("loading failed".into())
+        *e == PlaybackEvent::Error(PlaybackError::LoadFailed {
+            detail: "loading failed".into(),
+        })
     })
     .await;
     wait_requests(&h.mock, STOPPED, 1).await;
@@ -637,4 +690,220 @@ async fn player_state_events_are_forwarded() {
     assert!(calls.contains(&Call::SetSpeed(2.0)));
     assert!(calls.contains(&Call::SetVolume(50.0)));
     assert!(calls.contains(&Call::SetMuted(false)));
+}
+
+/// Asserts the `Ready` event of item B, started from the beginning, and its start report.
+async fn assert_other_started(h: &mut Harness, seen: &[PlaybackEvent]) {
+    assert!(
+        !seen
+            .iter()
+            .any(|e| matches!(e, PlaybackEvent::Error(_) | PlaybackEvent::SessionExpired)),
+        "{seen:?}"
+    );
+    let starts = wait_requests(&h.mock, START, 2).await;
+    let body = &starts[1];
+    assert_eq!(body["ItemId"], json!(OTHER_ID));
+    assert_eq!(body["PositionTicks"], json!(0));
+    assert_eq!(body["AudioStreamIndex"], json!(2));
+    assert_eq!(body["SubtitleStreamIndex"], json!(0));
+    let added: Vec<String> = h
+        .player
+        .calls()
+        .into_iter()
+        .filter_map(|call| match call {
+            Call::AddExternal { url, .. } => Some(url),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(added.len(), 2, "{added:?}");
+    assert!(
+        added[1].contains(&format!("/Videos/{OTHER_ID}/")),
+        "{added:?}"
+    );
+}
+
+#[tokio::test]
+async fn switching_items_drops_stale_events() {
+    let mut h = harness(PlaybackTimings {
+        unload_grace: Duration::from_secs(5),
+        ..quiet()
+    })
+    .await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(OTHER_ID),
+        mode: PlayMode::FromStart,
+    });
+    h.player.wait_call(|c| *c == Call::Stop).await;
+    h.sink.send(PlayerEvent::Paused(true));
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(50)));
+    let mut stale = file_tracks();
+    stale[1].is_selected = false;
+    stale[2].is_selected = true;
+    h.sink.send(PlayerEvent::Tracks(stale));
+    h.sink.send(PlayerEvent::Unloaded(UnloadReason::Stopped));
+    let start = tokio::time::Instant::now();
+    while h.loads().len() < 2 {
+        assert!(start.elapsed() < common::DEADLINE, "B never loaded");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert_eq!(h.loads()[1].start, None);
+    let mut seen = events_until(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::Loading { .. })
+    })
+    .await;
+    seen.extend(h.file_loaded_events().await);
+    assert!(
+        !seen.iter().any(
+            |e| matches!(e, PlaybackEvent::Position(p) if *p == Duration::from_secs(50))
+                || *e == PlaybackEvent::Paused(true)
+        ),
+        "{seen:?}"
+    );
+    assert_other_started(&mut h, &seen).await;
+    let stopped = wait_requests(&h.mock, STOPPED, 1).await;
+    assert_eq!(stopped[0]["ItemId"], json!(MOVIE_ID));
+    assert!(bodies(&h.mock, PROGRESS).await.is_empty());
+}
+
+#[tokio::test]
+async fn switching_items_loads_after_the_grace_without_unload() {
+    let mut h = harness(PlaybackTimings {
+        unload_grace: Duration::from_millis(50),
+        ..quiet()
+    })
+    .await;
+    h.play(PlayMode::Auto).await;
+    h.play_item(OTHER_ID, PlayMode::FromStart).await;
+    assert!(h.player.calls().contains(&Call::Stop));
+    let ready = h.file_loaded().await;
+    assert_other_started_single(&h, &ready).await;
+}
+
+/// Like [`assert_other_started`] when item A never loaded (one start report only).
+async fn assert_other_started_single(h: &Harness, ready: &PlaybackEvent) {
+    assert!(matches!(ready, PlaybackEvent::Ready { .. }));
+    let starts = wait_requests(&h.mock, START, 1).await;
+    assert_eq!(starts[0]["ItemId"], json!(OTHER_ID));
+    assert_eq!(starts[0]["PositionTicks"], json!(0));
+}
+
+#[tokio::test]
+async fn stale_unload_error_does_not_stop_the_next_item() {
+    let mut h = harness(PlaybackTimings {
+        unload_grace: Duration::from_secs(5),
+        ..quiet()
+    })
+    .await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(OTHER_ID),
+        mode: PlayMode::FromStart,
+    });
+    h.player.wait_call(|c| *c == Call::Stop).await;
+    h.sink
+        .send(PlayerEvent::Unloaded(UnloadReason::Error("stale".into())));
+    let mut seen = events_until(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::Loading { .. })
+    })
+    .await;
+    let start = tokio::time::Instant::now();
+    while h.loads().len() < 2 {
+        assert!(start.elapsed() < common::DEADLINE, "B never loaded");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    seen.extend(h.file_loaded_events().await);
+    seen.extend(h.stop().await);
+    assert_other_started(&mut h, &seen).await;
+}
+
+#[tokio::test]
+async fn failed_play_stops_the_previous_media() {
+    let mock = MockServer::start().await;
+    mount_status(
+        &mock,
+        "POST",
+        &format!("/Items/{OTHER_ID}/PlaybackInfo"),
+        500,
+    )
+    .await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(OTHER_ID),
+        mode: PlayMode::Auto,
+    });
+    wait_event(&mut h.events, |e| {
+        *e == PlaybackEvent::Error(PlaybackError::Server { status: 500 })
+    })
+    .await;
+    assert!(h.player.calls().contains(&Call::Stop));
+    assert_eq!(h.loads().len(), 1);
+    wait_requests(&h.mock, STOPPED, 1).await;
+}
+
+#[tokio::test]
+async fn slow_report_does_not_block_commands() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(PROGRESS))
+        .respond_with(ResponseTemplate::new(204).set_delay(Duration::from_secs(5)))
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.sink.send(PlayerEvent::Paused(true));
+    wait_requests(&h.mock, PROGRESS, 1).await;
+    let sent = tokio::time::Instant::now();
+    h.handle.send(PlaybackCommand::SetPaused(false));
+    h.player.wait_call(|c| *c == Call::SetPaused(false)).await;
+    assert!(
+        sent.elapsed() < Duration::from_millis(500),
+        "{:?}",
+        sent.elapsed()
+    );
+}
+
+#[tokio::test]
+async fn no_stop_report_before_the_start_report() {
+    let mut h = harness(PlaybackTimings {
+        unload_grace: Duration::from_millis(50),
+        ..quiet()
+    })
+    .await;
+    h.play(PlayMode::Auto).await;
+    h.handle.send(PlaybackCommand::Stop);
+    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Stopped)).await;
+
+    h.play(PlayMode::Auto).await;
+    h.sink
+        .send(PlayerEvent::Unloaded(UnloadReason::Error("broken".into())));
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::Error(PlaybackError::LoadFailed { .. }))
+    })
+    .await;
+
+    // Reports are sent in order: once this start report arrives, any earlier
+    // stop report would have arrived too.
+    h.start().await;
+    assert!(bodies(&h.mock, STOPPED).await.is_empty());
+}
+
+#[tokio::test]
+async fn start_report_401_is_session_expired() {
+    let mock = MockServer::start().await;
+    mount_status(&mock, "POST", START, 401).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.play(PlayMode::Auto).await;
+    h.sink.send(PlayerEvent::FileLoaded {
+        duration: None,
+        tracks: file_tracks(),
+    });
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::SessionExpired)
+    })
+    .await;
+    assert!(h.player.calls().contains(&Call::Stop));
+    assert!(bodies(&h.mock, STOPPED).await.is_empty());
 }
