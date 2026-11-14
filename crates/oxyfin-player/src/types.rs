@@ -106,8 +106,9 @@ pub struct Track {
     pub is_external: bool,
     /// Whether the track is currently selected.
     pub is_selected: bool,
-    /// Index of the stream in the file (mpv `ff-index`), equal to the Jellyfin
-    /// `MediaStream.index` for an internal track.
+    /// Index of the stream in the file (mpv `ff-index`). Jellyfin numbers
+    /// external streams first, so its `MediaStream.index` is this index plus
+    /// the number of external streams.
     pub stream_index: Option<i64>,
     /// URL of the external file, for an external track.
     pub external_url: Option<String>,
