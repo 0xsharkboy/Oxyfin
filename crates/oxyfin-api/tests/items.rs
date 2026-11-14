@@ -407,3 +407,10 @@ fn unknown_kind_is_kept() {
     assert_eq!(page.items[1].r#type, BaseItemKind::Other("Trailer".into()));
     assert_eq!(page.total_record_count, 2);
 }
+
+#[test]
+fn video_kind_is_recognized() {
+    let item: BaseItemDto = serde_json::from_value(json!({"Id": "v", "Type": "Video"})).unwrap();
+    assert_eq!(item.r#type, BaseItemKind::Video);
+    assert_eq!(BaseItemKind::Video.as_str(), "Video");
+}
