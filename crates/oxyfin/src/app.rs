@@ -5,16 +5,20 @@ use std::future::Future;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
-use oxyfin_api::Session;
-use oxyfin_core::{Config, CoreError, Paths, SessionManager, SignedIn, TokenStorage, TokenVault};
+use oxyfin_api::{ItemId, Session};
+use oxyfin_core::{
+    Catalog, Config, CoreError, ImageCache, Paths, SessionManager, SignedIn, TokenStorage,
+    TokenVault,
+};
 use slint::{CloseRequestResponse, ComponentHandle};
 use tokio::runtime::Handle;
 use tokio::task::{AbortHandle, JoinHandle};
 
 use crate::generation::Generation;
 use crate::present::device_name;
+use crate::screens::home::HomeController;
 use crate::screens::sign_in::SignInController;
-use crate::state::{AppState, Effect, Msg, Notice, Screen, SessionInfo};
+use crate::state::{AppState, Effect, GenerationId, Msg, Notice, Screen, SessionInfo};
 use crate::{AppWindow, Message};
 
 /// The running application, living on the Slint thread.
@@ -34,6 +38,7 @@ pub struct App {
     ending: RefCell<Vec<JoinHandle<()>>>,
     quitting: Cell<bool>,
     pub(crate) sign_in: SignInController,
+    pub(crate) home: HomeController,
 }
 
 impl App {
@@ -61,6 +66,7 @@ impl App {
             ending: RefCell::new(Vec::new()),
             quitting: Cell::new(false),
             sign_in: SignInController::default(),
+            home: HomeController::default(),
         });
         app.bind(window);
         app.restore();
@@ -89,6 +95,26 @@ impl App {
 
     pub(crate) fn manager(&self) -> Arc<SessionManager> {
         Arc::clone(&self.manager)
+    }
+
+    pub(crate) fn runtime(&self) -> &Handle {
+        &self.runtime
+    }
+
+    /// Identifier, catalog and image cache of the current generation.
+    pub(crate) fn services(&self) -> Option<(GenerationId, Catalog, Arc<ImageCache>)> {
+        self.generation.borrow().as_ref().map(|generation| {
+            (
+                generation.id,
+                generation.catalog.clone(),
+                Arc::clone(&generation.images),
+            )
+        })
+    }
+
+    /// Starts playing `item`. Playback is wired in a later step.
+    pub(crate) fn play(&self, item: ItemId) {
+        log::debug!("play {item} requested");
     }
 
     /// Runs `task` on the runtime, then `then` on the Slint thread with its output.
@@ -182,6 +208,7 @@ impl App {
         window.on_open_quick_connect(with(|app| app.sign_in.open_quick_connect(app)));
         window.on_cancel_quick_connect(with(|app| app.dispatch(Msg::CloseQuickConnect)));
         window.on_retry_quick_connect(with(|app| app.sign_in.start_quick_connect(app)));
+        window.on_open_settings(with(|app| app.dispatch(Msg::OpenSettings)));
 
         let this = self.this.clone();
         window.on_server_changed(move |address| {
@@ -193,6 +220,12 @@ impl App {
         window.on_server_confirmed(move |address| {
             if let Some(app) = this.upgrade() {
                 app.sign_in.server_confirmed(&app, address);
+            }
+        });
+        let this = self.this.clone();
+        window.on_play(move |id| {
+            if let Some(app) = this.upgrade() {
+                app.play(ItemId::from(id.as_str()));
             }
         });
         let this = self.this.clone();
@@ -264,6 +297,7 @@ impl App {
                     window.set_screen(slint_screen(screen));
                 }
                 self.sign_in.shown(self, screen, previous);
+                self.home.shown(self, screen);
             }
             Effect::Notify(notice) => {
                 if let Some(window) = self.window() {

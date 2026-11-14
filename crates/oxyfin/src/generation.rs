@@ -1,5 +1,7 @@
 //! Resources owned by one signed-in session.
 
+use std::sync::Arc;
+
 use oxyfin_api::Session;
 use oxyfin_core::{CacheBudgets, Catalog, ImageCache, Paths, SessionManager};
 
@@ -14,7 +16,7 @@ pub struct Generation {
     /// Library browsing for this session.
     pub catalog: Catalog,
     /// Image cache for this session.
-    pub images: ImageCache,
+    pub images: Arc<ImageCache>,
 }
 
 impl Generation {
@@ -24,7 +26,11 @@ impl Generation {
         Self {
             id,
             catalog: Catalog::new(session.clone()),
-            images: ImageCache::new(session.clone(), paths, CacheBudgets::default()),
+            images: Arc::new(ImageCache::new(
+                session.clone(),
+                paths,
+                CacheBudgets::default(),
+            )),
             session,
         }
     }

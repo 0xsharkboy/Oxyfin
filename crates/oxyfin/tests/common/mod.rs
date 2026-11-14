@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use oxyfin::{App, AppWindow};
-use oxyfin_core::{MemoryStore, Paths, TokenVault};
+use oxyfin_core::{Config, MemoryStore, Paths, SavedSession, TokenVault, account_key};
 use slint::ComponentHandle;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
@@ -149,12 +149,23 @@ where
     F: FnOnce(MockServer) -> Fut,
     Fut: Future<Output = MockServer>,
 {
+    start_with(mount, |_, _, _| {})
+}
+
+/// Like [`start`], with `prepare` filling the directories and the vault before the app starts.
+pub fn start_with<F, Fut>(mount: F, prepare: impl FnOnce(&Paths, &TokenVault, &str)) -> Flow
+where
+    F: FnOnce(MockServer) -> Fut,
+    Fut: Future<Output = MockServer>,
+{
     i_slint_backend_testing::init_integration_test_with_system_time();
     let runtime = runtime();
     let mock = runtime.block_on(async { mount(MockServer::start().await).await });
     let (dir, paths) = paths();
+    let vault = vault();
+    prepare(&paths, &vault, &mock.uri());
     let window = AppWindow::new().unwrap_or_else(|err| panic!("cannot create the window: {err}"));
-    let app = App::new(&window, runtime.handle().clone(), paths, vault())
+    let app = App::new(&window, runtime.handle().clone(), paths, vault)
         .unwrap_or_else(|err| panic!("cannot create the app: {err}"));
     window
         .show()
@@ -205,4 +216,28 @@ pub async fn wait_until(what: &str, condition: impl Fn() -> bool) -> Result<(), 
 /// Sleeps on the event loop without blocking it.
 pub async fn pause(duration: Duration) {
     tokio::time::sleep(duration).await;
+}
+
+/// Id of the fixture user.
+pub const USER_ID: &str = "28dd79b9f3564a398568f3d0ca90f9de";
+
+/// Saves a signed-in session for `server_url`, as a previous run would have.
+pub fn save_session(paths: &Paths, vault: &TokenVault, server_url: &str) {
+    let mut config =
+        Config::load_or_create(paths).unwrap_or_else(|err| panic!("cannot create config: {err}"));
+    config.session = Some(SavedSession {
+        server_url: server_url.to_owned(),
+        user_id: USER_ID.to_owned(),
+        user_name: "oxyfin".to_owned(),
+        server_id: None,
+    });
+    config
+        .save(paths)
+        .unwrap_or_else(|err| panic!("cannot save config: {err}"));
+    vault
+        .save(
+            &account_key(server_url, USER_ID),
+            "5dabe43042264dc4960513e5e30552e3",
+        )
+        .unwrap_or_else(|err| panic!("cannot save the token: {err}"));
 }
