@@ -102,7 +102,7 @@ let ticks = position.as_nanos() / 100;
 
 ### Testing against a real Jellyfin server
 
-`scripts/jellyfin-test-server.sh` starts a disposable Jellyfin server in Docker, with generated media (a movie and a two-season show). It needs Docker, `ffmpeg`, `curl` and `jq`; `nix develop` provides the last three. Pick a version tag (`10.10.7`, `10.11.11` or `12.4`):
+`scripts/jellyfin-test-server.sh` starts a disposable Jellyfin server in Docker, with generated media (a movie and a two-season show). It needs Docker, `ffmpeg`, `curl` and `jq`; when `ffmpeg` is not on the `PATH`, `up` re-runs itself under `nix develop`. The library scan wait defaults to 600 s (`OXYFIN_TEST_SCAN_TIMEOUT`). Pick a version tag (`10.10.7`, `10.11.11` or `12.4`):
 
 ```sh
 eval "$(scripts/jellyfin-test-server.sh up 12.4)"   # exports the OXYFIN_TEST_* variables
