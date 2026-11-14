@@ -109,10 +109,32 @@ pub enum Call {
     },
 }
 
+/// Pause, speed and volume of a [`FakePlayer`]. Like mpv, a load keeps them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlayerState {
+    /// Last pause state set.
+    pub paused: bool,
+    /// Last speed set.
+    pub speed: f64,
+    /// Last volume set.
+    pub volume: f64,
+}
+
+impl Default for PlayerState {
+    fn default() -> Self {
+        Self {
+            paused: false,
+            speed: 1.0,
+            volume: 100.0,
+        }
+    }
+}
+
 /// A player that records the calls it receives.
 #[derive(Default)]
 pub struct FakePlayer {
     calls: Mutex<Vec<Call>>,
+    state: Mutex<PlayerState>,
     next_subtitle: AtomicI64,
     no_media: AtomicBool,
     fail_load: AtomicBool,
@@ -135,6 +157,23 @@ impl FakePlayer {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clone()
+    }
+
+    /// The pause, speed and volume set so far, kept across loads.
+    pub fn state(&self) -> PlayerState {
+        *self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn update(&self, change: impl FnOnce(&mut PlayerState)) {
+        change(
+            &mut self
+                .state
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
+        );
     }
 
     /// Waits until a received call matches `pred` and returns it.
@@ -183,19 +222,25 @@ impl MediaPlayer for FakePlayer {
         self.record(Call::Stop)
     }
     fn set_paused(&self, paused: bool) -> std::result::Result<(), PlayerError> {
-        self.record(Call::SetPaused(paused))
+        self.record(Call::SetPaused(paused))?;
+        self.update(|state| state.paused = paused);
+        Ok(())
     }
     fn seek(&self, target: SeekTarget) -> std::result::Result<(), PlayerError> {
         self.record(Call::Seek(target))
     }
     fn set_volume(&self, volume: f64) -> std::result::Result<(), PlayerError> {
-        self.record(Call::SetVolume(volume))
+        self.record(Call::SetVolume(volume))?;
+        self.update(|state| state.volume = volume);
+        Ok(())
     }
     fn set_muted(&self, muted: bool) -> std::result::Result<(), PlayerError> {
         self.record(Call::SetMuted(muted))
     }
     fn set_speed(&self, speed: f64) -> std::result::Result<(), PlayerError> {
-        self.record(Call::SetSpeed(speed))
+        self.record(Call::SetSpeed(speed))?;
+        self.update(|state| state.speed = speed);
+        Ok(())
     }
     fn select_audio(&self, track: Option<TrackId>) -> std::result::Result<(), PlayerError> {
         self.record(Call::SelectAudio(track))

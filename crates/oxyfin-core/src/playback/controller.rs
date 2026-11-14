@@ -624,6 +624,15 @@ impl PlaybackController {
             current.expected_subtitle = Some(subtitle);
         }
         let _ = self.player.set_speed(1.0);
+        // mpv keeps `pause` across loads without reporting it.
+        match self.player.set_paused(false) {
+            Ok(()) | Err(PlayerError::NoMediaLoaded) => {}
+            Err(error) => {
+                let _ = self
+                    .events
+                    .send(PlaybackEvent::Error(PlaybackError::command(&error)));
+            }
+        }
 
         current.update_tracks(&tracks);
         let (audio, subtitles) = current.refresh_options().unwrap_or_default();
