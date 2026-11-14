@@ -1,0 +1,66 @@
+import { Theme } from "../theme.slint";
+import { LabelText } from "text.slint";
+
+// Filter, sort or genre pill; selected chips are filled with the accent.
+export component Chip inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    accessible-role: button;
+    accessible-label: label;
+    accessible-enabled: enabled;
+    accessible-checkable: true;
+    accessible-checked: selected;
+    accessible-action-default => {
+        activate();
+    }
+    forward-focus: focus;
+
+    border-radius: Theme.radius-full;
+    background: selected ? Theme.accent : (touch.has-hover && enabled ? Theme.bg-hover : Theme.bg-elevated);
+    border-width: focus.has-focus ? Theme.border-focus : (selected ? 0 : Theme.border-thin);
+    border-color: focus.has-focus ? (selected ? Theme.text-primary : Theme.accent) : Theme.border-default;
+    opacity: enabled ? 1 : 0.4;
+
+    function activate() {
+        if enabled {
+            clicked();
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => {
+            root.activate();
+        }
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.activate();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: Theme.space-lg;
+        padding-right: Theme.space-lg;
+        padding-top: Theme.space-chip-y;
+        padding-bottom: Theme.space-chip-y;
+        spacing: Theme.space-xs;
+
+        LabelText {
+            accessible-role: none;
+            text: root.label;
+            color: root.selected ? Theme.text-on-accent : Theme.text-secondary;
+            vertical-alignment: center;
+        }
+    }
+}

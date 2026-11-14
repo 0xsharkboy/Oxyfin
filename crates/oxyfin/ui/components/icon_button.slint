@@ -1,0 +1,58 @@
+import { Theme } from "../theme.slint";
+
+// Round icon button of the top bar and the player; `label` is announced by screen readers.
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> enabled: true;
+    in property <color> icon-color: Theme.text-primary;
+    callback clicked();
+
+    accessible-role: button;
+    accessible-label: label;
+    accessible-enabled: enabled;
+    accessible-action-default => {
+        activate();
+    }
+    forward-focus: focus;
+
+    width: 24px + 2 * Theme.space-sm;
+    height: self.width;
+    border-radius: Theme.radius-full;
+    background: (touch.has-hover || focus.has-focus) && enabled ? Theme.bg-hover : transparent;
+    border-width: focus.has-focus ? Theme.border-focus : 0;
+    border-color: Theme.accent;
+    opacity: enabled ? 1 : 0.4;
+
+    function activate() {
+        if enabled {
+            clicked();
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => {
+            root.activate();
+        }
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.activate();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    Image {
+        source: root.icon;
+        width: 24px;
+        height: 24px;
+        colorize: root.icon-color;
+    }
+}

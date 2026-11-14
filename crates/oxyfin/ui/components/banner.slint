@@ -1,0 +1,74 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { BodyText, DisplayText, LabelText } from "text.slint";
+import { Button } from "button.slint";
+
+// Featured item at the top of the home screen, over its backdrop.
+export component Banner inherits Rectangle {
+    in property <image> backdrop;
+    in property <string> title;
+    in property <string> meta;
+    in property <string> overview;
+    in property <bool> play-enabled: true;
+    callback play();
+
+    accessible-role: groupbox;
+    accessible-label: title;
+
+    preferred-height: 520px;
+    background: Theme.hero-placeholder;
+    clip: true;
+
+    Image {
+        width: 100%;
+        height: 100%;
+        source: root.backdrop;
+        image-fit: cover;
+    }
+    Rectangle {
+        background: Theme.hero-scrim-left;
+    }
+    Rectangle {
+        background: Theme.hero-scrim-bottom;
+    }
+
+    VerticalLayout {
+        padding-left: Theme.space-3xl;
+        padding-right: Theme.space-3xl;
+        padding-bottom: Theme.space-3xl + Theme.space-2xl;
+        spacing: Theme.space-lg;
+        alignment: end;
+
+        LabelText {
+            text: @tr("FEATURED");
+            color: Theme.accent;
+        }
+        DisplayText {
+            text: root.title;
+            overflow: elide;
+        }
+        if root.meta != "": LabelText {
+            text: root.meta;
+        }
+        if root.overview != "": BodyText {
+            text: root.overview;
+            color: Theme.text-secondary;
+            wrap: word-wrap;
+            max-width: 560px;
+        }
+        HorizontalLayout {
+            padding-top: Theme.space-sm;
+            spacing: Theme.space-md;
+            alignment: start;
+
+            Button {
+                label: @tr("Play");
+                icon: Icons.play;
+                enabled: root.play-enabled;
+                clicked => {
+                    root.play();
+                }
+            }
+        }
+    }
+}

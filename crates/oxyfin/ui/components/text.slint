@@ -1,0 +1,45 @@
+// Text elements preset with the Figma text styles.
+
+import { Theme } from "../theme.slint";
+
+export component DisplayText inherits Text {
+    font-size: Theme.display-size;
+    font-weight: Theme.display-weight;
+    line-height-factor: Theme.line-height-factor(Theme.display-size, Theme.display-line-height);
+    color: Theme.text-primary;
+}
+
+export component HeadingText inherits Text {
+    font-size: Theme.heading-size;
+    font-weight: Theme.heading-weight;
+    line-height-factor: Theme.line-height-factor(Theme.heading-size, Theme.heading-line-height);
+    color: Theme.text-primary;
+}
+
+export component BodyText inherits Text {
+    font-size: Theme.body-size;
+    font-weight: Theme.body-weight;
+    line-height-factor: Theme.line-height-factor(Theme.body-size, Theme.body-line-height);
+    color: Theme.text-primary;
+}
+
+export component BodyStrongText inherits Text {
+    font-size: Theme.body-strong-size;
+    font-weight: Theme.body-strong-weight;
+    line-height-factor: Theme.line-height-factor(Theme.body-strong-size, Theme.body-strong-line-height);
+    color: Theme.text-primary;
+}
+
+export component LabelText inherits Text {
+    font-size: Theme.label-size;
+    font-weight: Theme.label-weight;
+    line-height-factor: Theme.line-height-factor(Theme.label-size, Theme.label-line-height);
+    color: Theme.text-secondary;
+}
+
+export component CaptionText inherits Text {
+    font-size: Theme.caption-size;
+    font-weight: Theme.caption-weight;
+    line-height-factor: Theme.line-height-factor(Theme.caption-size, Theme.caption-line-height);
+    color: Theme.text-muted;
+}

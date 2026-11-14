@@ -1,0 +1,74 @@
+import { Theme } from "../theme.slint";
+import { BodyText, LabelText } from "text.slint";
+
+// Labelled single-line input of the sign-in screen.
+export component TextField {
+    in property <string> label;
+    in property <string> placeholder;
+    in-out property <string> text;
+    in property <bool> enabled: true;
+    in property <bool> password;
+    out property <bool> has-focus: input.has-focus;
+    callback edited(text: string);
+    callback accepted();
+
+    forward-focus: input;
+
+    VerticalLayout {
+        spacing: Theme.space-sm;
+
+        LabelText {
+            text: root.label;
+        }
+
+        Rectangle {
+            background: Theme.bg-elevated;
+            border-radius: Theme.radius-md;
+            border-width: input.has-focus ? Theme.border-focus : Theme.border-thin;
+            border-color: input.has-focus ? Theme.accent : Theme.border-default;
+            opacity: root.enabled ? 1 : 0.4;
+            clip: true;
+
+            HorizontalLayout {
+                padding-left: Theme.space-lg;
+                padding-right: Theme.space-lg;
+                padding-top: Theme.space-md;
+                padding-bottom: Theme.space-md;
+
+                Rectangle {
+                    if root.text.is-empty: BodyText {
+                        width: 100%;
+                        height: 100%;
+                        text: root.placeholder;
+                        color: Theme.text-muted;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+
+                    input := TextInput {
+                        accessible-role: text-input;
+                        accessible-label: root.label;
+                        accessible-placeholder-text: root.placeholder;
+                        text <=> root.text;
+                        enabled: root.enabled;
+                        single-line: true;
+                        input-type: root.password ? InputType.password : InputType.text;
+                        font-size: Theme.body-size;
+                        font-weight: Theme.body-weight;
+                        line-height-factor: Theme.line-height-factor(Theme.body-size, Theme.body-line-height);
+                        color: Theme.text-primary;
+                        selection-background-color: Theme.accent;
+                        selection-foreground-color: Theme.text-on-accent;
+                        vertical-alignment: center;
+                        edited => {
+                            root.edited(self.text);
+                        }
+                        accepted => {
+                            root.accepted();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

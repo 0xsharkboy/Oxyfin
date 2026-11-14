@@ -76,7 +76,7 @@ The hooks in `.githooks/` run the fast checks locally. CI runs the same checks, 
 - Logging goes through `tracing`. No `println!` outside the binary's entry point.
 - `unsafe` is only allowed in `oxyfin-player`, around libmpv. Every `unsafe` block has a `// SAFETY:` comment explaining why it is sound.
 - Prototypes under `spikes/` are exempt from the `unsafe`, `println!` and test rules.
-- Every user-facing string goes through Slint translations (`@tr(...)`).
+- Every user-facing string goes through Slint translations (`@tr(...)`). After changing one, regenerate the catalog with `find crates/oxyfin/ui -name "*.slint" | sort | xargs slint-tr-extractor --package-name oxyfin -o crates/oxyfin/po/oxyfin.pot` (the extractor is in the Nix dev shell).
 - The UI follows the [reference design](https://www.figma.com/design/KjhDn8ypMS0CP6UQNP5Lbv). Colors, spacing and radii come from the `Theme` global, never from literal values.
 
 ## Documentation and comments
