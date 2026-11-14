@@ -96,6 +96,27 @@ struct Trimmer {
     pass: tokio::sync::Mutex<()>,
 }
 
+/// Clears [`Trimmer::running`] when a trim task is cancelled.
+struct Running {
+    trimmer: Arc<Trimmer>,
+    armed: bool,
+}
+
+impl Running {
+    /// The task ended normally: `running` may already belong to another task.
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        if self.armed {
+            self.trimmer.running.store(false, Ordering::SeqCst);
+        }
+    }
+}
+
 impl Trimmer {
     fn request(self: &Arc<Self>) {
         let Ok(handle) = tokio::runtime::Handle::try_current() else {
@@ -106,8 +127,13 @@ impl Trimmer {
         if self.running.swap(true, Ordering::SeqCst) {
             return;
         }
-        let this = self.clone();
+        // Built outside the task so that a task dropped before its first poll resets the flag.
+        let mut running = Running {
+            trimmer: self.clone(),
+            armed: true,
+        };
         handle.spawn(async move {
+            let this = running.trimmer.clone();
             loop {
                 while this.pending.swap(false, Ordering::SeqCst) {
                     this.run().await;
@@ -118,6 +144,7 @@ impl Trimmer {
                     break;
                 }
             }
+            running.disarm();
         });
     }
 

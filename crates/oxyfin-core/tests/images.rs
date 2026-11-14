@@ -365,3 +365,27 @@ fn cache_built_outside_a_runtime_trims_on_first_get() {
         wait_removed(&stale).await;
     });
 }
+
+#[test]
+fn trim_cancelled_before_it_runs_does_not_block_later_ones() {
+    let first = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let dir = TempDir::new().unwrap();
+    let stale = stale_tmp(&dir);
+    let (mock, cache) = first.block_on(async {
+        let mock = MockServer::start().await;
+        serve(&mock, "aaa", b"pixels").await;
+        let cache = cache(&mock, &dir, 1024);
+        (mock, cache)
+    });
+    drop(first);
+    assert!(stale.exists());
+    let second = tokio::runtime::Runtime::new().unwrap();
+    second.block_on(async {
+        let _ = cache.get(&image("aaa", "t"), SIZE).await;
+        wait_removed(&stale).await;
+    });
+    drop(mock);
+}
