@@ -3,6 +3,7 @@
 mod controller;
 mod countdown;
 mod current;
+mod loader;
 mod media_player;
 mod queue;
 mod reporter;

@@ -6,25 +6,20 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use oxyfin_api::{ItemId, MediaStreamType, Session, Ticks};
-use oxyfin_player::{
-    MediaSource, PlayerError, PlayerEvent, SeekTarget, Track, TrackKind, UnloadReason,
-};
+use oxyfin_player::{PlayerError, PlayerEvent, SeekTarget, Track, TrackKind, UnloadReason};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::oneshot;
-use tokio::time::{Instant, sleep_until, timeout_at};
+use tokio::time::{Instant, sleep_until};
 
 use super::countdown::Countdown;
 use super::current::{Current, Siblings, mark_selected};
+use super::loader::{LoadFailure, LoadMessage, LoadStage, Loader, Prepared};
 use super::media_player::{MediaPlayer, PlayerEvents};
-use super::queue::neighbours;
 use super::reporter::{ReportKind, Reporter};
 use super::tracks::{TrackMap, subtitle_format};
-use super::types::{
-    PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent, PlaybackTimings, PlaybackTitle,
-};
-use crate::catalog::Catalog;
+use super::types::{PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent, PlaybackTimings};
 use crate::error::CoreError;
-use crate::models::{Episode, ItemSummary, UserState};
+use crate::models::Episode;
 
 #[derive(Debug)]
 enum Message {
@@ -82,6 +77,10 @@ pub struct PlaybackController {
     expired: bool,
     next_progress: Option<Instant>,
     countdown: Option<Countdown>,
+    loader: Loader,
+    /// A fetched item waiting for the unload of the previous media, until
+    /// the deadline.
+    pending: Option<(Prepared, Instant)>,
     /// Set by [`PlaybackHandle::shutdown`]: no new item is loaded.
     closing: Arc<AtomicBool>,
 }
@@ -121,6 +120,7 @@ impl PlaybackController {
         let (event_sender, event_receiver) = unbounded_channel();
         let (expired_sender, expired) = unbounded_channel();
         let closing = Arc::new(AtomicBool::new(false));
+        let (loader, loads) = Loader::new();
         let controller = Self {
             reporter: Reporter::spawn(session.clone(), expired_sender),
             session,
@@ -134,9 +134,11 @@ impl PlaybackController {
             expired: false,
             next_progress: None,
             countdown: None,
+            loader,
+            pending: None,
             closing: closing.clone(),
         };
-        tokio::spawn(controller.run(message_receiver, expired));
+        tokio::spawn(controller.run(message_receiver, expired, loads));
         (
             PlaybackHandle {
                 messages,
@@ -151,13 +153,15 @@ impl PlaybackController {
         mut self,
         mut messages: UnboundedReceiver<Message>,
         mut expired: UnboundedReceiver<()>,
+        mut loads: UnboundedReceiver<LoadMessage>,
     ) {
         loop {
             let deadline = self.next_progress;
             let countdown = self.countdown.as_ref().map(|countdown| countdown.deadline);
+            let grace = self.pending.as_ref().map(|(_, deadline)| *deadline);
             tokio::select! {
                 message = messages.recv() => match message {
-                    Some(Message::Command(command)) => self.on_command(command).await,
+                    Some(Message::Command(command)) => self.on_command(command),
                     Some(Message::Shutdown(done)) => {
                         self.finish().await;
                         let _ = done.send(());
@@ -167,15 +171,23 @@ impl PlaybackController {
                 },
                 event = self.player_events.recv(), if self.player_open => match event {
                     Some(event) => self.on_player_event(event),
-                    None => self.player_open = false,
+                    None => {
+                        self.player_open = false;
+                        self.load_pending();
+                    }
                 },
+                Some(message) = loads.recv() => self.on_load(message),
                 Some(()) = expired.recv() => self.expire(),
                 () = sleep_until(deadline.unwrap_or_else(Instant::now)), if deadline.is_some() => {
                     self.report(ReportKind::Progress);
                     self.schedule_progress();
                 }
                 () = sleep_until(countdown.unwrap_or_else(Instant::now)), if countdown.is_some() => {
-                    self.tick_countdown().await;
+                    self.tick_countdown();
+                }
+                () = sleep_until(grace.unwrap_or_else(Instant::now)), if grace.is_some() => {
+                    self.awaiting_unload = false;
+                    self.load_pending();
                 }
             }
         }
@@ -186,6 +198,7 @@ impl PlaybackController {
     /// until every queued report is sent.
     async fn finish(mut self) {
         self.countdown = None;
+        self.cancel_load();
         self.release(true);
         let _ = self.reporter.close().await;
     }
@@ -228,6 +241,7 @@ impl PlaybackController {
     }
 
     fn expire(&mut self) {
+        self.cancel_load();
         self.release(false);
         if !self.expired {
             self.expired = true;
@@ -269,7 +283,7 @@ impl PlaybackController {
         self.emit(event);
     }
 
-    async fn tick_countdown(&mut self) {
+    fn tick_countdown(&mut self) {
         let Some(countdown) = self.countdown.as_mut() else {
             return;
         };
@@ -277,7 +291,7 @@ impl PlaybackController {
             return self.emit(event);
         }
         if let Some(countdown) = self.countdown.take() {
-            self.play(countdown.into_episode().id, PlayMode::Auto).await;
+            self.play(countdown.into_episode().id, PlayMode::Auto);
         }
     }
 
@@ -313,9 +327,9 @@ impl PlaybackController {
         self.current.as_ref().map(|current| &current.siblings)
     }
 
-    async fn on_command(&mut self, command: PlaybackCommand) {
+    fn on_command(&mut self, command: PlaybackCommand) {
         match command {
-            PlaybackCommand::Play { item, mode } => self.play(item, mode).await,
+            PlaybackCommand::Play { item, mode } => self.play(item, mode),
             PlaybackCommand::SetPaused(paused) => {
                 self.call(self.player.set_paused(paused));
             }
@@ -349,6 +363,7 @@ impl PlaybackController {
             }
             PlaybackCommand::Stop => {
                 self.cancel_countdown();
+                self.cancel_load();
                 self.release(true);
                 self.emit(PlaybackEvent::Stopped);
             }
@@ -357,7 +372,7 @@ impl PlaybackController {
                     return;
                 };
                 match siblings.previous.as_ref().map(|episode| episode.id.clone()) {
-                    Some(previous) => self.play(previous, PlayMode::Auto).await,
+                    Some(previous) => self.play(previous, PlayMode::Auto),
                     None => self.seek(SeekTarget::Absolute(Duration::ZERO)),
                 }
             }
@@ -367,12 +382,12 @@ impl PlaybackController {
                     .and_then(|siblings| siblings.next.as_ref())
                     .map(|episode| episode.id.clone());
                 if let Some(next) = next {
-                    self.play(next, PlayMode::Auto).await;
+                    self.play(next, PlayMode::Auto);
                 }
             }
             PlaybackCommand::PlayNextNow => {
                 if let Some(countdown) = self.countdown.take() {
-                    self.play(countdown.into_episode().id, PlayMode::Auto).await;
+                    self.play(countdown.into_episode().id, PlayMode::Auto);
                 }
             }
             PlaybackCommand::CancelNextUp => self.cancel_countdown(),
@@ -392,104 +407,62 @@ impl PlaybackController {
             .and_then(|current| current.map.as_ref())
     }
 
-    async fn play(&mut self, item: ItemId, mode: PlayMode) {
+    /// Stops the current item and starts fetching `item`; the controller
+    /// keeps running meanwhile and loads it once fetched.
+    fn play(&mut self, item: ItemId, mode: PlayMode) {
         self.cancel_countdown();
         self.release(true);
-        let dto = match self.session.item(&item).await {
-            Ok(dto) => dto,
-            Err(error) => return self.fail(error.into()),
-        };
-        if self.closing() {
-            return;
-        }
-        let title = match ItemSummary::from_dto(&dto) {
-            Some(summary) => PlaybackTitle {
-                title: summary.title,
-                series_name: summary.series_name,
-                episode_label: summary.episode_label,
-            },
-            None => PlaybackTitle {
-                title: dto.name.clone().unwrap_or_default(),
-                series_name: None,
-                episode_label: None,
-            },
-        };
-        let saved = UserState::from_dto(dto.user_data.as_ref()).position;
-        self.emit(PlaybackEvent::Loading {
-            item: item.clone(),
-            title,
-        });
+        self.pending = None;
+        self.loader.start(self.session.clone(), item, mode);
+    }
 
-        let siblings = match Episode::from_dto(&dto) {
-            None => Siblings::default(),
-            Some(episode) => {
-                let catalog = Catalog::new(self.session.clone());
-                let list = catalog.all_episodes(&episode.series_id).await;
-                if self.closing() {
-                    return;
-                }
-                match list {
-                    Ok(list) => {
-                        let (previous, next) = neighbours(&list, &item);
-                        Siblings { previous, next }
-                    }
-                    Err(CoreError::SessionExpired) => return self.expire(),
-                    Err(_) => Siblings::default(),
-                }
-            }
-        };
-        let info = match self.session.playback_info(&item).await {
-            Ok(info) => info,
-            Err(error) => return self.fail(error.into()),
-        };
-        if self.closing() {
+    /// Abandons the item being fetched or waiting to load, if any.
+    fn cancel_load(&mut self) {
+        self.loader.cancel();
+        self.pending = None;
+    }
+
+    fn on_load(&mut self, message: LoadMessage) {
+        // `shutdown` raises the flag before its message reaches the queue.
+        if !self.loader.is_current(&message) || self.closing() {
             return;
         }
-        let Some(source) = info
-            .media_sources
-            .into_iter()
-            .find(|source| source.supports_direct_play)
-        else {
-            return self.emit(PlaybackEvent::Error(PlaybackError::NoDirectPlaySource));
-        };
-        let stream = self.session.stream_source(&item, &source.id);
-        let mut media = MediaSource::new(stream.url.as_str())
-            .with_header("Authorization", stream.authorization);
-        let start = match mode {
-            PlayMode::Auto if !saved.is_zero() => Some(saved),
-            _ => None,
-        };
-        if let Some(start) = start {
-            media = media.with_start(start);
+        match message.stage {
+            LoadStage::Loading { item, title } => self.emit(PlaybackEvent::Loading { item, title }),
+            LoadStage::Done(outcome) => match *outcome {
+                Ok(prepared) => {
+                    let deadline = Instant::now() + self.timings.unload_grace;
+                    self.pending = Some((prepared, deadline));
+                    self.load_pending();
+                }
+                Err(LoadFailure::Request(error)) => self.fail(error),
+                Err(LoadFailure::NoDirectPlaySource) => {
+                    self.emit(PlaybackEvent::Error(PlaybackError::NoDirectPlaySource));
+                }
+            },
         }
-        self.wait_for_unload().await;
-        if self.closing() {
+    }
+
+    /// Loads the fetched item, once the previous media has unloaded or its
+    /// grace has passed.
+    fn load_pending(&mut self) {
+        if self.awaiting_unload && self.player_open {
             return;
         }
-        if let Err(error) = self.player.load(&media) {
+        let Some((prepared, _)) = self.pending.take() else {
+            return;
+        };
+        self.awaiting_unload = false;
+        if let Err(error) = self.player.load(&prepared.media) {
             return self.emit(PlaybackEvent::Error(PlaybackError::load(error)));
         }
         self.current = Some(Current::new(
-            item,
-            source,
-            info.play_session_id,
-            start.unwrap_or_default(),
-            siblings,
+            prepared.item,
+            prepared.source,
+            prepared.play_session_id,
+            prepared.start.unwrap_or_default(),
+            prepared.siblings,
         ));
-    }
-
-    /// Drops the stale events of the stopped media until its unload, waiting
-    /// at most the unload grace.
-    async fn wait_for_unload(&mut self) {
-        let deadline = Instant::now() + self.timings.unload_grace;
-        while self.awaiting_unload && self.player_open {
-            match timeout_at(deadline, self.player_events.recv()).await {
-                Ok(Some(event)) => self.on_player_event(event),
-                Ok(None) => self.player_open = false,
-                Err(_) => break,
-            }
-        }
-        self.awaiting_unload = false;
     }
 
     fn on_player_event(&mut self, event: PlayerEvent) {
@@ -500,6 +473,7 @@ impl PlaybackController {
         if self.awaiting_unload && !global {
             if matches!(event, PlayerEvent::Unloaded(_)) {
                 self.awaiting_unload = false;
+                self.load_pending();
             }
             return;
         }
