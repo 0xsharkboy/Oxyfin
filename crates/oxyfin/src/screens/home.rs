@@ -24,6 +24,7 @@ pub const LATEST_LIMIT: u32 = 16;
 const LANDSCAPE_ARTWORK: (f32, f32) = (288.0, 162.0);
 const POSTER_ARTWORK: (f32, f32) = (160.0, 240.0);
 const BANNER_HEIGHT: f32 = 520.0;
+const BACKDROP_ASPECT: f32 = 16.0 / 9.0;
 
 type CoreResult<T> = Result<T, CoreError>;
 
@@ -418,7 +419,8 @@ impl HomeController {
         };
         let scale = window.window().scale_factor();
         let width = window.window().size().width as f32 / scale;
-        let size = image_size(width, BANNER_HEIGHT, scale);
+        let (width, height) = banner_box(width);
+        let size = image_size(width, height, scale);
         let target = window.as_weak();
         load_into(&images, app.runtime(), artwork, size, move |image| {
             let Some(window) = target.upgrade() else {
@@ -432,6 +434,14 @@ impl HomeController {
             }
         });
     }
+}
+
+// Jellyfin fits images inside the box, so ask for a 16:9 box covering the banner.
+fn banner_box(width: f32) -> (f32, f32) {
+    (
+        width.max(BANNER_HEIGHT * BACKDROP_ASPECT),
+        BANNER_HEIGHT.max(width / BACKDROP_ASPECT),
+    )
 }
 
 fn banner_artwork(item: &ItemSummary) -> Option<ImageRef> {
@@ -450,5 +460,22 @@ fn set_card_image(window: &AppWindow, row_title: &str, item_id: &str, image: sli
         data.image = image;
         data.has_image = true;
         row.items.set_row_data(index, data);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn banner_box_covers_a_wide_window() {
+        assert_eq!(banner_box(1440.0), (1440.0, 810.0));
+    }
+
+    #[test]
+    fn banner_box_covers_a_narrow_window() {
+        let (width, height) = banner_box(800.0);
+        assert!((width - 520.0 * 16.0 / 9.0).abs() < 0.01, "{width}");
+        assert_eq!(height, 520.0);
     }
 }
