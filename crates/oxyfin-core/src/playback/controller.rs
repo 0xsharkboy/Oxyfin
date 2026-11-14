@@ -267,15 +267,18 @@ impl PlaybackController {
                 self.call(self.player.set_muted(muted));
             }
             PlaybackCommand::SelectAudio(index) => {
+                self.forget_expected(TrackKind::Audio);
                 let track = self.map().and_then(|map| map.mpv_audio(index));
                 if let Some(track) = track {
                     self.call(self.player.select_audio(Some(track)));
                 }
             }
             PlaybackCommand::SelectSubtitle(None) => {
+                self.forget_expected(TrackKind::Subtitle);
                 self.call(self.player.select_subtitle(None));
             }
             PlaybackCommand::SelectSubtitle(Some(index)) => {
+                self.forget_expected(TrackKind::Subtitle);
                 let track = self.map().and_then(|map| map.mpv_subtitle(index));
                 if let Some(track) = track {
                     self.call(self.player.select_subtitle(Some(track)));
@@ -310,6 +313,13 @@ impl PlaybackController {
                 }
             }
             PlaybackCommand::CancelNextUp => self.cancel_countdown(),
+        }
+    }
+
+    /// A user pick replaces the default selection of that kind.
+    fn forget_expected(&mut self, kind: TrackKind) {
+        if let Some(current) = self.current.as_mut() {
+            current.forget_expected(kind);
         }
     }
 
@@ -423,6 +433,7 @@ impl PlaybackController {
             PlayerEvent::Position(position) => {
                 if let Some(current) = self.current.as_mut() {
                     current.position = position;
+                    current.position_moved(position);
                     self.emit(PlaybackEvent::Position(position));
                 }
             }
@@ -533,6 +544,7 @@ impl PlaybackController {
             && self.player.select_audio(Some(audio)).is_ok()
         {
             mark_selected(&mut tracks, TrackKind::Audio, Some(audio));
+            current.expected_audio = Some(audio);
         }
         let subtitle = current
             .source
@@ -541,6 +553,7 @@ impl PlaybackController {
             .and_then(|index| map.mpv_subtitle(index));
         if self.player.select_subtitle(subtitle).is_ok() {
             mark_selected(&mut tracks, TrackKind::Subtitle, subtitle);
+            current.expected_subtitle = Some(subtitle);
         }
         let _ = self.player.set_speed(1.0);
 
@@ -565,6 +578,9 @@ impl PlaybackController {
         let Some(current) = self.current.as_mut().filter(|c| c.loaded) else {
             return;
         };
+        if !current.selection_settled(tracks) {
+            return;
+        }
         let changed = current.update_tracks(tracks);
         if let Some((audio, subtitles)) = current.refresh_options() {
             self.emit(PlaybackEvent::TracksChanged { audio, subtitles });

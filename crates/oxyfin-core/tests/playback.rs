@@ -685,6 +685,10 @@ async fn track_change_reports_once() {
         track(2, TrackKind::Audio, 2, true),
         external,
     ];
+    let mut confirmed = tracks.clone();
+    confirmed[1].is_selected = true;
+    confirmed[2].is_selected = false;
+    h.sink.send(PlayerEvent::Tracks(confirmed));
     h.sink.send(PlayerEvent::Tracks(tracks.clone()));
     let event = wait_event(&mut h.events, |e| {
         matches!(e, PlaybackEvent::TracksChanged { .. })
@@ -1476,4 +1480,121 @@ async fn absolute_seek_back_cancels_the_countdown() {
         Duration::from_secs(100),
     )));
     wait_event(&mut h.events, |e| *e == PlaybackEvent::NextUpCancelled).await;
+}
+
+#[tokio::test]
+async fn tracks_from_before_the_default_selection_are_ignored() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    // mpv reports its own selection (no subtitle) before applying ours.
+    let mut stale = file_tracks();
+    stale.push(external_track(false));
+    h.sink.send(PlayerEvent::Tracks(stale));
+    let mut external = track(1, TrackKind::Subtitle, 0, true);
+    external.is_external = true;
+    external.stream_index = None;
+    let mut settled = file_tracks();
+    settled.push(external);
+    h.sink.send(PlayerEvent::Tracks(settled));
+    let seen = h.stop().await;
+    assert!(
+        !seen
+            .iter()
+            .any(|e| matches!(e, PlaybackEvent::TracksChanged { .. })),
+        "{seen:?}"
+    );
+    assert!(bodies(&h.mock, PROGRESS).await.is_empty());
+}
+
+#[tokio::test]
+async fn user_selection_after_load_is_reported() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::SelectSubtitle(None));
+    h.player
+        .wait_call(|c| *c == Call::SelectSubtitle(None))
+        .await;
+    h.sink.send(PlayerEvent::Tracks(file_tracks()));
+    let event = wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::TracksChanged { .. })
+    })
+    .await;
+    let PlaybackEvent::TracksChanged { subtitles, .. } = event else {
+        unreachable!();
+    };
+    assert!(subtitles.iter().all(|s| !s.selected));
+    let progress = wait_requests(&h.mock, PROGRESS, 1).await;
+    assert_eq!(progress[0].get("SubtitleStreamIndex"), None);
+}
+
+/// The external subtitle as mpv lists it once added (subtitle id 1).
+fn external_track(selected: bool) -> Track {
+    let mut external = track(1, TrackKind::Subtitle, 0, selected);
+    external.is_external = true;
+    external.stream_index = None;
+    external
+}
+
+#[tokio::test]
+async fn expected_track_missing_from_the_list_is_not_awaited() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    // The external subtitle the controller selected never appears.
+    h.sink.send(PlayerEvent::Tracks(file_tracks()));
+    let event = wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::TracksChanged { .. })
+    })
+    .await;
+    let PlaybackEvent::TracksChanged { subtitles, .. } = event else {
+        unreachable!();
+    };
+    assert!(subtitles.iter().all(|s| !s.selected), "{subtitles:?}");
+    let progress = wait_requests(&h.mock, PROGRESS, 1).await;
+    assert_eq!(progress[0].get("SubtitleStreamIndex"), None);
+}
+
+#[tokio::test]
+async fn expected_selection_is_dropped_once_playback_moves() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    // mpv keeps French (id 2) although English (id 1) was asked for.
+    let mut kept = file_tracks();
+    kept[1].is_selected = false;
+    kept[2].is_selected = true;
+    kept.push(external_track(true));
+    h.sink.send(PlayerEvent::Tracks(kept.clone()));
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(5)));
+    wait_event(&mut h.events, |e| {
+        *e == PlaybackEvent::Position(Duration::from_secs(5))
+    })
+    .await;
+    assert!(bodies(&h.mock, PROGRESS).await.is_empty());
+    h.sink.send(PlayerEvent::Tracks(kept));
+    let progress = wait_requests(&h.mock, PROGRESS, 1).await;
+    assert_eq!(progress[0]["AudioStreamIndex"], json!(3));
+    assert_eq!(progress[0]["SubtitleStreamIndex"], json!(0));
+}
+
+#[tokio::test]
+async fn user_pick_keeps_the_other_kind_expected() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::SelectAudio(2));
+    h.player
+        .wait_call(|c| *c == Call::SelectAudio(Some(TrackId(1))))
+        .await;
+    // Still the list from before the default subtitle: ignored.
+    h.sink.send(PlayerEvent::Tracks({
+        let mut stale = file_tracks();
+        stale.push(external_track(false));
+        stale
+    }));
+    let seen = h.stop().await;
+    assert!(
+        !seen
+            .iter()
+            .any(|e| matches!(e, PlaybackEvent::TracksChanged { .. })),
+        "{seen:?}"
+    );
+    assert!(bodies(&h.mock, PROGRESS).await.is_empty());
 }
