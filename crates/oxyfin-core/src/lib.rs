@@ -63,7 +63,7 @@ mod session;
 pub use catalog::{BrowseQuery, BrowseSource, Catalog, SortField};
 pub use config::{Config, SavedSession};
 pub use error::{CoreError, Result};
-pub use images::{ImageCache, ImageSize};
+pub use images::{DEFAULT_DISK_BUDGET, ImageCache, ImageSize};
 pub use models::{
     Episode, ImageRef, ItemKind, ItemSummary, Library, LibraryKind, MovieDetails, Page, Person,
     Season, SeriesDetails, UserState,

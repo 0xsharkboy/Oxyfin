@@ -37,7 +37,7 @@ async fn requests(mock: &MockServer) -> usize {
 }
 
 fn cache(mock: &MockServer, dir: &TempDir, budget: usize) -> ImageCache {
-    ImageCache::new(session(mock), &Paths::under(dir.path()), budget)
+    ImageCache::new(session(mock), &Paths::under(dir.path()), budget, u64::MAX)
 }
 
 #[tokio::test]
@@ -175,4 +175,81 @@ async fn read_only_disk_still_returns_bytes() {
     )
     .unwrap();
     assert_eq!(&*bytes, b"pixels");
+}
+
+#[allow(clippy::unwrap_used)]
+fn files_in(dir: &TempDir) -> Vec<(std::path::PathBuf, Vec<u8>)> {
+    let images = Paths::under(dir.path()).cache_dir.join("images");
+    std::fs::read_dir(images)
+        .unwrap()
+        .map(|entry| {
+            let path = entry.unwrap().path();
+            let bytes = std::fs::read(&path).unwrap();
+            (path, bytes)
+        })
+        .collect()
+}
+
+#[allow(clippy::unwrap_used)]
+fn age(path: &std::path::Path, secs: u64) {
+    let when = std::time::SystemTime::now() - std::time::Duration::from_secs(secs);
+    std::fs::File::options()
+        .write(true)
+        .open(path)
+        .unwrap()
+        .set_modified(when)
+        .unwrap();
+}
+
+#[tokio::test]
+async fn disk_cache_is_trimmed_to_its_budget() {
+    let mock = MockServer::start().await;
+    let bodies: [(&str, &[u8; 10]); 4] = [
+        ("aaa", b"aaaaaaaaaa"),
+        ("bbb", b"bbbbbbbbbb"),
+        ("ccc", b"cccccccccc"),
+        ("ddd", b"dddddddddd"),
+    ];
+    for (item, body) in bodies {
+        serve(&mock, item, body).await;
+    }
+    let dir = TempDir::new().unwrap();
+    let cache = ImageCache::new(session(&mock), &Paths::under(dir.path()), 0, 30);
+    for (item, _) in &bodies[..3] {
+        cache.get(&image(item, "t"), SIZE).await.unwrap();
+    }
+    cache.trim().await;
+    for (path, bytes) in files_in(&dir) {
+        let rank = bodies.iter().position(|(_, b)| b[..] == bytes[..]).unwrap();
+        age(&path, 1000 - rank as u64 * 100);
+    }
+    cache.get(&image("ddd", "t"), SIZE).await.unwrap();
+    cache.trim().await;
+    let mut left: Vec<_> = files_in(&dir).into_iter().map(|(_, b)| b).collect();
+    left.sort();
+    assert_eq!(
+        left,
+        vec![
+            b"bbbbbbbbbb".to_vec(),
+            b"cccccccccc".to_vec(),
+            b"dddddddddd".to_vec()
+        ]
+    );
+}
+
+#[tokio::test]
+async fn stale_tmp_files_are_removed() {
+    let mock = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let images = Paths::under(dir.path()).cache_dir.join("images");
+    std::fs::create_dir_all(&images).unwrap();
+    let stale = images.join(".x.tmp");
+    let fresh = images.join(".y.tmp");
+    std::fs::write(&stale, b"partial").unwrap();
+    std::fs::write(&fresh, b"partial").unwrap();
+    age(&stale, 3600);
+    let cache = cache(&mock, &dir, 1024);
+    cache.trim().await;
+    assert!(!stale.exists());
+    assert!(fresh.exists());
 }
