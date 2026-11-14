@@ -9,7 +9,7 @@ use oxyfin_core::{
 #[cfg(feature = "mpv")]
 use oxyfin_player::Player;
 
-use crate::state::{GenerationId, SessionEnd};
+use crate::state::{GenerationId, Screen, SessionEnd};
 
 /// The playback part of a generation, created at its first playback.
 pub struct Playback {
@@ -90,6 +90,29 @@ pub fn route(current: Option<GenerationId>, from: GenerationId, event: PlaybackE
     }
 }
 
+/// What to do with a player built off the Slint thread.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Built {
+    /// Its generation ended while it was built.
+    Release,
+    /// It becomes the player of its generation, without playing: the user left the home screen.
+    Keep,
+    /// It becomes the player of its generation and plays the item clicked.
+    Play,
+}
+
+/// Decides the fate of a player built for generation `built_for` while
+/// `current` is live and `screen` is shown.
+pub fn built(built_for: GenerationId, current: Option<GenerationId>, screen: Screen) -> Built {
+    if current != Some(built_for) {
+        Built::Release
+    } else if screen == Screen::Home {
+        Built::Play
+    } else {
+        Built::Keep
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,6 +135,19 @@ mod tests {
             route(Some(G1), G1, PlaybackEvent::SessionExpired),
             Route::Expire(G1)
         );
+    }
+
+    #[test]
+    fn a_player_built_for_another_generation_is_released() {
+        assert_eq!(built(G1, Some(G2), Screen::Home), Built::Release);
+        assert_eq!(built(G1, None, Screen::SignIn), Built::Release);
+    }
+
+    #[test]
+    fn a_player_built_for_the_current_generation_plays_from_home_only() {
+        assert_eq!(built(G1, Some(G1), Screen::Home), Built::Play);
+        assert_eq!(built(G1, Some(G1), Screen::Settings), Built::Keep);
+        assert_eq!(built(G1, Some(G1), Screen::Player), Built::Keep);
     }
 
     #[test]
