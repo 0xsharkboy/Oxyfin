@@ -48,6 +48,8 @@ string_enum!(
     BaseItemKind {
         /// A movie.
         Movie,
+        /// A standalone video, such as a home video.
+        Video,
         /// A TV series.
         Series,
         /// A season of a series.
