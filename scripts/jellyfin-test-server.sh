@@ -2,7 +2,18 @@
 # Starts or stops a disposable Jellyfin server with generated media.
 # Usage: jellyfin-test-server.sh up [TAG] | down
 # `up` prints `export` lines on stdout; progress goes to stderr.
+# OXYFIN_TEST_SCAN_TIMEOUT sets the library scan wait in seconds (default 600).
 set -euo pipefail
+
+if [ "${1:-}" = up ] && ! command -v ffmpeg >/dev/null 2>&1; then
+  if [ -z "${OXYFIN_TEST_IN_NIX:-}" ] && command -v nix >/dev/null 2>&1; then
+    echo "ffmpeg not found, re-running under nix develop" >&2
+    export OXYFIN_TEST_IN_NIX=1
+    exec nix develop --quiet "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" -c "${BASH_SOURCE[0]}" "$@"
+  fi
+  echo "ffmpeg not found: install it or run inside nix develop" >&2
+  exit 1
+fi
 
 NAME=oxyfin-test-jellyfin
 PORT=${OXYFIN_TEST_PORT:-18096}
@@ -129,15 +140,20 @@ up() {
   add_library Shows tvshows /media/shows '["Series","Season","Episode"]'
 
   log "waiting for the library scan"
-  local deadline=$((SECONDS + 120)) count=0
+  local timeout=${OXYFIN_TEST_SCAN_TIMEOUT:-600} count=0 start=$SECONDS
+  local deadline=$((SECONDS + timeout)) next_log=$((SECONDS + 10))
   while ((SECONDS < deadline)); do
     count=$(curl -sf -H "$ACCEPT" -H "$token_header" \
       "$BASE/Items?recursive=true&includeItemTypes=Movie,Episode" | jq -r .TotalRecordCount || echo 0)
     [ "$count" = 5 ] && break
+    if ((SECONDS >= next_log)); then
+      log "  scan in progress: $count/5 items after $((SECONDS - start)) s (limit ${timeout} s)"
+      next_log=$((SECONDS + 10))
+    fi
     sleep 2
   done
   if [ "$count" != 5 ]; then
-    log "expected 5 items, found $count"
+    log "expected 5 items, found $count after ${timeout} s (raise OXYFIN_TEST_SCAN_TIMEOUT)"
     return 1
   fi
 
