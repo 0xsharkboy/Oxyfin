@@ -1,0 +1,174 @@
+import { Theme, CardData } from "../theme.slint";
+import { Banner } from "../components/banner.slint";
+import { TopBar, TopBarPage } from "../components/top_bar.slint";
+import { CardStatus } from "../components/card.slint";
+import { LandscapeCard } from "../components/landscape_card.slint";
+import { PosterCard } from "../components/poster_card.slint";
+import { BodyText, HeadingText } from "../components/text.slint";
+
+export enum HomeRowKind { landscape, poster }
+
+// Featured item of the home screen; `has` is false until it is known.
+export struct HomeBanner {
+    has: bool,
+    title: string,
+    year: int,
+    duration-minutes: int,
+    card: CardData,
+}
+
+// A row of the home screen; `error` is set instead of `items` when it failed to load.
+export struct HomeRow {
+    title: string,
+    kind: HomeRowKind,
+    items: [CardData],
+    error: string,
+}
+
+// Titles of the home rows, translated here because Rust builds the rows.
+export global HomeTitles {
+    public pure function continue-watching() -> string {
+        @tr("Continue Watching")
+    }
+    public pure function next-up() -> string {
+        @tr("Next Up")
+    }
+    public pure function recently-added(library: string) -> string {
+        @tr("Recently Added: {}", library)
+    }
+}
+
+component HomeRowView inherits Rectangle {
+    in property <HomeRow> section;
+    callback play(id: string);
+
+    accessible-role: list;
+    accessible-label: section.title;
+
+    pure function status(card: CardData) -> CardStatus {
+        if card.watched {
+            return CardStatus.watched;
+        }
+        card.progress > 0 ? CardStatus.in-progress : CardStatus.default
+    }
+
+    VerticalLayout {
+        padding-left: Theme.space-3xl;
+        spacing: Theme.space-md;
+
+        HeadingText {
+            text: root.section.title;
+            overflow: elide;
+        }
+
+        if root.section.error != "": BodyText {
+            text: root.section.error;
+            color: Theme.text-secondary;
+            wrap: word-wrap;
+        }
+
+        if root.section.error == "" && root.section.kind == HomeRowKind.landscape: Flickable {
+            height: landscape-cards.preferred-height;
+            content-width: landscape-cards.preferred-width;
+            content-height: self.height;
+
+            landscape-cards := HorizontalLayout {
+                padding-right: Theme.space-3xl;
+                spacing: Theme.space-lg;
+
+                for card in root.section.items: LandscapeCard {
+                    title: card.title;
+                    subtitle: card.subtitle;
+                    image: card.image;
+                    status: root.status(card);
+                    progress: card.progress;
+                    clicked => {
+                        root.play(card.id);
+                    }
+                }
+            }
+        }
+
+        if root.section.error == "" && root.section.kind == HomeRowKind.poster: Flickable {
+            height: poster-cards.preferred-height;
+            content-width: poster-cards.preferred-width;
+            content-height: self.height;
+
+            poster-cards := HorizontalLayout {
+                padding-right: Theme.space-3xl;
+                spacing: Theme.space-lg;
+
+                for card in root.section.items: PosterCard {
+                    title: card.title;
+                    subtitle: card.subtitle;
+                    image: card.image;
+                    status: root.status(card);
+                    progress: card.progress;
+                    enabled: false;
+                }
+            }
+        }
+    }
+}
+
+// Home: top bar, featured banner, then one horizontal row per section.
+export component HomeScreen inherits Rectangle {
+    in property <HomeBanner> banner;
+    in property <[HomeRow]> rows;
+    callback play(id: string);
+    callback open-settings();
+
+    accessible-role: groupbox;
+    accessible-label: @tr("Home");
+
+    background: Theme.bg-base;
+
+    pure function banner-meta(year: int, minutes: int) -> string {
+        if minutes <= 0 {
+            return year > 0 ? "\{year}" : "";
+        }
+        let duration = minutes >= 60 ? @tr("{}h {}m", floor(minutes / 60), mod(minutes, 60)) : @tr("{}m", minutes);
+        year > 0 ? "\{year} \u{b7} \{duration}" : duration
+    }
+
+    Flickable {
+        content-width: self.width;
+        content-height: content.preferred-height;
+
+        content := VerticalLayout {
+            width: parent.width;
+            alignment: start;
+            padding-bottom: Theme.space-3xl;
+            spacing: Theme.space-2xl;
+
+            if root.banner.has: Banner {
+                height: self.preferred-height;
+                backdrop: root.banner.card.image;
+                title: root.banner.title;
+                meta: root.banner-meta(root.banner.year, root.banner.duration-minutes);
+                play => {
+                    root.play(root.banner.card.id);
+                }
+            }
+            if !root.banner.has: Rectangle {
+                height: top-bar.height;
+            }
+
+            for row in root.rows: HomeRowView {
+                section: row;
+                play(id) => {
+                    root.play(id);
+                }
+            }
+        }
+    }
+
+    top-bar := TopBar {
+        y: 0;
+        height: self.preferred-height;
+        current: TopBarPage.home;
+        settings-clicked => {
+            root.open-settings();
+        }
+    }
+}

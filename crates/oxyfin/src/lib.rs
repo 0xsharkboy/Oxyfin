@@ -7,6 +7,7 @@ mod generated {
 
 pub mod app;
 pub mod generation;
+pub mod images;
 pub mod present;
 mod screens;
 pub mod state;
