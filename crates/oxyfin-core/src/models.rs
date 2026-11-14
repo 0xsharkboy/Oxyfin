@@ -491,6 +491,7 @@ mod tests {
         assert_eq!(kind(Some("homevideos")), LibraryKind::Mixed);
         assert_eq!(kind(Some("music")), LibraryKind::Other);
     }
+
     #[test]
     fn unknown_kind_is_skipped() {
         let dto = BaseItemDto {

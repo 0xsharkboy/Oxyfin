@@ -216,7 +216,7 @@ async fn browse_favorites_sends_is_favorite() {
         .and(path("/Items"))
         .and(query_param("isFavorite", "true"))
         .and(query_param("recursive", "true"))
-        .and(query_param("includeItemTypes", "Movie,Series"))
+        .and(query_param("includeItemTypes", "Movie,Series,Video"))
         .respond_with(ResponseTemplate::new(200).set_body_json(fixture("items_movies")))
         .mount(&mock)
         .await;

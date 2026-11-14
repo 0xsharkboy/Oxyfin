@@ -141,7 +141,9 @@ impl Catalog {
             .cloned()
     }
 
-    /// Lists the items of a library (movies, series and, for mixed libraries, videos), or the favorites.
+    /// Lists the items of a library, or the favorites.
+    ///
+    /// Movies and series are listed, plus videos for mixed libraries and favorites.
     pub async fn browse(&self, query: &BrowseQuery) -> Result<Page<ItemSummary>> {
         let mut items = ItemsQuery {
             recursive: true,
@@ -167,7 +169,11 @@ impl Catalog {
                 items.include_item_types = kinds_of(*kind);
             }
             BrowseSource::Favorites => {
-                items.include_item_types = vec![BaseItemKind::Movie, BaseItemKind::Series];
+                items.include_item_types = vec![
+                    BaseItemKind::Movie,
+                    BaseItemKind::Series,
+                    BaseItemKind::Video,
+                ];
                 items.is_favorite = Some(true);
             }
         }
