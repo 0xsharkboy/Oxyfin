@@ -59,6 +59,36 @@ async fn libraries_lists_views() {
 }
 
 #[tokio::test]
+async fn libraries_keep_movies_and_shows_only() {
+    let mock = MockServer::start().await;
+    let view = |id: &str, collection: Option<&str>| {
+        let mut view = json!({"Id": id, "Name": id, "Type": "CollectionFolder"});
+        if let Some(collection) = collection {
+            view["CollectionType"] = json!(collection);
+        }
+        view
+    };
+    let items = [
+        view("movies", Some("movies")),
+        view("tvshows", Some("tvshows")),
+        view("music", Some("music")),
+        view("livetv", Some("livetv")),
+        view("playlists", Some("playlists")),
+        view("untyped", None),
+    ];
+    mount(
+        &mock,
+        "GET",
+        "/UserViews",
+        json!({"Items": items, "TotalRecordCount": 6, "StartIndex": 0}),
+    )
+    .await;
+    let libraries = catalog(&mock).libraries().await.unwrap();
+    let kinds: Vec<_> = libraries.iter().map(|library| library.kind).collect();
+    assert_eq!(kinds, [LibraryKind::Movies, LibraryKind::Shows]);
+}
+
+#[tokio::test]
 async fn continue_watching_skips_unknown_kinds() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
