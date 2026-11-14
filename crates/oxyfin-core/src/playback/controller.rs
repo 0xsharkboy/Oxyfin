@@ -463,6 +463,10 @@ impl PlaybackController {
                     self.load_failed();
                     self.emit(PlaybackEvent::Error(PlaybackError::NoDirectPlaySource));
                 }
+                Err(LoadFailure::NothingToPlay) => {
+                    self.load_failed();
+                    self.emit(PlaybackEvent::Error(PlaybackError::NothingToPlay));
+                }
             },
         }
     }
