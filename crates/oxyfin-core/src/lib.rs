@@ -6,6 +6,7 @@ mod error;
 mod images;
 mod models;
 mod paths;
+pub mod playback;
 mod quick_connect;
 mod secrets;
 mod session;
@@ -19,6 +20,7 @@ pub use models::{
     Season, SeriesDetails, UserState,
 };
 pub use paths::Paths;
+pub use playback::{AudioOption, SubtitleOption};
 pub use quick_connect::{QUICK_CONNECT_POLL_INTERVAL, QuickConnect};
 pub use secrets::{
     FileStore, KeyringStore, MemoryStore, SecretStore, TokenStorage, TokenVault, account_key,
