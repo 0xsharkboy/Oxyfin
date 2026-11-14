@@ -2,6 +2,7 @@
 
 mod config;
 mod error;
+mod models;
 mod paths;
 mod quick_connect;
 mod secrets;
@@ -9,6 +10,10 @@ mod session;
 
 pub use config::{Config, SavedSession};
 pub use error::{CoreError, Result};
+pub use models::{
+    Episode, ImageRef, ItemKind, ItemSummary, Library, LibraryKind, MovieDetails, Page, Person,
+    Season, SeriesDetails, UserState,
+};
 pub use paths::Paths;
 pub use quick_connect::{QUICK_CONNECT_POLL_INTERVAL, QuickConnect};
 pub use secrets::{
