@@ -99,11 +99,14 @@ impl TrackMap {
             .is_some_and(|track| track.is_selected)
     }
 
-    /// The audio tracks of the media source, in server order.
+    /// The audio tracks of the media source that mpv knows, in server order.
     pub(crate) fn audio_options(&self) -> Vec<AudioOption> {
         self.streams
             .iter()
-            .filter(|s| s.r#type == MediaStreamType::Audio)
+            .filter(|s| {
+                s.r#type == MediaStreamType::Audio
+                    && self.to_mpv.contains_key(&(TrackKind::Audio, s.index))
+            })
             .map(|s| AudioOption {
                 index: s.index,
                 label: label(s),
@@ -114,11 +117,14 @@ impl TrackMap {
             .collect()
     }
 
-    /// The subtitle tracks of the media source, in server order.
+    /// The subtitle tracks of the media source that mpv knows, in server order.
     pub(crate) fn subtitle_options(&self) -> Vec<SubtitleOption> {
         self.streams
             .iter()
-            .filter(|s| s.r#type == MediaStreamType::Subtitle)
+            .filter(|s| {
+                s.r#type == MediaStreamType::Subtitle
+                    && self.to_mpv.contains_key(&(TrackKind::Subtitle, s.index))
+            })
             .map(|s| SubtitleOption {
                 index: s.index,
                 label: label(s),
@@ -283,6 +289,26 @@ mod tests {
         assert!(audio[0].selected);
         let subs = map.subtitle_options();
         assert!(subs[0].external && !subs[0].selected);
+    }
+
+    #[test]
+    fn unmapped_streams_are_not_offered() {
+        let streams = [
+            stream(0, MediaStreamType::Video, false),
+            stream(1, MediaStreamType::Audio, false),
+            stream(2, MediaStreamType::Audio, false),
+            stream(3, MediaStreamType::Subtitle, false),
+            stream(4, MediaStreamType::Subtitle, false),
+        ];
+        let tracks = [
+            track(1, TrackKind::Audio, Some(1)),
+            track(1, TrackKind::Subtitle, Some(3)),
+        ];
+        let map = TrackMap::new(&streams, &tracks, &[], &[]);
+        let audio: Vec<_> = map.audio_options().iter().map(|o| o.index).collect();
+        let subs: Vec<_> = map.subtitle_options().iter().map(|o| o.index).collect();
+        assert_eq!(audio, [1]);
+        assert_eq!(subs, [3]);
     }
 
     #[test]
