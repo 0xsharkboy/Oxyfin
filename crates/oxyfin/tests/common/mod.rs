@@ -114,11 +114,14 @@ pub fn paths() -> (TempDir, Paths) {
     (dir, paths)
 }
 
-/// A vault whose primary and fallback stores are fresh in-memory stores.
-pub fn vault() -> TokenVault {
-    TokenVault::new(
-        Arc::new(MemoryStore::default()),
-        Arc::new(MemoryStore::default()),
+/// A vault whose primary and fallback stores are fresh in-memory stores, and a
+/// second vault over the same stores for the test to inspect.
+pub fn vault() -> (TokenVault, TokenVault) {
+    let primary = Arc::new(MemoryStore::default());
+    let fallback = Arc::new(MemoryStore::default());
+    (
+        TokenVault::new(primary.clone(), fallback.clone()),
+        TokenVault::new(primary, fallback),
     )
 }
 
@@ -140,6 +143,8 @@ pub struct Flow {
     pub window: AppWindow,
     /// The app under test.
     pub app: Rc<App>,
+    /// A view of the token stores the app uses.
+    pub vault: TokenVault,
     _dir: TempDir,
 }
 
@@ -162,7 +167,7 @@ where
     let runtime = runtime();
     let mock = runtime.block_on(async { mount(MockServer::start().await).await });
     let (dir, paths) = paths();
-    let vault = vault();
+    let (vault, view) = vault();
     prepare(&paths, &vault, &mock.uri());
     let window = AppWindow::new().unwrap_or_else(|err| panic!("cannot create the window: {err}"));
     let app = App::new(&window, runtime.handle().clone(), paths, vault)
@@ -175,6 +180,7 @@ where
         mock,
         window,
         app,
+        vault: view,
         _dir: dir,
     }
 }
@@ -231,6 +237,7 @@ pub fn save_session(paths: &Paths, vault: &TokenVault, server_url: &str) {
         user_name: "oxyfin".to_owned(),
         server_id: None,
     });
+    config.last_server_url = Some(server_url.to_owned());
     config
         .save(paths)
         .unwrap_or_else(|err| panic!("cannot save config: {err}"));

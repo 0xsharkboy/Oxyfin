@@ -48,9 +48,10 @@ fn playing_a_card_without_mpv_shows_a_notice() {
             .ok_or("no Continue Watching card")?
             .invoke_accessible_default_action();
 
-        wait_until("the notice", || window.get_notice_visible()).await?;
-        if window.get_notice() != Message::PlaybackUnavailable {
-            return Err(format!("unexpected notice: {:?}", window.get_notice()));
+        wait_until("the notice", || window.get_notice().visible).await?;
+        let notice = window.get_notice();
+        if notice.message != Message::PlaybackUnavailable || notice.dismissible {
+            return Err(format!("unexpected notice: {notice:?}"));
         }
         if window.get_screen() != Screen::Home {
             return Err(format!("left the home screen: {:?}", window.get_screen()));

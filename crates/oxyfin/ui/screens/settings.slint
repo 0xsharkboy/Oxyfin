@@ -1,0 +1,148 @@
+import { Theme } from "../theme.slint";
+import { Button, ButtonStyle } from "../components/button.slint";
+import { TopBar, TopBarPage } from "../components/top_bar.slint";
+import { BodyText, DisplayText, HeadingText, LabelText } from "../components/text.slint";
+
+component SettingRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value;
+
+    spacing: Theme.space-lg;
+
+    LabelText {
+        width: 160px;
+        text: root.label;
+        vertical-alignment: center;
+    }
+    BodyText {
+        horizontal-stretch: 1;
+        text: root.value;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+}
+
+component SettingSection inherits Rectangle {
+    in property <string> title;
+
+    background: Theme.bg-elevated;
+    border-radius: Theme.radius-lg;
+    border-width: Theme.border-thin;
+    border-color: Theme.border-default;
+
+    VerticalLayout {
+        padding: Theme.space-xl;
+        spacing: Theme.space-md;
+
+        HeadingText {
+            text: root.title;
+        }
+        @children
+    }
+}
+
+// Settings: the signed-in account, the application version and the sign-out action.
+export component SettingsScreen inherits Rectangle {
+    in property <string> server-address;
+    in property <string> user-name;
+    in property <bool> token-in-file;
+    in property <string> version;
+    callback back();
+    callback sign-out();
+
+    accessible-role: groupbox;
+    accessible-label: @tr("Settings");
+
+    background: Theme.bg-base;
+    forward-focus: keys;
+
+    // Wraps the content so Escape reaches it from any focused control.
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.back();
+                return accept;
+            }
+            reject
+        }
+
+        Flickable {
+            y: top-bar.height;
+            height: parent.height - self.y;
+            content-width: self.width;
+            content-height: content.preferred-height;
+
+            content := HorizontalLayout {
+                width: parent.width;
+                alignment: center;
+
+                VerticalLayout {
+                    width: min(640px, root.width - 2 * Theme.space-3xl);
+                    padding-top: Theme.space-xl;
+                    padding-bottom: Theme.space-3xl;
+                    spacing: Theme.space-xl;
+
+                    DisplayText {
+                        text: @tr("Settings");
+                    }
+
+                    SettingSection {
+                        title: @tr("Account");
+
+                        SettingRow {
+                            label: @tr("Server");
+                            value: root.server-address;
+                        }
+                        SettingRow {
+                            label: @tr("Signed in as");
+                            value: root.user-name;
+                        }
+                        SettingRow {
+                            label: @tr("Sign-in token");
+                            value: root.token-in-file ? @tr("Stored in a private file") : @tr("Stored in the system keyring");
+                        }
+                        HorizontalLayout {
+                            padding-top: Theme.space-sm;
+                            alignment: start;
+
+                            Button {
+                                label: @tr("Sign out");
+                                style: ButtonStyle.secondary;
+                                clicked => {
+                                    root.sign-out();
+                                }
+                            }
+                        }
+                    }
+
+                    SettingSection {
+                        title: @tr("About");
+
+                        SettingRow {
+                            label: @tr("Version");
+                            // Brand name, not translated.
+                            value: "Oxyfin \{root.version}";
+                        }
+                    }
+                }
+            }
+        }
+
+        top-bar := TopBar {
+            y: 0;
+            height: self.preferred-height;
+            current: TopBarPage.none;
+            settings-active: true;
+            home-clicked => {
+                root.back();
+            }
+            settings-clicked => {
+                root.back();
+            }
+        }
+    }
+
+    init => {
+        keys.focus();
+    }
+}

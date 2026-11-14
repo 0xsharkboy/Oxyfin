@@ -11,7 +11,7 @@ use slint::{ComponentHandle, LogicalPosition, ModelRc, SharedString, VecModel};
 use crate::present::{
     audio_rows, clock, next_up_title, playback_error_message, playback_title, subtitle_rows,
 };
-use crate::{AppWindow, NextUp};
+use crate::{AppWindow, Message, NextUp};
 
 /// Volume change of one step of the volume keys, in percent.
 pub const VOLUME_STEP: f64 = 5.0;
@@ -135,8 +135,9 @@ pub fn leave(window: &AppWindow) {
     }
 }
 
-/// Shows a playback event on the player screen.
-pub fn apply(window: &AppWindow, event: PlaybackEvent) {
+/// Shows a playback event on the player screen. Returns the message to show
+/// in the notice banner when the event calls for one.
+pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
     match event {
         PlaybackEvent::Loading { title, .. } => {
             let (title, subtitle) = playback_title(&title);
@@ -197,9 +198,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) {
         PlaybackEvent::Error(error @ PlaybackError::Command { .. }) => {
             log::warn!("playback command failed: {error}");
             window.set_player_seek_pending(false);
-            window.set_notice(playback_error_message(&error));
-            window.set_notice_detail(Default::default());
-            window.set_notice_visible(true);
+            return Some(playback_error_message(&error));
         }
         PlaybackEvent::Error(error) => {
             log::warn!("playback failed: {error}");
@@ -209,6 +208,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) {
             window.set_player_has_error(true);
         }
     }
+    None
 }
 
 fn show_progress(window: &AppWindow, position: Duration, duration: Option<Duration>) {

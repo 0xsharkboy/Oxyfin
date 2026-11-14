@@ -11,6 +11,7 @@ export component TopBar inherits Rectangle {
     in property <TopBarPage> current: TopBarPage.home;
     in property <bool> library-pages-enabled;
     in property <bool> search-enabled;
+    in property <bool> settings-active;
     callback home-clicked();
     callback movies-clicked();
     callback shows-clicked();
@@ -100,6 +101,7 @@ export component TopBar inherits Rectangle {
             IconButton {
                 icon: Icons.settings;
                 label: @tr("Settings");
+                active: root.settings-active;
                 clicked => {
                     root.settings-clicked();
                 }

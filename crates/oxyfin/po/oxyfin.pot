@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-14 18:51+0000\n"
+"POT-Creation-Date: 2026-11-14 19:43+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -32,142 +32,152 @@ msgctxt "NextEpisodeToast"
 msgid "Next episode in {} s"
 msgstr ""
 
-#: crates/oxyfin/ui/components/next_episode_toast.slint:69
+#: crates/oxyfin/ui/components/next_episode_toast.slint:71
 msgctxt "NextEpisodeToast"
 msgid "Play now"
 msgstr ""
 
-#: crates/oxyfin/ui/components/next_episode_toast.slint:77
+#: crates/oxyfin/ui/components/next_episode_toast.slint:81
 msgctxt "NextEpisodeToast"
 msgid "Cancel"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:124
+#: crates/oxyfin/ui/components/notice_banner.slint:20
+msgctxt "NoticeBanner"
+msgid "Notice"
+msgstr ""
+
+#: crates/oxyfin/ui/components/notice_banner.slint:50
+msgctxt "NoticeBanner"
+msgid "Close"
+msgstr ""
+
+#: crates/oxyfin/ui/components/player_controls.slint:126
 msgctxt "PlayerControls"
 msgid "Seek"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:145
+#: crates/oxyfin/ui/components/player_controls.slint:149
 msgctxt "PlayerControls"
 msgid "Previous"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:153
+#: crates/oxyfin/ui/components/player_controls.slint:159
 msgctxt "PlayerControls"
 msgid "Back 10 seconds"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:161
+#: crates/oxyfin/ui/components/player_controls.slint:169
 msgctxt "PlayerControls"
 msgid "Play"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:161
+#: crates/oxyfin/ui/components/player_controls.slint:169
 msgctxt "PlayerControls"
 msgid "Pause"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:169
+#: crates/oxyfin/ui/components/player_controls.slint:179
 msgctxt "PlayerControls"
 msgid "Forward 10 seconds"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:177
+#: crates/oxyfin/ui/components/player_controls.slint:189
 msgctxt "PlayerControls"
 msgid "Next"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:185
+#: crates/oxyfin/ui/components/player_controls.slint:197
 msgctxt "PlayerControls"
 msgid "{} / {}"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:199
+#: crates/oxyfin/ui/components/player_controls.slint:213
 msgctxt "PlayerControls"
 msgid "Unmute"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:199
+#: crates/oxyfin/ui/components/player_controls.slint:213
 msgctxt "PlayerControls"
 msgid "Mute"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:208
+#: crates/oxyfin/ui/components/player_controls.slint:222
 msgctxt "PlayerControls"
 msgid "Volume"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:224
+#: crates/oxyfin/ui/components/player_controls.slint:240
 msgctxt "PlayerControls"
 msgid "Audio and subtitles"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:233
+#: crates/oxyfin/ui/components/player_controls.slint:251
 msgctxt "PlayerControls"
 msgid "Playback speed"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:242
+#: crates/oxyfin/ui/components/player_controls.slint:262
 msgctxt "PlayerControls"
 msgid "Exit fullscreen"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:242
+#: crates/oxyfin/ui/components/player_controls.slint:262
 msgctxt "PlayerControls"
 msgid "Fullscreen"
 msgstr ""
 
-#: crates/oxyfin/ui/components/speed_menu.slint:11
+#: crates/oxyfin/ui/components/speed_menu.slint:10
 msgctxt "SpeedMenu"
 msgid "Playback speed"
 msgstr ""
 
-#: crates/oxyfin/ui/components/speed_menu.slint:14
+#: crates/oxyfin/ui/components/speed_menu.slint:13
 msgctxt "SpeedMenu"
 msgid "SPEED"
 msgstr ""
 
-#: crates/oxyfin/ui/components/speed_menu.slint:18
+#: crates/oxyfin/ui/components/speed_menu.slint:17
 msgctxt "SpeedMenu"
 msgid "Normal"
 msgstr ""
 
-#: crates/oxyfin/ui/components/speed_menu.slint:18
+#: crates/oxyfin/ui/components/speed_menu.slint:17
 msgctxt "SpeedMenu"
 msgid "{}×"
 msgstr ""
 
-#: crates/oxyfin/ui/components/top_bar.slint:22
+#: crates/oxyfin/ui/components/top_bar.slint:23
 msgctxt "TopBar"
 msgid "Navigation"
 msgstr ""
 
-#: crates/oxyfin/ui/components/top_bar.slint:52
+#: crates/oxyfin/ui/components/top_bar.slint:53
 msgctxt "TopBar"
 msgid "Home"
 msgstr ""
 
-#: crates/oxyfin/ui/components/top_bar.slint:59
+#: crates/oxyfin/ui/components/top_bar.slint:60
 msgctxt "TopBar"
 msgid "Movies"
 msgstr ""
 
-#: crates/oxyfin/ui/components/top_bar.slint:67
+#: crates/oxyfin/ui/components/top_bar.slint:68
 msgctxt "TopBar"
 msgid "Shows"
 msgstr ""
 
-#: crates/oxyfin/ui/components/top_bar.slint:75
+#: crates/oxyfin/ui/components/top_bar.slint:76
 msgctxt "TopBar"
 msgid "Favorites"
 msgstr ""
 
-#: crates/oxyfin/ui/components/top_bar.slint:91
+#: crates/oxyfin/ui/components/top_bar.slint:92
 msgctxt "TopBar"
 msgid "Search"
 msgstr ""
 
-#: crates/oxyfin/ui/components/top_bar.slint:102
+#: crates/oxyfin/ui/components/top_bar.slint:103
 msgctxt "TopBar"
 msgid "Settings"
 msgstr ""
@@ -232,12 +242,12 @@ msgctxt "HomeScreen"
 msgid "{}m"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:87
+#: crates/oxyfin/ui/screens/player.slint:97
 msgctxt "PlayerScreen"
 msgid "Player"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:209
+#: crates/oxyfin/ui/screens/player.slint:221
 msgctxt "PlayerScreen"
 msgid "Back"
 msgstr ""
@@ -273,6 +283,57 @@ msgstr ""
 #: crates/oxyfin/ui/screens/quick_connect.slint:89
 msgctxt "QuickConnectScreen"
 msgid "Back"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/settings.slint:54
+#: crates/oxyfin/ui/screens/settings.slint:54
+msgctxt "SettingsScreen"
+msgid "Settings"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/settings.slint:90
+msgctxt "SettingsScreen"
+msgid "Account"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/settings.slint:93
+msgctxt "SettingsScreen"
+msgid "Server"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/settings.slint:97
+msgctxt "SettingsScreen"
+msgid "Signed in as"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/settings.slint:101
+msgctxt "SettingsScreen"
+msgid "Sign-in token"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/settings.slint:102
+msgctxt "SettingsScreen"
+msgid "Stored in a private file"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/settings.slint:102
+msgctxt "SettingsScreen"
+msgid "Stored in the system keyring"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/settings.slint:109
+msgctxt "SettingsScreen"
+msgid "Sign out"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/settings.slint:119
+msgctxt "SettingsScreen"
+msgid "About"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/settings.slint:122
+msgctxt "SettingsScreen"
+msgid "Version"
 msgstr ""
 
 #: crates/oxyfin/ui/screens/sign_in.slint:36
