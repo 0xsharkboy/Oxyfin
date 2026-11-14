@@ -32,7 +32,15 @@ impl SessionManager {
         if !server.server.quick_connect_enabled().await? {
             return Err(CoreError::QuickConnectDisabled);
         }
-        let state = server.server.quick_connect_initiate().await?;
+        // Jellyfin answers 401 to Initiate when Quick Connect is disabled.
+        let state = server
+            .server
+            .quick_connect_initiate()
+            .await
+            .map_err(|error| match error {
+                ApiError::Status { status: 401, .. } => CoreError::QuickConnectDisabled,
+                other => other.into(),
+            })?;
         Ok(QuickConnect {
             code: state.code,
             secret: state.secret,
