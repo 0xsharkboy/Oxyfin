@@ -41,6 +41,7 @@ export component AppWindow inherits Window {
 
     in property <HomeBanner> home-banner;
     in property <[HomeRow]> home-rows;
+    in property <bool> home-settled;
     callback play(id: string);
     callback open-settings();
 
@@ -144,6 +145,7 @@ export component AppWindow inherits Window {
     if root.screen == Screen.home: HomeScreen {
         banner: root.home-banner;
         rows: root.home-rows;
+        settled: root.home-settled;
         play(id) => {
             root.play(id);
         }

@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-14 19:43+0000\n"
+"POT-Creation-Date: 2026-11-14 23:01+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -102,27 +102,27 @@ msgctxt "PlayerControls"
 msgid "Mute"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:222
+#: crates/oxyfin/ui/components/player_controls.slint:226
 msgctxt "PlayerControls"
 msgid "Volume"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:240
+#: crates/oxyfin/ui/components/player_controls.slint:245
 msgctxt "PlayerControls"
 msgid "Audio and subtitles"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:251
+#: crates/oxyfin/ui/components/player_controls.slint:256
 msgctxt "PlayerControls"
 msgid "Playback speed"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:262
+#: crates/oxyfin/ui/components/player_controls.slint:267
 msgctxt "PlayerControls"
 msgid "Exit fullscreen"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:262
+#: crates/oxyfin/ui/components/player_controls.slint:267
 msgctxt "PlayerControls"
 msgid "Fullscreen"
 msgstr ""
@@ -227,19 +227,29 @@ msgctxt "HomeTitles"
 msgid "Recently Added in {}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/home.slint:122
+#: crates/oxyfin/ui/screens/home.slint:124
 msgctxt "HomeScreen"
 msgid "Home"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/home.slint:130
+#: crates/oxyfin/ui/screens/home.slint:132
 msgctxt "HomeScreen"
 msgid "{}h {}m"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/home.slint:130
+#: crates/oxyfin/ui/screens/home.slint:132
 msgctxt "HomeScreen"
 msgid "{}m"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/home.slint:172
+msgctxt "HomeScreen"
+msgid "Nothing to show yet"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/home.slint:177
+msgctxt "HomeScreen"
+msgid "Movies and shows you add or start watching will appear here."
 msgstr ""
 
 #: crates/oxyfin/ui/screens/player.slint:97
