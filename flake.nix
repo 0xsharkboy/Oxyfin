@@ -53,7 +53,7 @@
                   ffmpeg-headless
                   cargo-deny
                 ]
-                ++ lib.optionals stdenv.hostPlatform.isLinux linuxRuntimeLibs;
+                ++ lib.optionals stdenv.hostPlatform.isLinux (linuxRuntimeLibs ++ [ dbus ]);
 
               shellHook = ''
                 git config core.hooksPath .githooks
