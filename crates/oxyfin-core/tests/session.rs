@@ -286,6 +286,23 @@ mod quick_connect {
     }
 
     #[tokio::test]
+    async fn quick_connect_initiate_401_is_disabled() {
+        let mock = MockServer::start().await;
+        mount_public_info(&mock).await;
+        mount_enabled(&mock, true).await;
+        Mock::given(method("POST"))
+            .and(path("/QuickConnect/Initiate"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&mock)
+            .await;
+        let dir = TempDir::new().unwrap();
+        let manager = manager(&mock, &dir, memory_vault());
+        let handle = manager.connect(&mock.uri()).await.unwrap();
+        let error = manager.start_quick_connect(&handle).await.unwrap_err();
+        assert_eq!(error, CoreError::QuickConnectDisabled);
+    }
+
+    #[tokio::test]
     async fn quick_connect_expired() {
         for status in [401, 404] {
             let mock = MockServer::start().await;
