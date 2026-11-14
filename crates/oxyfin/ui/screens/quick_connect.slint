@@ -1,0 +1,95 @@
+import { Theme } from "../theme.slint";
+import { Button, ButtonStyle } from "../components/button.slint";
+import { HeadingText, BodyText, LabelText, DisplayText } from "../components/text.slint";
+import { AuthPage } from "../components/auth_card.slint";
+
+// Quick Connect card: the code to approve on a signed-in device, digit by digit.
+export component QuickConnectScreen inherits AuthPage {
+    in property <string> code;
+    in property <[string]> digits;
+    in property <string> error;
+    in property <bool> can-retry;
+    callback cancel();
+    callback retry();
+
+    accessible-role: groupbox;
+    accessible-label: @tr("Quick Connect");
+
+    HeadingText {
+        text: @tr("Quick Connect");
+        horizontal-alignment: center;
+    }
+
+    BodyText {
+        text: @tr("On a device that is already signed in, open Settings › Quick Connect and enter this code.");
+        color: Theme.text-secondary;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+
+    if root.error.is-empty && !root.code.is-empty: HorizontalLayout {
+        accessible-role: text;
+        accessible-label: root.code;
+        alignment: center;
+        spacing: Theme.space-sm;
+
+        for digit in root.digits: Rectangle {
+            width: 52px;
+            height: 64px;
+            background: Theme.bg-hover;
+            border-radius: Theme.radius-md;
+            border-width: Theme.border-thin;
+            border-color: Theme.border-default;
+
+            DisplayText {
+                accessible-role: none;
+                text: digit;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    if root.error.is-empty: HorizontalLayout {
+        alignment: center;
+        spacing: Theme.space-sm;
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: Theme.space-md;
+                height: self.width;
+                border-radius: Theme.radius-full;
+                background: Theme.accent;
+                opacity: 0.4 + 0.6 * abs(sin(animation-tick() / 1s * 180deg));
+            }
+        }
+        LabelText {
+            text: root.code.is-empty ? @tr("Requesting a code…") : @tr("Waiting for approval");
+            vertical-alignment: center;
+        }
+    }
+
+    if !root.error.is-empty: LabelText {
+        accessible-role: text;
+        text: root.error;
+        color: Theme.danger;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+
+    if root.can-retry: Button {
+        label: @tr("Get a new code");
+        clicked => {
+            root.retry();
+        }
+    }
+
+    Button {
+        label: @tr("Back");
+        style: ButtonStyle.ghost;
+        clicked => {
+            root.cancel();
+        }
+    }
+}

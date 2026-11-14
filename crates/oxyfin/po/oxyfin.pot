@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-14 16:03+0000\n"
+"POT-Creation-Date: 2026-11-14 16:39+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -57,84 +57,174 @@ msgctxt "TopBar"
 msgid "Settings"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:93
-msgctxt "Messages"
-msgid "Cannot reach the server. Check the address and your connection."
+#: crates/oxyfin/ui/screens/quick_connect.slint:16
+#: crates/oxyfin/ui/screens/quick_connect.slint:16
+msgctxt "QuickConnectScreen"
+msgid "Quick Connect"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:96
-msgctxt "Messages"
-msgid "This server address is not valid."
+#: crates/oxyfin/ui/screens/quick_connect.slint:24
+msgctxt "QuickConnectScreen"
+msgid ""
+"On a device that is already signed in, open Settings › Quick Connect and "
+"enter this code."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:99
-msgctxt "Messages"
-msgid "This Jellyfin version is not supported (installed / required: {})."
+#: crates/oxyfin/ui/screens/quick_connect.slint:68
+msgctxt "QuickConnectScreen"
+msgid "Requesting a code…"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:102
-msgctxt "Messages"
-msgid "Incorrect username or password."
+#: crates/oxyfin/ui/screens/quick_connect.slint:68
+msgctxt "QuickConnectScreen"
+msgid "Waiting for approval"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:105
-msgctxt "Messages"
-msgid "Quick Connect is disabled on this server."
+#: crates/oxyfin/ui/screens/quick_connect.slint:82
+msgctxt "QuickConnectScreen"
+msgid "Get a new code"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:108
-msgctxt "Messages"
-msgid "The Quick Connect code has expired."
+#: crates/oxyfin/ui/screens/quick_connect.slint:89
+msgctxt "QuickConnectScreen"
+msgid "Back"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:111
-msgctxt "Messages"
-msgid "The server ran into an error. Please try again later."
+#: crates/oxyfin/ui/screens/sign_in.slint:36
+#: crates/oxyfin/ui/screens/sign_in.slint:36
+#: crates/oxyfin/ui/screens/sign_in.slint:36
+msgctxt "SignInScreen"
+msgid "Sign in"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:114
+#: crates/oxyfin/ui/screens/sign_in.slint:43
+msgctxt "SignInScreen"
+msgid "Server address"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/sign_in.slint:44
+msgctxt "SignInScreen"
+msgid "https://jellyfin.example.com"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/sign_in.slint:61
+msgctxt "SignInScreen"
+msgid "Username"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/sign_in.slint:70
+msgctxt "SignInScreen"
+msgid "Password"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/sign_in.slint:93
+msgctxt "SignInScreen"
+msgid "Checking the server…"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/sign_in.slint:127
+msgctxt "SignInScreen"
+msgid "or"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/sign_in.slint:141
+msgctxt "SignInScreen"
+msgid "Use Quick Connect"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/starting.slint:7
+msgctxt "StartingScreen"
+msgid "Starting"
+msgstr ""
+
+#: crates/oxyfin/ui/theme.slint:115
 msgctxt "Messages"
-msgid "The server sent a response Oxyfin does not understand."
+msgid "Server found (Jellyfin {})"
 msgstr ""
 
 #: crates/oxyfin/ui/theme.slint:117
 msgctxt "Messages"
+msgid "Server found: {} (Jellyfin {})"
+msgstr ""
+
+#: crates/oxyfin/ui/theme.slint:123
+msgctxt "Messages"
+msgid "Cannot reach the server. Check the address and your connection."
+msgstr ""
+
+#: crates/oxyfin/ui/theme.slint:126
+msgctxt "Messages"
+msgid "This server address is not valid."
+msgstr ""
+
+#: crates/oxyfin/ui/theme.slint:129
+msgctxt "Messages"
+msgid "This Jellyfin version is not supported (installed / required: {})."
+msgstr ""
+
+#: crates/oxyfin/ui/theme.slint:132
+msgctxt "Messages"
+msgid "Incorrect username or password."
+msgstr ""
+
+#: crates/oxyfin/ui/theme.slint:135
+msgctxt "Messages"
+msgid "Quick Connect is disabled on this server."
+msgstr ""
+
+#: crates/oxyfin/ui/theme.slint:138
+msgctxt "Messages"
+msgid "The Quick Connect code has expired."
+msgstr ""
+
+#: crates/oxyfin/ui/theme.slint:141
+msgctxt "Messages"
+msgid "The server ran into an error. Please try again later."
+msgstr ""
+
+#: crates/oxyfin/ui/theme.slint:144
+msgctxt "Messages"
+msgid "The server sent a response Oxyfin does not understand."
+msgstr ""
+
+#: crates/oxyfin/ui/theme.slint:147
+msgctxt "Messages"
 msgid "Oxyfin could not read or save its settings."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:120
+#: crates/oxyfin/ui/theme.slint:150
 msgctxt "Messages"
 msgid "Your session has expired. Please sign in again."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:123
+#: crates/oxyfin/ui/theme.slint:153
 msgctxt "Messages"
 msgid ""
 "The system keyring is unavailable, so your sign-in token is stored in a file "
 "only you can read."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:126
+#: crates/oxyfin/ui/theme.slint:156
 msgctxt "Messages"
 msgid "Oxyfin cannot play this item directly."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:129
+#: crates/oxyfin/ui/theme.slint:159
 msgctxt "Messages"
 msgid "There is nothing left to play in this series."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:132
+#: crates/oxyfin/ui/theme.slint:162
 msgctxt "Messages"
 msgid "This item could not be loaded."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:135
+#: crates/oxyfin/ui/theme.slint:165
 msgctxt "Messages"
 msgid "The player could not complete that action."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:137
+#: crates/oxyfin/ui/theme.slint:167
 msgctxt "Messages"
 msgid "Playback is not available in this build of Oxyfin."
 msgstr ""

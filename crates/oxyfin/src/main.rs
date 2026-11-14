@@ -1,9 +1,14 @@
 //! Oxyfin, a native Jellyfin desktop client.
 
 use std::process::ExitCode;
+use std::time::Duration;
 
-use oxyfin::AppWindow;
-use slint::{BackendSelector, CloseRequestResponse, ComponentHandle};
+use oxyfin::{App, AppWindow};
+use oxyfin_core::{Paths, TokenVault};
+use slint::{BackendSelector, ComponentHandle};
+
+/// How long the exit waits for the sessions still shutting down.
+const EXIT_GRACE: Duration = Duration::from_secs(3);
 
 fn main() -> ExitCode {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
@@ -23,16 +28,29 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .require_opengl()
         .select()?;
 
-    let _runtime = tokio::runtime::Builder::new_multi_thread()
+    let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
 
+    let paths = Paths::from_system()?;
+    let vault = TokenVault::system(&paths);
     let window = AppWindow::new()?;
-    window.window().on_close_requested(|| {
-        let _ = slint::quit_event_loop();
-        CloseRequestResponse::HideWindow
-    });
+    let app = App::new(&window, runtime.handle().clone(), paths, vault)?;
     window.show()?;
     slint::run_event_loop_until_quit()?;
+    window.hide()?;
+
+    let pending = app.take_pending_ends();
+    runtime.block_on(async {
+        let deadline = tokio::time::Instant::now() + EXIT_GRACE;
+        for task in pending {
+            if tokio::time::timeout_at(deadline, task).await.is_err() {
+                log::warn!("a session did not finish shutting down before exit");
+                break;
+            }
+        }
+    });
+    drop(app);
+    runtime.shutdown_timeout(Duration::from_millis(500));
     Ok(())
 }

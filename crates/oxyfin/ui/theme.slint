@@ -12,6 +12,7 @@ export global Theme {
     out property <color> accent: #4cc9f0;
     out property <color> watched: #4ade80;
     out property <color> progress-track: #6b7385;
+    out property <color> danger: #f87171;
 
     // Gradients drawn in the design without a variable.
     out property <brush> top-bar-scrim: @linear-gradient(180deg, #0b0d12f2 0%, #0b0d1200 100%);
@@ -20,6 +21,8 @@ export global Theme {
     out property <brush> hero-placeholder: @linear-gradient(154deg, #1f4761 7%, #141f33 46%, #331a38 79%);
     out property <brush> poster-placeholder: @linear-gradient(132deg, #384573 14%, #141a29 86%);
     out property <brush> landscape-placeholder: @linear-gradient(157deg, #59384d 14%, #1a1424 86%);
+    out property <brush> sign-in-glow: @radial-gradient(circle, #12404f99 0%, #0b0d1200 70%);
+    out property <color> card-shadow: #00000066;
 
     out property <length> space-2xs: 2px;
     out property <length> space-xs: 4px;
@@ -33,6 +36,7 @@ export global Theme {
 
     out property <length> radius-indicator: 2px;
     out property <length> radius-md: 8px;
+    out property <length> radius-lg: 12px;
     out property <length> radius-full: 999px;
 
     out property <length> border-thin: 1px;
@@ -44,6 +48,7 @@ export global Theme {
     out property <length> heading-size: 20px;
     out property <int> heading-weight: 600;
     out property <length> heading-line-height: 26px;
+    out property <length> brand-size: 28px;
     out property <length> body-size: 15px;
     out property <int> body-weight: 400;
     out property <length> body-line-height: 22px;
@@ -106,6 +111,13 @@ export enum Message {
 }
 
 export global Messages {
+    public pure function server-found(name: string, version: string) -> string {
+        if name.is-empty {
+            return @tr("Server found (Jellyfin {})", version);
+        }
+        @tr("Server found: {} (Jellyfin {})", name, version)
+    }
+
     // `detail` is only used by `unsupported-server` and carries "<installed> / <required>" versions.
     public pure function message-text(m: Message, detail: string) -> string {
         if m == Message.server-unreachable {

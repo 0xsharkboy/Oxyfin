@@ -5,7 +5,11 @@ mod generated {
     slint::include_modules!();
 }
 
+pub mod app;
+pub mod generation;
 pub mod present;
+mod screens;
 pub mod state;
 
+pub use app::App;
 pub use generated::*;

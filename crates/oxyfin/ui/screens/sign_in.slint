@@ -1,0 +1,148 @@
+import { Theme } from "../theme.slint";
+import { Button, ButtonStyle } from "../components/button.slint";
+import { TextField } from "../components/text_field.slint";
+import { HeadingText, CaptionText, LabelText } from "../components/text.slint";
+import { AuthPage } from "../components/auth_card.slint";
+
+export enum ServerState { idle, checking, found, error }
+
+export struct ServerStatus {
+    state: ServerState,
+    text: string,
+}
+
+// Sign-in card: server address, credentials, password and Quick Connect buttons.
+export component SignInScreen inherits AuthPage {
+    in-out property <string> server-address;
+    in-out property <string> username;
+    in property <ServerStatus> server-status;
+    in property <bool> busy;
+    in property <string> form-error;
+    callback server-changed(address: string);
+    callback server-confirmed(address: string);
+    callback sign-in(username: string, password: string);
+    callback open-quick-connect();
+
+    property <bool> found: server-status.state == ServerState.found;
+    property <bool> can-sign-in: found && !busy && !username.is-empty;
+
+    function submit() {
+        if can-sign-in {
+            sign-in(username, password.text);
+        }
+    }
+
+    accessible-role: groupbox;
+    accessible-label: @tr("Sign in");
+
+    HeadingText {
+        text: @tr("Sign in");
+    }
+
+    address := TextField {
+        label: @tr("Server address");
+        placeholder: @tr("https://jellyfin.example.com");
+        text <=> root.server-address;
+        enabled: !root.busy;
+        edited(text) => {
+            root.server-changed(text);
+        }
+        accepted => {
+            root.server-confirmed(self.text);
+        }
+        changed has-focus => {
+            if !self.has-focus {
+                root.server-confirmed(self.text);
+            }
+        }
+    }
+
+    TextField {
+        label: @tr("Username");
+        text <=> root.username;
+        enabled: !root.busy;
+        accepted => {
+            password.focus();
+        }
+    }
+
+    password := TextField {
+        label: @tr("Password");
+        password: true;
+        enabled: !root.busy;
+        accepted => {
+            root.submit();
+        }
+    }
+
+    if root.server-status.state != ServerState.idle: HorizontalLayout {
+        spacing: Theme.space-sm;
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: Theme.space-sm;
+                height: self.width;
+                border-radius: Theme.radius-full;
+                background: root.server-status.state == ServerState.found ? Theme.watched
+                    : root.server-status.state == ServerState.error ? Theme.danger : Theme.text-muted;
+            }
+        }
+        CaptionText {
+            accessible-role: text;
+            text: root.server-status.state == ServerState.checking ? @tr("Checking the server…") : root.server-status.text;
+            color: root.server-status.state == ServerState.error ? Theme.danger : Theme.text-secondary;
+            wrap: word-wrap;
+            horizontal-stretch: 1;
+        }
+    }
+
+    if !root.form-error.is-empty: LabelText {
+        accessible-role: text;
+        text: root.form-error;
+        color: Theme.danger;
+        wrap: word-wrap;
+    }
+
+    Button {
+        label: @tr("Sign in");
+        enabled: root.can-sign-in;
+        clicked => {
+            root.submit();
+        }
+    }
+
+    HorizontalLayout {
+        spacing: Theme.space-md;
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Rectangle {
+                height: Theme.border-thin;
+                background: Theme.border-default;
+            }
+        }
+        CaptionText {
+            text: @tr("or");
+            vertical-alignment: center;
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Rectangle {
+                height: Theme.border-thin;
+                background: Theme.border-default;
+            }
+        }
+    }
+
+    Button {
+        label: @tr("Use Quick Connect");
+        style: ButtonStyle.ghost;
+        enabled: root.found && !root.busy;
+        clicked => {
+            root.open-quick-connect();
+        }
+    }
+}

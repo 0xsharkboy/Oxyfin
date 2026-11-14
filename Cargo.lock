@@ -3733,6 +3733,7 @@ dependencies = [
  "i-slint-backend-testing",
  "image",
  "log",
+ "oxyfin-api",
  "oxyfin-core",
  "oxyfin-player",
  "slint",

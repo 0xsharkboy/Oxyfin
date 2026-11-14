@@ -1,0 +1,68 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { HeadingText } from "text.slint";
+
+// Brand mark above the sign-in cards and on the startup screen.
+export component Brand inherits HorizontalLayout {
+    spacing: Theme.space-md;
+    alignment: center;
+
+    VerticalLayout {
+        alignment: center;
+        Image {
+            source: Icons.logo;
+            width: 32px;
+            height: 32px;
+        }
+    }
+    Text {
+        // Brand name, not translated.
+        text: "Oxyfin";
+        font-size: Theme.brand-size;
+        font-weight: Theme.heading-weight;
+        color: Theme.text-primary;
+        vertical-alignment: center;
+    }
+}
+
+// Screen of the sign-in flow: the brand and a centered card over the glow.
+export component AuthPage inherits Rectangle {
+    in property <length> card-width: 440px;
+
+    background: Theme.bg-base;
+
+    Rectangle {
+        y: parent.height * 0.4;
+        height: parent.height;
+        background: Theme.sign-in-glow;
+    }
+
+    VerticalLayout {
+        alignment: center;
+        spacing: Theme.space-2xl;
+
+        Brand { }
+
+        HorizontalLayout {
+            alignment: center;
+
+            Rectangle {
+                width: root.card-width;
+                background: Theme.bg-elevated;
+                border-radius: Theme.radius-lg;
+                border-width: Theme.border-thin;
+                border-color: Theme.border-default;
+                drop-shadow-blur: Theme.space-xl;
+                drop-shadow-offset-y: Theme.space-sm;
+                drop-shadow-color: Theme.card-shadow;
+
+                VerticalLayout {
+                    padding: Theme.space-2xl;
+                    spacing: Theme.space-xl;
+
+                    @children
+                }
+            }
+        }
+    }
+}
