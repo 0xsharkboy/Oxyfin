@@ -8,6 +8,7 @@ import { StartingScreen } from "screens/starting.slint";
 import { SignInScreen, ServerState, ServerStatus } from "screens/sign_in.slint";
 import { QuickConnectScreen } from "screens/quick_connect.slint";
 import { HomeScreen, HomeBanner, HomeRow, HomeRowKind, HomeTitles } from "screens/home.slint";
+import { PlayerScreen } from "screens/player.slint";
 
 export { CardData, Message, Messages, TrackRow } from "theme.slint";
 export { ServerState, ServerStatus }
@@ -41,6 +42,14 @@ export component AppWindow inherits Window {
     callback play(id: string);
     callback open-settings();
 
+    in property <string> player-title;
+    in property <string> player-subtitle;
+    in property <bool> player-loading;
+    in property <bool> player-has-error;
+    in property <Message> player-error;
+    callback player-stop();
+    callback close-player();
+
     in property <Message> notice;
     in property <string> notice-detail;
     in property <bool> notice-visible;
@@ -51,7 +60,8 @@ export component AppWindow inherits Window {
     preferred-width: 1280px;
     preferred-height: 720px;
 
-    Rectangle {
+    // The video is drawn under the interface, so the player screen leaves the window transparent.
+    if root.screen != Screen.player: Rectangle {
         background: Theme.bg-base;
     }
 
@@ -98,6 +108,18 @@ export component AppWindow inherits Window {
         }
         open-settings => {
             root.open-settings();
+        }
+    }
+
+    if root.screen == Screen.player: PlayerScreen {
+        title: root.player-title;
+        subtitle: root.player-subtitle;
+        loading: root.player-loading;
+        has-error: root.player-has-error;
+        error: root.player-error;
+        back => {
+            root.player-stop();
+            root.close-player();
         }
     }
 

@@ -36,6 +36,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let vault = TokenVault::system(&paths);
     let window = AppWindow::new()?;
     let app = App::new(&window, runtime.handle().clone(), paths, vault)?;
+    #[cfg(feature = "mpv")]
+    oxyfin::video::install(&window, app.video_source())?;
     window.show()?;
     slint::run_event_loop_until_quit()?;
     if let Err(error) = window.hide() {

@@ -6,6 +6,7 @@ use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
 use oxyfin_api::{ItemId, Session};
+use oxyfin_core::PlaybackCommand;
 use oxyfin_core::{
     Catalog, Config, CoreError, ImageCache, Paths, SessionManager, SignedIn, TokenStorage,
     TokenVault,
@@ -15,8 +16,11 @@ use tokio::runtime::Handle;
 use tokio::task::{AbortHandle, JoinHandle};
 
 use crate::generation::Generation;
+#[cfg(feature = "mpv")]
+use crate::generation::{Route, route};
 use crate::present::device_name;
 use crate::screens::home::HomeController;
+use crate::screens::player;
 use crate::screens::sign_in::SignInController;
 use crate::state::{AppState, Effect, GenerationId, Msg, Notice, Screen, SessionInfo};
 use crate::{AppWindow, Message};
@@ -37,6 +41,8 @@ pub struct App {
     incoming: RefCell<Option<Session>>,
     ending: RefCell<Vec<JoinHandle<()>>>,
     quitting: Cell<bool>,
+    #[cfg(feature = "mpv")]
+    video: crate::video::VideoSource,
     pub(crate) sign_in: SignInController,
     pub(crate) home: HomeController,
 }
@@ -65,6 +71,8 @@ impl App {
             incoming: RefCell::new(None),
             ending: RefCell::new(Vec::new()),
             quitting: Cell::new(false),
+            #[cfg(feature = "mpv")]
+            video: Default::default(),
             sign_in: SignInController::default(),
             home: HomeController::default(),
         });
@@ -112,9 +120,137 @@ impl App {
         })
     }
 
-    /// Starts playing `item`. Playback is wired in a later step.
-    pub(crate) fn play(&self, item: ItemId) {
-        log::debug!("play {item} requested");
+    /// The player of the current generation, published for the video renderer.
+    #[cfg(feature = "mpv")]
+    pub fn video_source(&self) -> crate::video::VideoSource {
+        Rc::clone(&self.video)
+    }
+
+    /// Plays `item` on the player screen. Only the home screen starts playback.
+    pub(crate) fn play(self: &Rc<Self>, item: ItemId) {
+        if self.state.borrow().screen() != Screen::Home {
+            return;
+        }
+        #[cfg(not(feature = "mpv"))]
+        {
+            log::info!("cannot play {item}: this build has no player");
+            self.notify(Message::PlaybackUnavailable);
+        }
+        #[cfg(feature = "mpv")]
+        {
+            let handle = match self.playback() {
+                Some(Ok(handle)) => handle,
+                Some(Err(error)) => {
+                    log::error!("cannot create the player: {error}");
+                    self.notify(Message::LoadFailed);
+                    return;
+                }
+                None => return,
+            };
+            if let Some(window) = self.window() {
+                player::reset(&window);
+            }
+            handle.send(PlaybackCommand::Play {
+                item,
+                mode: oxyfin_core::PlayMode::Auto,
+            });
+            self.dispatch(Msg::OpenPlayer);
+        }
+    }
+
+    /// The playback of the current generation, created at its first use.
+    #[cfg(feature = "mpv")]
+    fn playback(&self) -> Option<Result<oxyfin_core::PlaybackHandle, oxyfin_player::PlayerError>> {
+        use oxyfin_core::{PlaybackController, player_events};
+        use oxyfin_player::{Player, PlayerOptions};
+
+        let mut current = self.generation.borrow_mut();
+        let generation = current.as_mut()?;
+        if let Some(playback) = &generation.playback {
+            return Some(Ok(playback.handle.clone()));
+        }
+        let _guard = self.runtime.enter();
+        let (sink, events) = player_events();
+        let player = match Player::new(PlayerOptions::default(), move |event| sink.send(event)) {
+            Ok(player) => Arc::new(player),
+            Err(error) => return Some(Err(error)),
+        };
+        let (handle, updates) =
+            PlaybackController::spawn(generation.session.clone(), player.clone(), events);
+        self.relay(generation.id, updates);
+        *self.video.borrow_mut() = Some((generation.id, Arc::clone(&player)));
+        generation.playback = Some(crate::generation::Playback {
+            handle: handle.clone(),
+            player,
+        });
+        Some(Ok(handle))
+    }
+
+    /// Delivers the events of the playback controller of generation `id` on the Slint thread.
+    #[cfg(feature = "mpv")]
+    fn relay(
+        &self,
+        id: GenerationId,
+        mut updates: tokio::sync::mpsc::UnboundedReceiver<oxyfin_core::PlaybackEvent>,
+    ) {
+        let this = self.this.clone();
+        let result = slint::spawn_local(async move {
+            while let Some(event) = updates.recv().await {
+                let Some(app) = this.upgrade() else { break };
+                if app.quitting.get() {
+                    break;
+                }
+                let current = app.state.borrow().generation();
+                match route(current, id, event) {
+                    Route::Ignore => {}
+                    Route::Expire(id) => app.dispatch(Msg::Expired(id)),
+                    Route::Show(event) => {
+                        if let Some(window) = app.window() {
+                            player::apply(&window, event);
+                        }
+                    }
+                }
+            }
+        });
+        if let Err(error) = result {
+            log::error!("cannot relay the playback events: {error}");
+        }
+    }
+
+    /// Stops publishing the player of generation `id`; the renderer goes at the next frame.
+    #[cfg(feature = "mpv")]
+    fn clear_video(&self, id: GenerationId) {
+        let player = {
+            let mut video = self.video.borrow_mut();
+            match &*video {
+                Some((published, _)) if *published == id => video.take(),
+                _ => None,
+            }
+        };
+        if player.is_some()
+            && let Some(window) = self.window()
+        {
+            window.window().request_redraw();
+        }
+    }
+
+    fn send_playback(&self, command: PlaybackCommand) {
+        if let Some(playback) = self
+            .generation
+            .borrow()
+            .as_ref()
+            .and_then(|generation| generation.playback.as_ref())
+        {
+            playback.handle.send(command);
+        }
+    }
+
+    fn notify(&self, message: Message) {
+        if let Some(window) = self.window() {
+            window.set_notice(message);
+            window.set_notice_detail(Default::default());
+            window.set_notice_visible(true);
+        }
     }
 
     /// Runs `task` on the runtime, then `then` on the Slint thread with its output.
@@ -228,6 +364,16 @@ impl App {
                 app.play(ItemId::from(id.as_str()));
             }
         });
+        window.on_close_player(with(|app| app.dispatch(Msg::ClosePlayer)));
+        let this = self.this.clone();
+        player::bind(
+            window,
+            Rc::new(move |command| {
+                if let Some(app) = this.upgrade() {
+                    app.send_playback(command);
+                }
+            }),
+        );
         let this = self.this.clone();
         window.on_sign_in(move |user, password| {
             if let Some(app) = this.upgrade() {
@@ -294,7 +440,11 @@ impl App {
                 ending.retain(|task| !task.is_finished());
                 ending.push(task);
                 drop(ending);
-                self.on_ui(ended, move |app, _| app.dispatch(Msg::GenerationEnded(id)));
+                self.on_ui(ended, move |app, _| {
+                    #[cfg(feature = "mpv")]
+                    app.clear_video(id);
+                    app.dispatch(Msg::GenerationEnded(id));
+                });
             }
             Effect::Show(screen) => {
                 let previous = self.shown.replace(screen);
@@ -305,13 +455,7 @@ impl App {
                 self.sign_in.shown(self, screen, previous);
                 self.home.shown(self, screen);
             }
-            Effect::Notify(notice) => {
-                if let Some(window) = self.window() {
-                    window.set_notice(notice_message(notice));
-                    window.set_notice_detail(Default::default());
-                    window.set_notice_visible(true);
-                }
-            }
+            Effect::Notify(notice) => self.notify(notice_message(notice)),
             Effect::Quit => {
                 self.quitting.set(true);
                 if let Err(error) = slint::quit_event_loop() {

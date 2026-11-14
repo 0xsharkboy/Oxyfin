@@ -1,0 +1,91 @@
+import { Spinner } from "std-widgets.slint";
+import { Theme, Message, Messages } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { IconButton } from "../components/icon_button.slint";
+import { BodyText, HeadingText, LabelText } from "../components/text.slint";
+
+// Video player. The window is transparent here so the video drawn under the interface shows.
+export component PlayerScreen inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <bool> loading;
+    in property <bool> has-error;
+    in property <Message> error;
+    callback back();
+
+    accessible-role: groupbox;
+    accessible-label: @tr("Player");
+
+    // Covers the window until the first frame, so the desktop never shows through.
+    background: root.loading || root.has-error ? Theme.video-backdrop : transparent;
+
+    if root.loading && !root.has-error: Spinner {
+        indeterminate: true;
+        width: 48px;
+        height: 48px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+
+    if root.has-error: Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(parent.width - 2 * Theme.space-3xl, 480px);
+        height: error-text.preferred-height + 2 * Theme.space-xl;
+        background: Theme.bg-elevated;
+        border-radius: Theme.radius-lg;
+        border-width: Theme.border-thin;
+        border-color: Theme.border-default;
+
+        error-text := BodyText {
+            accessible-role: text;
+            x: Theme.space-xl;
+            width: parent.width - 2 * Theme.space-xl;
+            text: Messages.message-text(root.error, "");
+            wrap: word-wrap;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    Rectangle {
+        y: 0;
+        height: 96px;
+        background: Theme.top-bar-scrim;
+
+        HorizontalLayout {
+            padding-left: Theme.space-xl;
+            padding-right: Theme.space-xl;
+            padding-top: Theme.space-lg;
+            padding-bottom: Theme.space-lg;
+            spacing: Theme.space-md;
+            alignment: start;
+
+            VerticalLayout {
+                alignment: start;
+                IconButton {
+                    icon: Icons.arrow-left;
+                    label: @tr("Back");
+                    clicked => {
+                        root.back();
+                    }
+                }
+            }
+
+            VerticalLayout {
+                alignment: start;
+                spacing: Theme.space-2xs;
+
+                HeadingText {
+                    text: root.title;
+                    overflow: elide;
+                }
+
+                if root.subtitle != "": LabelText {
+                    text: root.subtitle;
+                    overflow: elide;
+                }
+            }
+        }
+    }
+}
