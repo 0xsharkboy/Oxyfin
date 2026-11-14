@@ -144,6 +144,8 @@ pub enum PlayerEvent {
     Paused(bool),
     /// The volume changed.
     Volume(f64),
+    /// The playback speed changed.
+    Speed(f64),
     /// The muted state changed.
     Muted(bool),
     /// A seek started.
