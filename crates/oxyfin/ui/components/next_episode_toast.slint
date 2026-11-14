@@ -1,0 +1,86 @@
+import { Theme, NextUp } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { Button, ButtonStyle } from "button.slint";
+import { BodyStrongText, LabelText } from "text.slint";
+
+// End of episode toast: the next episode starts when the countdown ends, unless cancelled.
+export component NextEpisodeToast inherits Rectangle {
+    in property <NextUp> next-up;
+    callback play-now();
+    callback cancel();
+
+    accessible-role: groupbox;
+    accessible-label: @tr("Next episode");
+
+    width: row.preferred-width;
+    height: row.preferred-height;
+    background: Theme.bg-elevated;
+    border-radius: Theme.radius-lg;
+    border-width: Theme.border-thin;
+    border-color: Theme.border-default;
+    drop-shadow-offset-y: 8px;
+    drop-shadow-blur: 12px;
+    drop-shadow-color: Theme.menu-shadow;
+
+    TouchArea { }
+
+    row := HorizontalLayout {
+        padding: Theme.space-md;
+        spacing: Theme.space-lg;
+
+        Rectangle {
+            width: 160px;
+            height: 90px;
+            border-radius: Theme.radius-md;
+            background: Theme.next-up-placeholder;
+            clip: true;
+
+            if root.next-up.has-image: Image {
+                source: root.next-up.image;
+                width: parent.width;
+                height: parent.height;
+                image-fit: cover;
+            }
+        }
+
+        VerticalLayout {
+            spacing: Theme.space-xs;
+            alignment: start;
+
+            LabelText {
+                accessible-role: text;
+                text: @tr("Next episode in {} s", root.next-up.remaining);
+                color: Theme.accent;
+            }
+
+            BodyStrongText {
+                accessible-role: text;
+                text: root.next-up.title;
+                overflow: elide;
+                max-width: 360px;
+            }
+
+            HorizontalLayout {
+                padding-top: Theme.space-sm;
+                spacing: Theme.space-sm;
+                alignment: start;
+
+                Button {
+                    label: @tr("Play now");
+                    icon: Icons.play;
+                    clicked => {
+                        root.play-now();
+                    }
+                }
+
+                Button {
+                    label: @tr("Cancel");
+                    style: ButtonStyle.ghost;
+                    clicked => {
+                        root.cancel();
+                    }
+                }
+            }
+        }
+    }
+}

@@ -2,7 +2,7 @@ import "fonts/Inter-Regular.ttf";
 import "fonts/Inter-Medium.ttf";
 import "fonts/Inter-SemiBold.ttf";
 import "fonts/Inter-Bold.ttf";
-import { Theme, Message, Messages } from "theme.slint";
+import { Theme, Message, Messages, NextUp, TrackRow } from "theme.slint";
 import { LabelText } from "components/text.slint";
 import { StartingScreen } from "screens/starting.slint";
 import { SignInScreen, ServerState, ServerStatus } from "screens/sign_in.slint";
@@ -10,7 +10,7 @@ import { QuickConnectScreen } from "screens/quick_connect.slint";
 import { HomeScreen, HomeBanner, HomeRow, HomeRowKind, HomeTitles } from "screens/home.slint";
 import { PlayerScreen } from "screens/player.slint";
 
-export { CardData, Message, Messages, TrackRow } from "theme.slint";
+export { CardData, Message, Messages, NextUp, TrackRow } from "theme.slint";
 export { ServerState, ServerStatus }
 export { HomeBanner, HomeRow, HomeRowKind, HomeTitles }
 
@@ -48,7 +48,39 @@ export component AppWindow inherits Window {
     in property <bool> player-has-error;
     in property <Message> player-error;
     in property <bool> player-video-active;
-    callback player-stop();
+    in property <float> player-position;
+    in property <float> player-duration;
+    in property <string> player-elapsed;
+    in property <string> player-total;
+    in property <bool> player-paused;
+    in property <float> player-volume: 100;
+    in property <bool> player-muted;
+    in property <float> player-speed: 1;
+    in property <[float]> player-speeds;
+    in property <bool> player-has-next;
+    in property <[TrackRow]> player-audio;
+    in property <[TrackRow]> player-subtitles;
+    in property <NextUp> player-next-up;
+    // Set while a seek is on its way; the position is frozen until the player confirms it.
+    in property <bool> player-seek-pending;
+    in-out property <bool> player-scrubbing;
+    callback player-toggle-fullscreen();
+    callback player-cursor-hidden(x: length, y: length);
+    callback player-command-stop();
+    callback player-command-set-paused(paused: bool);
+    callback player-command-seek(seconds: float);
+    callback player-command-skip(direction: int);
+    callback player-command-previous();
+    callback player-command-next();
+    callback player-command-play-next-now();
+    callback player-command-cancel-next-up();
+    callback player-command-set-speed(speed: float);
+    callback player-command-step-speed(direction: int);
+    callback player-command-set-volume(volume: float);
+    callback player-command-step-volume(direction: int);
+    callback player-command-set-muted(muted: bool);
+    callback player-command-select-audio(index: int);
+    callback player-command-select-subtitle(index: int);
     callback close-player();
 
     in property <Message> notice;
@@ -119,9 +151,72 @@ export component AppWindow inherits Window {
         has-error: root.player-has-error;
         error: root.player-error;
         video-active: root.player-video-active;
+        position: root.player-position;
+        duration: root.player-duration;
+        elapsed: root.player-elapsed;
+        total: root.player-total;
+        paused: root.player-paused;
+        volume: root.player-volume;
+        muted: root.player-muted;
+        speed: root.player-speed;
+        speeds: root.player-speeds;
+        has-next: root.player-has-next;
+        audio: root.player-audio;
+        subtitles: root.player-subtitles;
+        next-up: root.player-next-up;
+        fullscreen: root.full-screen;
+        scrubbing <=> root.player-scrubbing;
         back => {
-            root.player-stop();
+            root.player-command-stop();
             root.close-player();
+        }
+        toggle-fullscreen => {
+            root.player-toggle-fullscreen();
+        }
+        cursor-hidden(x, y) => {
+            root.player-cursor-hidden(x, y);
+        }
+        command-set-paused(paused) => {
+            root.player-command-set-paused(paused);
+        }
+        command-seek(seconds) => {
+            root.player-command-seek(seconds);
+        }
+        command-skip(direction) => {
+            root.player-command-skip(direction);
+        }
+        command-previous => {
+            root.player-command-previous();
+        }
+        command-next => {
+            root.player-command-next();
+        }
+        command-play-next-now => {
+            root.player-command-play-next-now();
+        }
+        command-cancel-next-up => {
+            root.player-command-cancel-next-up();
+        }
+        command-set-speed(speed) => {
+            root.player-command-set-speed(speed);
+        }
+        command-step-speed(direction) => {
+            root.player-command-step-speed(direction);
+        }
+        command-set-volume(volume) => {
+            root.player-command-set-volume(volume);
+        }
+        command-step-volume(direction) => {
+            root.player-command-step-volume(direction);
+        }
+        command-set-muted(muted) => {
+            root.player-command-set-muted(muted);
+        }
+        command-select-audio(index) => {
+            root.player-command-select-audio(index);
+        }
+        command-select-subtitle(index) => {
+            root.player-command-select-subtitle(index);
         }
     }
 

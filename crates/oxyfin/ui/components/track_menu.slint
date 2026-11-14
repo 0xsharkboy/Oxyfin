@@ -1,0 +1,175 @@
+import { Theme, TrackRow } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { BodyText, CaptionText, LabelText } from "text.slint";
+
+// Floating panel of the player menus; scrolls when its options outgrow `limit`.
+export component MenuPanel inherits Rectangle {
+    in property <length> limit: 400px;
+
+    width: 280px;
+    height: min(content.preferred-height + 2 * Theme.space-sm, root.limit);
+    background: Theme.bg-elevated;
+    border-radius: Theme.radius-lg;
+    border-width: Theme.border-thin;
+    border-color: Theme.border-default;
+    drop-shadow-offset-y: 8px;
+    drop-shadow-blur: 12px;
+    drop-shadow-color: Theme.menu-shadow;
+
+    // Clicks between the options must not reach the player behind the panel.
+    TouchArea { }
+
+    Flickable {
+        x: 0;
+        y: Theme.space-sm;
+        width: parent.width;
+        height: parent.height - 2 * Theme.space-sm;
+        content-width: self.width;
+        content-height: content.preferred-height;
+
+        content := VerticalLayout {
+            width: root.width;
+            alignment: start;
+
+            @children
+        }
+    }
+}
+
+// Section title of a player menu.
+export component MenuHeader inherits HorizontalLayout {
+    in property <string> text;
+
+    padding-left: Theme.space-lg;
+    padding-right: Theme.space-lg;
+    padding-top: Theme.space-sm;
+    padding-bottom: Theme.space-xs;
+
+    LabelText {
+        accessible-role: none;
+        text: root.text;
+        color: Theme.text-muted;
+    }
+}
+
+// Thin line between two menu sections.
+export component MenuDivider inherits Rectangle {
+    height: Theme.border-thin;
+    background: Theme.border-default;
+}
+
+// One choice of a player menu: a check when selected, the label, then muted details.
+export component MenuOption inherits Rectangle {
+    in property <string> label;
+    in property <string> detail;
+    in property <bool> selected;
+    callback chosen();
+
+    accessible-role: list-item;
+    accessible-label: root.detail.is-empty ? root.label : root.label + " " + root.detail;
+    accessible-item-selectable: true;
+    accessible-item-selected: root.selected;
+    accessible-action-default => {
+        root.chosen();
+    }
+
+    height: row.preferred-height;
+    background: root.selected || touch.has-hover ? Theme.bg-hover : transparent;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.chosen();
+        }
+    }
+
+    row := HorizontalLayout {
+        padding-left: Theme.space-lg;
+        padding-right: Theme.space-lg;
+        padding-top: Theme.space-sm;
+        padding-bottom: Theme.space-sm;
+        spacing: Theme.space-md;
+
+        Rectangle {
+            width: 18px;
+            height: 18px;
+
+            if root.selected: Image {
+                source: Icons.check;
+                width: parent.width;
+                height: parent.height;
+                colorize: Theme.accent;
+            }
+        }
+
+        BodyText {
+            accessible-role: none;
+            text: root.label;
+            font-weight: root.selected ? Theme.body-strong-weight : Theme.body-weight;
+            color: root.selected ? Theme.text-primary : Theme.text-secondary;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        if !root.detail.is-empty: CaptionText {
+            accessible-role: none;
+            text: root.detail;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+    }
+}
+
+// Audio and subtitle menu of the player. The subtitle row with index -1 turns subtitles off.
+export component TrackMenu inherits MenuPanel {
+    in property <[TrackRow]> audio;
+    in property <[TrackRow]> subtitles;
+    callback select-audio(index: int);
+    callback select-subtitle(index: int);
+
+    pure function join(first: string, second: string) -> string {
+        if first.is-empty {
+            return second;
+        }
+        if second.is-empty {
+            return first;
+        }
+        first + " · " + second
+    }
+
+    pure function detail(row: TrackRow) -> string {
+        join(join(row.detail, row.forced ? @tr("Forced") : ""), row.external ? @tr("External") : "")
+    }
+
+    accessible-role: list;
+    accessible-label: @tr("Audio and subtitles");
+
+    MenuHeader {
+        text: @tr("AUDIO");
+    }
+
+    for row in root.audio: MenuOption {
+        label: row.label;
+        detail: root.detail(row);
+        selected: row.selected;
+        chosen => {
+            root.select-audio(row.index);
+        }
+    }
+
+    MenuDivider { }
+
+    MenuHeader {
+        text: @tr("SUBTITLES");
+    }
+
+    for row in root.subtitles: MenuOption {
+        label: row.index < 0 ? @tr("Off") : row.label;
+        detail: root.detail(row);
+        selected: row.selected;
+        chosen => {
+            root.select-subtitle(row.index);
+        }
+    }
+}

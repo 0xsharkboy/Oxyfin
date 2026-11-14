@@ -1,0 +1,251 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { IconButton } from "icon_button.slint";
+import { ProgressBar } from "progress_bar.slint";
+import { LabelText } from "text.slint";
+
+// Horizontal slider of the player: the value follows the pointer while dragging and is committed on release.
+export component Scrubber inherits Rectangle {
+    in property <float> value;
+    in property <float> maximum: 1;
+    in property <float> step: 1;
+    in property <string> label;
+    in property <bool> knob;
+    in property <bool> enabled: true;
+    in-out property <bool> dragging;
+    callback committed(value: float);
+    callback stepped(direction: int);
+
+    property <float> drag-value;
+    property <float> shown: root.dragging ? root.drag-value : root.value;
+    property <float> ratio: root.maximum > 0 ? clamp(root.shown / root.maximum, 0, 1) : 0;
+
+    function pick(x: length) -> float {
+        clamp(x / max(root.width, 1px), 0, 1) * root.maximum
+    }
+
+    accessible-role: slider;
+    accessible-label: root.label;
+    accessible-value: round(root.shown);
+    accessible-value-minimum: 0;
+    accessible-value-maximum: root.maximum;
+    accessible-value-step: root.step;
+    accessible-enabled: root.enabled;
+    accessible-action-increment => {
+        root.stepped(1);
+    }
+    accessible-action-decrement => {
+        root.stepped(-1);
+    }
+    accessible-action-set-value(value) => {
+        root.committed(clamp(value.to-float(), 0, root.maximum));
+    }
+
+    height: 14px;
+    opacity: root.enabled ? 1 : Theme.disabled-opacity;
+
+    ProgressBar {
+        accessible-role: none;
+        y: (parent.height - self.height) / 2;
+        width: parent.width;
+        value: root.ratio;
+    }
+
+    if root.knob && root.enabled: Rectangle {
+        x: root.ratio * (parent.width - self.width);
+        width: parent.height;
+        height: parent.height;
+        border-radius: self.width / 2;
+        background: Theme.accent;
+    }
+
+    TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.cancel {
+                root.dragging = false;
+                return;
+            }
+            if event.button != PointerEventButton.left {
+                return;
+            }
+            if event.kind == PointerEventKind.down {
+                root.drag-value = root.pick(self.mouse-x);
+                root.dragging = true;
+            } else if event.kind == PointerEventKind.up && root.dragging {
+                root.dragging = false;
+                root.committed(root.drag-value);
+            }
+        }
+        moved => {
+            if root.dragging {
+                root.drag-value = root.pick(self.mouse-x);
+            }
+        }
+    }
+}
+
+// Bottom bar of the player: seek bar, transport, time, volume, menus and fullscreen.
+export component PlayerControls inherits Rectangle {
+    in property <float> position;
+    in property <float> duration;
+    in property <string> elapsed;
+    in property <string> total;
+    in property <bool> paused;
+    in property <bool> has-next;
+    in property <float> volume;
+    in property <bool> muted;
+    in property <bool> tracks-open;
+    in property <bool> speed-open;
+    in property <bool> fullscreen;
+    in-out property <bool> scrubbing;
+    callback toggle-pause();
+    callback seek(seconds: float);
+    callback skip(direction: int);
+    callback previous();
+    callback next();
+    callback set-volume(volume: float);
+    callback step-volume(direction: int);
+    callback toggle-mute();
+    callback toggle-tracks();
+    callback toggle-speed();
+    callback toggle-fullscreen();
+
+    background: Theme.player-scrim-bottom;
+    height: layout.preferred-height;
+
+    layout := VerticalLayout {
+        padding-top: Theme.space-3xl;
+        padding-bottom: Theme.space-xl;
+        padding-left: Theme.space-2xl;
+        padding-right: Theme.space-2xl;
+        spacing: Theme.space-md;
+
+        Scrubber {
+            label: @tr("Seek");
+            value: root.position;
+            maximum: max(root.duration, 0);
+            step: 10;
+            knob: true;
+            enabled: root.duration > 0;
+            dragging <=> root.scrubbing;
+            committed(value) => {
+                root.seek(value);
+            }
+            stepped(direction) => {
+                root.skip(direction);
+            }
+        }
+
+        HorizontalLayout {
+            spacing: Theme.space-sm;
+            alignment: stretch;
+
+            IconButton {
+                icon: Icons.skip-prev;
+                label: @tr("Previous");
+                clicked => {
+                    root.previous();
+                }
+            }
+
+            IconButton {
+                icon: Icons.rewind-10;
+                label: @tr("Back 10 seconds");
+                clicked => {
+                    root.skip(-1);
+                }
+            }
+
+            IconButton {
+                icon: root.paused ? Icons.play : Icons.pause;
+                label: root.paused ? @tr("Play") : @tr("Pause");
+                clicked => {
+                    root.toggle-pause();
+                }
+            }
+
+            IconButton {
+                icon: Icons.forward-10;
+                label: @tr("Forward 10 seconds");
+                clicked => {
+                    root.skip(1);
+                }
+            }
+
+            IconButton {
+                icon: Icons.skip-next;
+                label: @tr("Next");
+                enabled: root.has-next;
+                clicked => {
+                    root.next();
+                }
+            }
+
+            LabelText {
+                text: @tr("{} / {}", root.elapsed, root.total);
+                vertical-alignment: center;
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            HorizontalLayout {
+                spacing: Theme.space-sm;
+                alignment: center;
+
+                IconButton {
+                    icon: Icons.volume;
+                    label: root.muted ? @tr("Unmute") : @tr("Mute");
+                    icon-color: root.muted ? Theme.text-muted : Theme.text-primary;
+                    clicked => {
+                        root.toggle-mute();
+                    }
+                }
+
+                Scrubber {
+                    width: 80px;
+                    label: @tr("Volume");
+                    value: root.volume;
+                    maximum: 100;
+                    step: 5;
+                    opacity: root.muted ? Theme.disabled-opacity : 1;
+                    committed(value) => {
+                        root.set-volume(round(value));
+                    }
+                    stepped(direction) => {
+                        root.step-volume(direction);
+                    }
+                }
+            }
+
+            IconButton {
+                icon: Icons.subtitles;
+                label: @tr("Audio and subtitles");
+                active: root.tracks-open;
+                clicked => {
+                    root.toggle-tracks();
+                }
+            }
+
+            IconButton {
+                icon: Icons.settings;
+                label: @tr("Playback speed");
+                active: root.speed-open;
+                clicked => {
+                    root.toggle-speed();
+                }
+            }
+
+            IconButton {
+                icon: Icons.fullscreen;
+                label: root.fullscreen ? @tr("Exit fullscreen") : @tr("Fullscreen");
+                clicked => {
+                    root.toggle-fullscreen();
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,23 @@
+import { MenuPanel, MenuHeader, MenuOption } from "track_menu.slint";
+
+// Playback speed menu of the player; the selection follows the speed the player reports.
+export component SpeedMenu inherits MenuPanel {
+    in property <[float]> speeds;
+    in property <float> speed;
+    callback select(speed: float);
+
+    accessible-role: list;
+    accessible-label: @tr("Playback speed");
+
+    MenuHeader {
+        text: @tr("SPEED");
+    }
+
+    for value in root.speeds: MenuOption {
+        label: value == 1 ? @tr("Normal") : @tr("{}×", value);
+        selected: abs(value - root.speed) < 0.001;
+        chosen => {
+            root.select(value);
+        }
+    }
+}

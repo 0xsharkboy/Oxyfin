@@ -3,8 +3,8 @@
 use std::time::Duration;
 
 use oxyfin_core::{
-    AudioOption, CoreError, ImageSize, ItemKind, ItemSummary, PlaybackError, PlaybackTitle,
-    SubtitleOption,
+    AudioOption, CoreError, Episode, ImageSize, ItemKind, ItemSummary, PlaybackError,
+    PlaybackTitle, SubtitleOption,
 };
 use slint::SharedString;
 
@@ -167,6 +167,17 @@ pub fn playback_title(title: &PlaybackTitle) -> (SharedString, SharedString) {
     }
 }
 
+/// Title of the next episode toast: `S01E02 · episode title`, or the title alone.
+pub fn next_up_title(episode: &Episode) -> SharedString {
+    join_detail(
+        episode
+            .label
+            .clone()
+            .into_iter()
+            .chain(std::iter::once(episode.title.clone())),
+    )
+}
+
 /// Name this device registers with the server.
 pub fn device_name(hostname: Option<&str>, device_id: &str) -> String {
     match hostname.map(str::trim).filter(|name| !name.is_empty()) {
@@ -254,6 +265,32 @@ mod tests {
         for (error, expected) in cases {
             assert_eq!(playback_error_message(&error), expected);
         }
+    }
+
+    fn episode(label: Option<&str>) -> Episode {
+        Episode {
+            id: "e2".into(),
+            series_id: "s".into(),
+            series_name: Some("Series".into()),
+            season_id: None,
+            title: "The Return".into(),
+            season_number: Some(2),
+            number: Some(6),
+            label: label.map(str::to_owned),
+            overview: None,
+            thumb: None,
+            duration: None,
+            user: UserState::default(),
+        }
+    }
+
+    #[test]
+    fn next_up_title_leads_with_the_episode_label() {
+        assert_eq!(
+            next_up_title(&episode(Some("S02E06"))),
+            "S02E06 \u{b7} The Return"
+        );
+        assert_eq!(next_up_title(&episode(None)), "The Return");
     }
 
     #[test]
