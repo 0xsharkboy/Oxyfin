@@ -71,6 +71,31 @@ async fn new_cache_reads_disk() {
 }
 
 #[tokio::test]
+async fn empty_disk_file_is_refetched() {
+    let mock = MockServer::start().await;
+    serve(&mock, "aaa", b"pixels").await;
+    let dir = TempDir::new().unwrap();
+    cache(&mock, &dir, 1024)
+        .get(&image("aaa", "t1"), SIZE)
+        .await
+        .unwrap();
+    let images = Paths::under(dir.path()).cache_dir.join("images");
+    let files: Vec<_> = std::fs::read_dir(&images)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    assert_eq!(files.len(), 1, "{files:?}");
+    std::fs::write(&files[0], b"").unwrap();
+    let bytes = cache(&mock, &dir, 1024)
+        .get(&image("aaa", "t1"), SIZE)
+        .await
+        .unwrap();
+    assert_eq!(&*bytes, b"pixels");
+    assert_eq!(requests(&mock).await, 2);
+    assert_eq!(std::fs::read(&files[0]).unwrap(), b"pixels");
+}
+
+#[tokio::test]
 async fn budget_evicts_oldest() {
     let mock = MockServer::start().await;
     for item in ["aaa", "bbb", "ccc"] {
