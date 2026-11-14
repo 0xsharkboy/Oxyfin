@@ -83,6 +83,16 @@ export component PlayerScreen inherits Rectangle {
         }
     }
 
+    // Slint drops the focus of an element that disappears, which would silence the shortcuts:
+    // the player buttons never take focus on click, and the shortcuts take it back when a
+    // control reached with Tab hides.
+    property <bool> toast-visible: root.next-up.visible;
+    changed toast-visible => {
+        if !self.toast-visible {
+            keys.focus();
+        }
+    }
+
     accessible-role: groupbox;
     accessible-label: @tr("Player");
 
@@ -94,6 +104,7 @@ export component PlayerScreen inherits Rectangle {
         running: root.awake && !root.paused && root.menu == PlayerMenu.none && !root.scrubbing && !root.loading && !root.has-error;
         triggered => {
             root.awake = false;
+            keys.focus();
             if surface.has-hover {
                 root.cursor-hidden(surface.mouse-x, surface.mouse-y);
             }
@@ -205,6 +216,7 @@ export component PlayerScreen inherits Rectangle {
                     VerticalLayout {
                         alignment: start;
                         IconButton {
+                            focus-on-click: false;
                             icon: Icons.arrow-left;
                             label: @tr("Back");
                             clicked => {

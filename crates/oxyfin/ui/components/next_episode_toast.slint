@@ -66,6 +66,8 @@ export component NextEpisodeToast inherits Rectangle {
                 alignment: start;
 
                 Button {
+
+                    focus-on-click: false;
                     label: @tr("Play now");
                     icon: Icons.play;
                     clicked => {
@@ -74,6 +76,8 @@ export component NextEpisodeToast inherits Rectangle {
                 }
 
                 Button {
+
+                    focus-on-click: false;
                     label: @tr("Cancel");
                     style: ButtonStyle.ghost;
                     clicked => {

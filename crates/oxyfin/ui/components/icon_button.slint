@@ -5,6 +5,8 @@ export component IconButton inherits Rectangle {
     in property <image> icon;
     in property <string> label;
     in property <bool> enabled: true;
+    // False where a click must leave the keyboard focus where it is.
+    in property <bool> focus-on-click: true;
     // Highlighted while what it opens is shown.
     in property <bool> active;
     in property <color> icon-color: Theme.text-primary;
@@ -42,6 +44,7 @@ export component IconButton inherits Rectangle {
 
     focus := FocusScope {
         enabled: root.enabled;
+        focus-on-click: root.focus-on-click;
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " {
                 root.activate();

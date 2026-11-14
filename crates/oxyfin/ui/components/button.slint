@@ -9,6 +9,8 @@ export component Button inherits Rectangle {
     in property <image> icon;
     in property <ButtonStyle> style: ButtonStyle.primary;
     in property <bool> enabled: true;
+    // False where a click must leave the keyboard focus where it is.
+    in property <bool> focus-on-click: true;
     callback clicked();
 
     property <color> foreground: style == ButtonStyle.primary ? Theme.text-on-accent : Theme.text-primary;
@@ -43,6 +45,7 @@ export component Button inherits Rectangle {
 
     focus := FocusScope {
         enabled: root.enabled;
+        focus-on-click: root.focus-on-click;
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " {
                 root.activate();
