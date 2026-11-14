@@ -78,6 +78,11 @@ fn kinds_of(kind: LibraryKind) -> Vec<BaseItemKind> {
     match kind {
         LibraryKind::Movies => vec![BaseItemKind::Movie],
         LibraryKind::Shows => vec![BaseItemKind::Series],
+        LibraryKind::Mixed => vec![
+            BaseItemKind::Movie,
+            BaseItemKind::Series,
+            BaseItemKind::Video,
+        ],
         LibraryKind::Other => vec![BaseItemKind::Movie, BaseItemKind::Series],
     }
 }
@@ -88,16 +93,21 @@ impl Catalog {
         Self { session }
     }
 
-    /// Lists the movie and show libraries of the user.
+    /// Lists the movie, show, mixed and home video libraries of the user.
     ///
-    /// Other views (music, live TV, playlists, untyped) are left out.
+    /// Other views (music, live TV, playlists, box sets) are left out.
     pub async fn libraries(&self) -> Result<Vec<Library>> {
         let views = self.session.user_views().await?;
         Ok(views
             .items
             .iter()
             .map(Library::from_dto)
-            .filter(|library| matches!(library.kind, LibraryKind::Movies | LibraryKind::Shows))
+            .filter(|library| {
+                matches!(
+                    library.kind,
+                    LibraryKind::Movies | LibraryKind::Shows | LibraryKind::Mixed
+                )
+            })
             .collect())
     }
 
@@ -131,7 +141,7 @@ impl Catalog {
             .cloned()
     }
 
-    /// Lists movies and series of a library, or the favorites.
+    /// Lists the items of a library (movies, series and, for mixed libraries, videos), or the favorites.
     pub async fn browse(&self, query: &BrowseQuery) -> Result<Page<ItemSummary>> {
         let mut items = ItemsQuery {
             recursive: true,

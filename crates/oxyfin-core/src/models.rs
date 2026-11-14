@@ -8,6 +8,8 @@ use std::time::Duration;
 pub enum ItemKind {
     /// A movie.
     Movie,
+    /// A standalone video: a home video or a loose file of a mixed library.
+    Video,
     /// A TV series.
     Series,
     /// An episode of a series.
@@ -112,7 +114,7 @@ fn duration(dto: &BaseItemDto) -> Option<Duration> {
     dto.run_time_ticks.map(|ticks| ticks.to_duration())
 }
 
-/// Compact description of a movie, series or episode, for lists and cards.
+/// Compact description of a movie, video, series or episode, for lists and cards.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ItemSummary {
     /// Identifier of the item.
@@ -146,6 +148,7 @@ impl ItemSummary {
     pub fn from_dto(dto: &BaseItemDto) -> Option<ItemSummary> {
         let kind = match dto.r#type {
             BaseItemKind::Movie => ItemKind::Movie,
+            BaseItemKind::Video => ItemKind::Video,
             BaseItemKind::Series => ItemKind::Series,
             BaseItemKind::Episode => ItemKind::Episode,
             _ => return None,
@@ -206,7 +209,7 @@ fn cast(dto: &BaseItemDto) -> Vec<Person> {
     dto.people.iter().map(Person::from_dto).collect()
 }
 
-/// Full description of a movie.
+/// Full description of a movie or a standalone video.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MovieDetails {
     /// Summary shown in lists.
@@ -222,9 +225,10 @@ pub struct MovieDetails {
 }
 
 impl MovieDetails {
-    /// Converts a DTO; returns `None` when it is not a movie.
+    /// Converts a DTO; returns `None` when it is neither a movie nor a standalone video.
     pub fn from_dto(dto: &BaseItemDto) -> Option<Self> {
-        let summary = ItemSummary::from_dto(dto).filter(|s| s.kind == ItemKind::Movie)?;
+        let summary = ItemSummary::from_dto(dto)
+            .filter(|s| matches!(s.kind, ItemKind::Movie | ItemKind::Video))?;
         let can_resume = summary.user.can_resume();
         Some(Self {
             summary,
@@ -367,7 +371,9 @@ pub enum LibraryKind {
     Movies,
     /// TV shows.
     Shows,
-    /// Anything else.
+    /// Movies, shows and videos together: home videos and libraries without a declared type.
+    Mixed,
+    /// Any other content, such as music.
     Other,
 }
 
@@ -388,6 +394,7 @@ impl Library {
         let kind = match dto.collection_type.as_deref() {
             Some("movies") => LibraryKind::Movies,
             Some("tvshows") => LibraryKind::Shows,
+            None | Some("mixed" | "homevideos") => LibraryKind::Mixed,
             _ => LibraryKind::Other,
         };
         Self {
@@ -455,6 +462,35 @@ mod tests {
         assert_eq!(summary.thumb.unwrap().tag, "thumbtag");
     }
 
+    #[test]
+    fn video_is_a_summary_and_has_movie_details() {
+        let dto = BaseItemDto {
+            r#type: BaseItemKind::Video,
+            name: Some("Holiday".to_owned()),
+            ..BaseItemDto::default()
+        };
+        let summary = ItemSummary::from_dto(&dto).unwrap();
+        assert_eq!(summary.kind, ItemKind::Video);
+        assert_eq!(
+            MovieDetails::from_dto(&dto).unwrap().summary.title,
+            "Holiday"
+        );
+    }
+
+    #[test]
+    fn collection_types_map_to_library_kinds() {
+        let kind = |collection: Option<&str>| {
+            Library::from_dto(&BaseItemDto {
+                collection_type: collection.map(str::to_owned),
+                ..BaseItemDto::default()
+            })
+            .kind
+        };
+        assert_eq!(kind(None), LibraryKind::Mixed);
+        assert_eq!(kind(Some("mixed")), LibraryKind::Mixed);
+        assert_eq!(kind(Some("homevideos")), LibraryKind::Mixed);
+        assert_eq!(kind(Some("music")), LibraryKind::Other);
+    }
     #[test]
     fn unknown_kind_is_skipped() {
         let dto = BaseItemDto {

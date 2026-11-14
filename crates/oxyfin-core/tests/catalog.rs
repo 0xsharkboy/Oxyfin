@@ -59,7 +59,7 @@ async fn libraries_lists_views() {
 }
 
 #[tokio::test]
-async fn libraries_keep_movies_and_shows_only() {
+async fn libraries_keep_video_libraries() {
     let mock = MockServer::start().await;
     let view = |id: &str, collection: Option<&str>| {
         let mut view = json!({"Id": id, "Name": id, "Type": "CollectionFolder"});
@@ -75,17 +75,27 @@ async fn libraries_keep_movies_and_shows_only() {
         view("livetv", Some("livetv")),
         view("playlists", Some("playlists")),
         view("untyped", None),
+        view("home", Some("homevideos")),
+        view("boxsets", Some("boxsets")),
     ];
     mount(
         &mock,
         "GET",
         "/UserViews",
-        json!({"Items": items, "TotalRecordCount": 6, "StartIndex": 0}),
+        json!({"Items": items, "TotalRecordCount": 8, "StartIndex": 0}),
     )
     .await;
     let libraries = catalog(&mock).libraries().await.unwrap();
     let kinds: Vec<_> = libraries.iter().map(|library| library.kind).collect();
-    assert_eq!(kinds, [LibraryKind::Movies, LibraryKind::Shows]);
+    assert_eq!(
+        kinds,
+        [
+            LibraryKind::Movies,
+            LibraryKind::Shows,
+            LibraryKind::Mixed,
+            LibraryKind::Mixed
+        ]
+    );
 }
 
 #[tokio::test]
@@ -449,4 +459,22 @@ async fn catalog_401_is_session_expired() {
         .await;
     let error = catalog(&mock).libraries().await.unwrap_err();
     assert_eq!(error, CoreError::SessionExpired);
+}
+
+#[tokio::test]
+async fn browse_mixed_sends_movie_series_and_video_kinds() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .and(query_param("parentId", "lib3"))
+        .and(query_param("includeItemTypes", "Movie,Series,Video"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("items_movies")))
+        .mount(&mock)
+        .await;
+    let q = query(BrowseSource::Library {
+        id: ItemId::from("lib3"),
+        kind: LibraryKind::Mixed,
+    });
+    let page = catalog(&mock).browse(&q).await.unwrap();
+    assert_eq!(page.items.len(), 1);
 }
