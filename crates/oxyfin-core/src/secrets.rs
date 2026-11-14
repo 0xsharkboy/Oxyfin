@@ -62,6 +62,8 @@ impl SecretStore for KeyringStore {
 }
 
 /// Stores tokens in `data_dir/tokens.json`, readable by the owner only on Unix.
+///
+/// An unreadable file is moved to `tokens.json.bad` and treated as empty.
 #[derive(Debug)]
 pub struct FileStore {
     file: PathBuf,
@@ -83,7 +85,14 @@ impl FileStore {
 
     fn read(&self) -> Result<HashMap<String, String>> {
         match fs::read(&self.file) {
-            Ok(bytes) => serde_json::from_slice(&bytes).map_err(storage),
+            Ok(bytes) => match serde_json::from_slice(&bytes) {
+                Ok(tokens) => Ok(tokens),
+                Err(_) => {
+                    fs::rename(&self.file, self.file.with_extension("json.bad"))
+                        .map_err(storage)?;
+                    Ok(HashMap::new())
+                }
+            },
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(HashMap::new()),
             Err(error) => Err(storage(error)),
         }
@@ -372,6 +381,18 @@ mod tests {
         assert_eq!(store.get("a").unwrap(), None);
         assert_eq!(store.get("b").unwrap().as_deref(), Some("tb"));
         store.delete("missing").unwrap();
+    }
+
+    #[test]
+    fn corrupt_file_is_moved_aside() {
+        let (_dir, paths) = temp();
+        fs::create_dir_all(&paths.data_dir).unwrap();
+        fs::write(paths.data_dir.join(FILE_NAME), b"{not json").unwrap();
+        let store = FileStore::new(&paths);
+        assert_eq!(store.get("a").unwrap(), None);
+        assert!(paths.data_dir.join("tokens.json.bad").exists());
+        store.set("a", "t").unwrap();
+        assert_eq!(store.get("a").unwrap().as_deref(), Some("t"));
     }
 
     #[test]
