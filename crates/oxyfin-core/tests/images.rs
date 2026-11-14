@@ -329,3 +329,39 @@ async fn going_over_the_disk_budget_trims_to_ninety_percent() {
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     }
 }
+
+/// Writes a `.x.tmp` file an hour old in the image directory; returns its path.
+#[allow(clippy::unwrap_used)]
+fn stale_tmp(dir: &TempDir) -> std::path::PathBuf {
+    let images = Paths::under(dir.path()).cache_dir.join("images");
+    std::fs::create_dir_all(&images).unwrap();
+    let stale = images.join(".x.tmp");
+    std::fs::write(&stale, b"partial").unwrap();
+    age(&stale, 3600);
+    stale
+}
+
+async fn wait_removed(path: &std::path::Path) {
+    let start = std::time::Instant::now();
+    while path.exists() {
+        assert!(start.elapsed() < common::DEADLINE, "{path:?} still there");
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+}
+
+#[test]
+fn cache_built_outside_a_runtime_trims_on_first_get() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let mock = runtime.block_on(async {
+        let mock = MockServer::start().await;
+        serve(&mock, "aaa", b"pixels").await;
+        mock
+    });
+    let dir = TempDir::new().unwrap();
+    let stale = stale_tmp(&dir);
+    let cache = cache(&mock, &dir, 1024);
+    runtime.block_on(async {
+        cache.get(&image("aaa", "t"), SIZE).await.unwrap();
+        wait_removed(&stale).await;
+    });
+}
