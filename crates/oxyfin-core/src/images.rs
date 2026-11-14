@@ -1,8 +1,10 @@
-//! Image cache: an in-memory LRU bounded in bytes, backed by a disk cache.
+//! Image cache: an in-memory LRU bounded in bytes, backed by a bounded disk cache.
 
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
+use std::time::{Duration, SystemTime};
 
 use oxyfin_api::{ImageRequest, Session};
 
@@ -16,6 +18,12 @@ pub struct ImageSize {
     /// Maximum height.
     pub max_height: u32,
 }
+
+/// Default disk budget of the image cache: 500 MB.
+pub const DEFAULT_DISK_BUDGET: u64 = 500 * 1024 * 1024;
+
+/// Temporary files younger than this may belong to a write in progress.
+const STALE_TMP_AGE: Duration = Duration::from_secs(60);
 
 #[derive(Default)]
 struct Memory {
@@ -54,26 +62,137 @@ impl Memory {
     }
 }
 
+struct Trimmer {
+    dir: PathBuf,
+    budget: u64,
+    running: AtomicBool,
+    pending: AtomicBool,
+    pass: tokio::sync::Mutex<()>,
+}
+
+impl Trimmer {
+    fn request(self: &Arc<Self>) {
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        self.pending.store(true, Ordering::SeqCst);
+        if self.running.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let this = self.clone();
+        handle.spawn(async move {
+            loop {
+                while this.pending.swap(false, Ordering::SeqCst) {
+                    this.run().await;
+                }
+                this.running.store(false, Ordering::SeqCst);
+                if !this.pending.load(Ordering::SeqCst) || this.running.swap(true, Ordering::SeqCst)
+                {
+                    break;
+                }
+            }
+        });
+    }
+
+    async fn run(&self) {
+        let _guard = self.pass.lock().await;
+        let _ = self.trim().await;
+    }
+
+    async fn trim(&self) -> std::io::Result<()> {
+        let mut entries = match tokio::fs::read_dir(&self.dir).await {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error),
+        };
+        let now = SystemTime::now();
+        let mut files = Vec::new();
+        let mut total = 0u64;
+        while let Some(entry) = entries.next_entry().await? {
+            let Ok(meta) = entry.metadata().await else {
+                continue;
+            };
+            if !meta.is_file() {
+                continue;
+            }
+            let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with('.') && name.ends_with(".tmp") {
+                let age = now.duration_since(modified).unwrap_or_default();
+                if age >= STALE_TMP_AGE {
+                    let _ = tokio::fs::remove_file(entry.path()).await;
+                }
+                continue;
+            }
+            total += meta.len();
+            files.push((modified, entry.path(), meta.len()));
+        }
+        files.sort();
+        for (_, path, len) in files {
+            if total <= self.budget {
+                break;
+            }
+            if tokio::fs::remove_file(&path).await.is_ok() {
+                total -= len;
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Fetches item images, keeping them in memory and on disk.
 ///
 /// Returns the raw encoded bytes; decoding is left to the UI.
+///
+/// The disk part is trimmed to a byte budget in a background task, at
+/// construction and after each disk write, so `get` never waits for it. At most
+/// one trim runs at a time and a request made while one runs schedules one more
+/// pass. Files go oldest first by modification time, which is the write order:
+/// reading a file does not refresh it. Orphaned `.*.tmp` files older than a
+/// minute are removed by the same pass.
 pub struct ImageCache {
     session: Session,
     dir: PathBuf,
     budget: usize,
     memory: Mutex<Memory>,
+    trimmer: Arc<Trimmer>,
 }
 
 impl ImageCache {
-    /// A cache storing files under `paths.cache_dir` and keeping at most
-    /// `memory_budget_bytes` of images in memory.
-    pub fn new(session: Session, paths: &Paths, memory_budget_bytes: usize) -> Self {
+    /// A cache storing files under `paths.cache_dir`, keeping at most
+    /// `memory_budget_bytes` of images in memory and `disk_budget_bytes` on disk
+    /// (see [`DEFAULT_DISK_BUDGET`]).
+    ///
+    /// Starts a background trim of the disk cache when called inside a Tokio runtime.
+    pub fn new(
+        session: Session,
+        paths: &Paths,
+        memory_budget_bytes: usize,
+        disk_budget_bytes: u64,
+    ) -> Self {
+        let dir = paths.cache_dir.join("images");
+        let trimmer = Arc::new(Trimmer {
+            dir: dir.clone(),
+            budget: disk_budget_bytes,
+            running: AtomicBool::new(false),
+            pending: AtomicBool::new(false),
+            pass: tokio::sync::Mutex::new(()),
+        });
+        trimmer.request();
         Self {
             session,
-            dir: paths.cache_dir.join("images"),
+            dir,
             budget: memory_budget_bytes,
             memory: Mutex::new(Memory::default()),
+            trimmer,
         }
+    }
+
+    /// Runs a trim pass and returns when it is done, for deterministic tests.
+    #[doc(hidden)]
+    pub async fn trim(&self) {
+        self.trimmer.run().await;
     }
 
     /// Returns the bytes of `image` scaled to fit `size`, from memory, disk or the server.
@@ -106,7 +225,9 @@ impl ImageCache {
     }
 
     async fn write_disk(&self, name: &str, bytes: &[u8]) {
-        let _ = self.try_write_disk(name, bytes).await;
+        if self.try_write_disk(name, bytes).await.is_ok() {
+            self.trimmer.request();
+        }
     }
 
     async fn try_write_disk(&self, name: &str, bytes: &[u8]) -> std::io::Result<()> {
