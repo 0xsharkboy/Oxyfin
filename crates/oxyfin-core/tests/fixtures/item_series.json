@@ -1,0 +1,60 @@
+{
+  "Name": "Test Show",
+  "ServerId": "87fcca6823684ae692e5c60378bf931d",
+  "Id": "9ea196e7ccc3ae17d2c3f75c3ab34406",
+  "Etag": "47f8763f26c7e1a2ebc447f3027ea1c3",
+  "DateCreated": "2026-11-13T00:37:02.2701538Z",
+  "DateLastMediaAdded": "2026-11-13T00:36:47.5550839Z",
+  "CanDelete": true,
+  "CanDownload": false,
+  "SortName": "test show",
+  "ExternalUrls": [],
+  "Path": "/media/shows/Test Show",
+  "EnableMediaSourceDisplay": true,
+  "ChannelId": null,
+  "Overview": "A generated test show.",
+  "Taglines": [],
+  "Genres": [
+    "Animation"
+  ],
+  "PlayAccess": "Full",
+  "ProductionYear": 2021,
+  "RemoteTrailers": [],
+  "ProviderIds": {},
+  "IsFolder": true,
+  "ParentId": "4580dc8f6d27ce7af26b09d3e103412f",
+  "Type": "Series",
+  "People": [],
+  "Studios": [],
+  "GenreItems": [
+    {
+      "Name": "Animation",
+      "Id": "074229225b7254292f131f9f49f8dcd6"
+    }
+  ],
+  "LocalTrailerCount": 0,
+  "UserData": {
+    "PlayedPercentage": 25,
+    "UnplayedItemCount": 3,
+    "PlaybackPositionTicks": 0,
+    "PlayCount": 0,
+    "IsFavorite": false,
+    "Played": false,
+    "Key": "9ea196e7-ccc3-ae17-d2c3-f75c3ab34406",
+    "ItemId": "9ea196e7ccc3ae17d2c3f75c3ab34406"
+  },
+  "RecursiveItemCount": 4,
+  "ChildCount": 2,
+  "SpecialFeatureCount": 0,
+  "DisplayPreferencesId": "f63033ff6886ecc7083a696cbeced1b0",
+  "AirDays": [],
+  "Tags": [],
+  "ImageTags": {},
+  "BackdropImageTags": [],
+  "ImageBlurHashes": {},
+  "Chapters": [],
+  "LocationType": "FileSystem",
+  "MediaType": "Unknown",
+  "LockedFields": [],
+  "LockData": false
+}
