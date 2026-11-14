@@ -37,7 +37,23 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let window = AppWindow::new()?;
     let app = App::new(&window, runtime.handle().clone(), paths, vault)?;
     #[cfg(feature = "mpv")]
-    oxyfin::video::install(&window, app.video_source(), runtime.handle().clone())?;
+    {
+        let weak = std::rc::Rc::downgrade(&app);
+        oxyfin::video::install(
+            &window,
+            app.video_source(),
+            runtime.handle().clone(),
+            move |id| {
+                let weak = weak.clone();
+                // Leaves the rendering notifier before touching the window.
+                slint::Timer::single_shot(Duration::ZERO, move || {
+                    if let Some(app) = weak.upgrade() {
+                        app.video_failed(id);
+                    }
+                });
+            },
+        )?;
+    }
     window.show()?;
     slint::run_event_loop_until_quit()?;
     if let Err(error) = window.hide() {
