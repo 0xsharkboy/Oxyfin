@@ -97,6 +97,12 @@ fn series_poster(dto: &BaseItemDto) -> Option<ImageRef> {
     )
 }
 
+fn episode_thumb(dto: &BaseItemDto) -> Option<ImageRef> {
+    own_image(dto, ImageType::Primary)
+        .or_else(|| own_image(dto, ImageType::Thumb))
+        .or_else(|| backdrop(dto))
+}
+
 fn duration(dto: &BaseItemDto) -> Option<Duration> {
     dto.run_time_ticks.map(|ticks| ticks.to_duration())
 }
@@ -141,12 +147,12 @@ impl ItemSummary {
         };
         let is_episode = kind == ItemKind::Episode;
         let poster = if is_episode {
-            series_poster(dto)
+            series_poster(dto).or_else(|| own_image(dto, ImageType::Primary))
         } else {
             own_image(dto, ImageType::Primary)
         };
         let thumb = if is_episode {
-            own_image(dto, ImageType::Primary)
+            episode_thumb(dto)
         } else {
             own_image(dto, ImageType::Thumb)
         };
@@ -263,8 +269,8 @@ pub struct Episode {
     pub id: ItemId,
     /// Series the episode belongs to.
     pub series_id: ItemId,
-    /// Name of the series.
-    pub series_name: String,
+    /// Name of the series, when the server reports it.
+    pub series_name: Option<String>,
     /// Season the episode belongs to.
     pub season_id: Option<ItemId>,
     /// Display title.
@@ -294,14 +300,14 @@ impl Episode {
         Some(Self {
             id: dto.id.clone(),
             series_id: dto.series_id.clone()?,
-            series_name: dto.series_name.clone()?,
+            series_name: dto.series_name.clone(),
             season_id: dto.season_id.clone(),
             title: dto.name.clone().unwrap_or_default(),
             season_number: dto.parent_index_number,
             number: dto.index_number,
             label: episode_label(dto),
             overview: dto.overview.clone(),
-            thumb: own_image(dto, ImageType::Primary),
+            thumb: episode_thumb(dto),
             duration: duration(dto),
             user: UserState::from_dto(dto.user_data.as_ref()),
         })
@@ -503,10 +509,47 @@ mod tests {
     }
 
     #[test]
-    fn episode_without_series_is_skipped() {
+    fn episode_without_series_name_is_kept() {
+        let mut dto = item(include_str!("../tests/fixtures/item_episode.json"));
+        dto.series_name = None;
+        let episode = Episode::from_dto(&dto).unwrap();
+        assert_eq!(episode.series_name, None);
+    }
+
+    #[test]
+    fn episode_without_series_id_is_skipped() {
         let mut dto = item(include_str!("../tests/fixtures/item_episode.json"));
         dto.series_id = None;
         assert!(Episode::from_dto(&dto).is_none());
+    }
+
+    #[test]
+    fn episode_images_fall_back_in_order() {
+        let mut dto = item(include_str!("../tests/fixtures/item_episode.json"));
+        // The captured fixture carries no image tags at all.
+        assert!(Episode::from_dto(&dto).unwrap().thumb.is_none());
+        assert!(ItemSummary::from_dto(&dto).unwrap().poster.is_none());
+
+        dto.parent_backdrop_item_id = Some(ItemId::from("parent"));
+        dto.parent_backdrop_image_tags = vec!["bd".to_owned()];
+        let thumb = Episode::from_dto(&dto).unwrap().thumb.unwrap();
+        assert_eq!(
+            (thumb.image_type, thumb.tag.as_str()),
+            (ImageType::Backdrop, "bd")
+        );
+
+        dto.image_tags.insert(ImageType::Thumb, "th".to_owned());
+        let thumb = Episode::from_dto(&dto).unwrap().thumb.unwrap();
+        assert_eq!(thumb.tag, "th");
+
+        dto.image_tags.insert(ImageType::Primary, "pr".to_owned());
+        let thumb = Episode::from_dto(&dto).unwrap().thumb.unwrap();
+        assert_eq!(thumb.tag, "pr");
+        let poster = ItemSummary::from_dto(&dto).unwrap().poster.unwrap();
+        assert_eq!(
+            (poster.item_id, poster.tag.as_str()),
+            (dto.id.clone(), "pr")
+        );
     }
 
     #[test]
