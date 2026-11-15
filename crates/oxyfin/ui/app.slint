@@ -123,6 +123,7 @@ export component AppWindow inherits Window {
     in property <int> series-season: -1;
     in property <[EpisodeData]> series-episodes;
     in property <bool> series-episodes-loading;
+    in property <bool> series-episodes-stale;
     in property <string> series-episodes-error;
     callback series-play();
     callback series-play-episode(id: string);
@@ -377,6 +378,7 @@ export component AppWindow inherits Window {
         season: root.series-season;
         episodes: root.series-episodes;
         episodes-loading: root.series-episodes-loading;
+        episodes-stale: root.series-episodes-stale;
         episodes-error: root.series-episodes-error;
         play => {
             root.series-play();

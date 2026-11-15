@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-15 14:29+0000\n"
+"POT-Creation-Date: 2026-11-15 15:13+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -543,39 +543,39 @@ msgctxt "SearchScreen"
 msgid "Search movies and shows"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:73
+#: crates/oxyfin/ui/screens/series.slint:75
 msgctxt "SeriesScreen"
 msgid "Series"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:135
+#: crates/oxyfin/ui/screens/series.slint:137
 msgctxt "SeriesScreen"
 msgid "Resume {}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:135
+#: crates/oxyfin/ui/screens/series.slint:137
 msgctxt "SeriesScreen"
 msgid "Play {}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:135
+#: crates/oxyfin/ui/screens/series.slint:137
 msgctxt "SeriesScreen"
 msgid "Play"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:177
-#: crates/oxyfin/ui/screens/series.slint:177
+#: crates/oxyfin/ui/screens/series.slint:187
+#: crates/oxyfin/ui/screens/series.slint:187
 msgctxt "SeriesScreen"
 msgid "Loading"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:189
-#: crates/oxyfin/ui/screens/series.slint:189
+#: crates/oxyfin/ui/screens/series.slint:199
+#: crates/oxyfin/ui/screens/series.slint:199
 msgctxt "SeriesScreen"
 msgid "Retry"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:209
+#: crates/oxyfin/ui/screens/series.slint:219
 msgctxt "SeriesScreen"
 msgid "Back"
 msgstr ""
@@ -683,94 +683,94 @@ msgctxt "StartingScreen"
 msgid "Starting"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:140
+#: crates/oxyfin/ui/theme.slint:141
 msgctxt "Messages"
 msgid "Server found (Jellyfin {})"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:142
+#: crates/oxyfin/ui/theme.slint:143
 msgctxt "Messages"
 msgid "Server found: {} (Jellyfin {})"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:148
+#: crates/oxyfin/ui/theme.slint:149
 msgctxt "Messages"
 msgid "Cannot reach the server. Check the address and your connection."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:151
+#: crates/oxyfin/ui/theme.slint:152
 msgctxt "Messages"
 msgid "This server address is not valid."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:154
+#: crates/oxyfin/ui/theme.slint:155
 msgctxt "Messages"
 msgid "This Jellyfin version is not supported (installed / required: {})."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:157
+#: crates/oxyfin/ui/theme.slint:158
 msgctxt "Messages"
 msgid "Incorrect username or password."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:160
+#: crates/oxyfin/ui/theme.slint:161
 msgctxt "Messages"
 msgid "Quick Connect is disabled on this server."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:163
+#: crates/oxyfin/ui/theme.slint:164
 msgctxt "Messages"
 msgid "The Quick Connect code has expired."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:166
+#: crates/oxyfin/ui/theme.slint:167
 msgctxt "Messages"
 msgid "The server ran into an error. Please try again later."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:169
+#: crates/oxyfin/ui/theme.slint:170
 msgctxt "Messages"
 msgid "The server sent a response Oxyfin does not understand."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:172
+#: crates/oxyfin/ui/theme.slint:173
 msgctxt "Messages"
 msgid "Oxyfin could not read or save its settings."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:175
+#: crates/oxyfin/ui/theme.slint:176
 msgctxt "Messages"
 msgid "Your session has expired. Please sign in again."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:178
+#: crates/oxyfin/ui/theme.slint:179
 msgctxt "Messages"
 msgid ""
 "The system keyring is unavailable, so your sign-in token is stored in a file "
 "only you can read."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:181
+#: crates/oxyfin/ui/theme.slint:182
 msgctxt "Messages"
 msgid "Oxyfin cannot play this item directly."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:184
+#: crates/oxyfin/ui/theme.slint:185
 msgctxt "Messages"
 msgid "There is nothing left to play in this series."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:187
+#: crates/oxyfin/ui/theme.slint:188
 msgctxt "Messages"
 msgid "This item could not be loaded."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:190
+#: crates/oxyfin/ui/theme.slint:191
 msgctxt "Messages"
 msgid "The player could not complete that action."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:193
+#: crates/oxyfin/ui/theme.slint:194
 msgctxt "Messages"
 msgid "Playback is not available in this build of Oxyfin."
 msgstr ""

@@ -61,7 +61,7 @@ export component EpisodeRow inherits Rectangle {
         spacing: Theme.space-lg;
 
         VerticalLayout {
-            width: Theme.space-3xl;
+            width: Theme.space-2xl;
             alignment: center;
 
             HeadingText {
@@ -94,7 +94,7 @@ export component EpisodeRow inherits Rectangle {
             }
 
             if root.status == CardStatus.watched: Rectangle {
-                x: parent.width - Theme.space-md - self.width;
+                x: parent.width - Theme.space-sm - self.width;
                 y: Theme.space-sm;
                 width: 16px + 2 * Theme.space-xs;
                 height: self.width;
@@ -112,7 +112,7 @@ export component EpisodeRow inherits Rectangle {
 
         VerticalLayout {
             alignment: center;
-            spacing: Theme.space-xs;
+            spacing: Theme.episode-text-gap;
 
             HorizontalLayout {
                 spacing: Theme.space-lg;
