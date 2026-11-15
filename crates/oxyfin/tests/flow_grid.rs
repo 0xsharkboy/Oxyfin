@@ -27,18 +27,20 @@ mod page {
             callback chosen(int);
             callback near-end();
 
-            width: 1200px;
+            width: 1300px;
             height: 1400px;
 
             VerticalLayout {
-                Dropdown {
+                HorizontalLayout {
                     z: 10;
-                    label: "Sort";
-                    options: root.options;
-                    selected: root.selected;
-                    chosen(index) => {
-                        root.selected = index;
-                        root.chosen(index);
+                    Dropdown {
+                        label: "Sort";
+                        options: root.options;
+                        selected: root.selected;
+                        chosen(index) => {
+                            root.selected = index;
+                            root.chosen(index);
+                        }
                     }
                 }
                 grid := PosterGrid {
@@ -80,14 +82,14 @@ fn grid_lays_out_rows_and_opens_on_the_first_click() {
     i_slint_backend_testing::init_no_event_loop();
     let page = GridPage::new().unwrap();
     page.set_cards(ModelRc::new(VecModel::from(
-        (0..20).map(card).collect::<Vec<_>>(),
+        (0..60).map(card).collect::<Vec<_>>(),
     )));
     page.set_options(ModelRc::new(VecModel::from(vec![
         "Date added".into(),
         "Name".into(),
     ])));
     page.window()
-        .set_size(slint::LogicalSize::new(1200., 1400.));
+        .set_size(slint::LogicalSize::new(1300., 1400.));
     page.show().unwrap();
 
     let positions: Vec<_> = (0..20)
@@ -101,13 +103,19 @@ fn grid_lays_out_rows_and_opens_on_the_first_click() {
         .take_while(|(position, _)| position.y == positions[0].0.y)
         .count();
     assert!(columns > 1 && columns < 20, "got {columns} columns");
-    let (card_width, gap) = (
+    let (card_width, gap, margin) = (
         positions[0].1.width,
         positions[1].0.x - positions[0].0.x - positions[0].1.width,
+        positions[0].0.x,
     );
+    // Same formula as poster_grid.slint; at 1300px it differs from one without the margins.
     assert_eq!(
         columns,
-        ((1200. + gap) / (card_width + gap)).floor() as usize
+        ((1300. - 2. * margin + gap) / (card_width + gap)).floor() as usize
+    );
+    assert_ne!(
+        columns,
+        ((1300. + gap) / (card_width + gap)).floor() as usize
     );
     for i in 1..columns {
         assert!(positions[i].0.x > positions[i - 1].0.x);
@@ -160,6 +168,7 @@ fn grid_lays_out_rows_and_opens_on_the_first_click() {
             .is_none(),
         "a click outside closes the list"
     );
+    assert_eq!(*opened.borrow(), ["id7"], "the dismiss click opens no card");
 
     common::click(&page, &find(&page, "Sort: Name", AccessibleRole::Button));
     assert!(
@@ -185,10 +194,10 @@ fn grid_lays_out_rows_and_opens_on_the_first_click() {
     let ends = Rc::new(std::cell::Cell::new(0));
     let counter = Rc::clone(&ends);
     page.on_near_end(move || counter.set(counter.get() + 1));
-    page.window().set_size(slint::LogicalSize::new(1200., 700.));
+    page.window().set_size(slint::LogicalSize::new(1300., 700.));
     slint::platform::update_timers_and_animations();
     assert_eq!(ends.get(), 0, "far from the end of the content");
-    page.set_viewport_y(-100.);
+    page.set_viewport_y(-2000.);
     slint::platform::update_timers_and_animations();
     assert!(ends.get() > 0, "less than one view height is left");
 }
