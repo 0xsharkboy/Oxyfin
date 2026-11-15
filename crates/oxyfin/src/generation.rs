@@ -95,18 +95,24 @@ pub fn route(current: Option<GenerationId>, from: GenerationId, event: PlaybackE
 pub enum Built {
     /// Its generation ended while it was built.
     Release,
-    /// It becomes the player of its generation, without playing: the user left the screens that play.
+    /// It becomes the player of its generation, without playing: the screen that asked for it is gone.
     Keep,
     /// It becomes the player of its generation and plays the item clicked.
     Play,
 }
 
 /// Decides the fate of a player built for generation `built_for` while
-/// `current` is live and `screen` is shown.
-pub fn built(built_for: GenerationId, current: Option<GenerationId>, screen: Screen) -> Built {
+/// `current` is live and `screen` is shown. Only the screen that asked for
+/// the playback, `requested_from`, starts it.
+pub fn built(
+    built_for: GenerationId,
+    current: Option<GenerationId>,
+    screen: &Screen,
+    requested_from: &Screen,
+) -> Built {
     if current != Some(built_for) {
         Built::Release
-    } else if matches!(screen, Screen::Home | Screen::Movie(_) | Screen::Series(_)) {
+    } else if screen == requested_from && screen.can_play() {
         Built::Play
     } else {
         Built::Keep
@@ -139,17 +145,35 @@ mod tests {
 
     #[test]
     fn a_player_built_for_another_generation_is_released() {
-        assert_eq!(built(G1, Some(G2), Screen::Home), Built::Release);
-        assert_eq!(built(G1, None, Screen::SignIn), Built::Release);
+        assert_eq!(
+            built(G1, Some(G2), &Screen::Home, &Screen::Home),
+            Built::Release
+        );
+        assert_eq!(
+            built(G1, None, &Screen::SignIn, &Screen::Home),
+            Built::Release
+        );
     }
 
     #[test]
     fn a_player_built_for_the_current_generation_plays_from_home_and_details_only() {
-        assert_eq!(built(G1, Some(G1), Screen::Home), Built::Play);
-        assert_eq!(built(G1, Some(G1), Screen::Movie("m".into())), Built::Play);
-        assert_eq!(built(G1, Some(G1), Screen::Series("s".into())), Built::Play);
-        assert_eq!(built(G1, Some(G1), Screen::Settings), Built::Keep);
-        assert_eq!(built(G1, Some(G1), Screen::Player), Built::Keep);
+        let play = |screen: Screen| built(G1, Some(G1), &screen, &screen);
+        assert_eq!(play(Screen::Home), Built::Play);
+        assert_eq!(play(Screen::Movie("m".into())), Built::Play);
+        assert_eq!(play(Screen::Series("s".into())), Built::Play);
+        assert_eq!(play(Screen::Settings), Built::Keep);
+        assert_eq!(play(Screen::Player), Built::Keep);
+    }
+
+    #[test]
+    fn a_player_built_for_another_screen_does_not_play() {
+        let asked = Screen::Movie("a".into());
+        assert_eq!(
+            built(G1, Some(G1), &Screen::Movie("b".into()), &asked),
+            Built::Keep
+        );
+        assert_eq!(built(G1, Some(G1), &Screen::Home, &asked), Built::Keep);
+        assert_eq!(built(G1, Some(G1), &asked, &asked), Built::Play);
     }
 
     #[test]
