@@ -247,7 +247,7 @@ msgstr "Paramètres"
 #: crates/oxyfin/ui/components/track_menu.slint:142
 msgctxt "TrackMenu"
 msgid "Forced"
-msgstr "Forcés"
+msgstr "Forcé"
 
 #: crates/oxyfin/ui/components/track_menu.slint:142
 msgctxt "TrackMenu"
