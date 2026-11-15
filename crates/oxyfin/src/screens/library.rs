@@ -411,6 +411,11 @@ impl LibraryController {
                 return;
             }
         };
+        let previous: Vec<CardData> = if start == 0 {
+            self.cards.iter().collect()
+        } else {
+            Vec::new()
+        };
         if start == 0 {
             self.items.borrow_mut().clear();
             self.cards.set_vec(Vec::new());
@@ -418,12 +423,12 @@ impl LibraryController {
         self.ready.set(true);
         self.total.set(page.total);
         window.set_library_total(i32::try_from(page.total).unwrap_or(i32::MAX));
-        let new_cards: Vec<CardData> = page.items.iter().map(card).collect();
+        let (new_cards, missing) = cards_with_posters(&page.items, &previous);
         self.items.borrow_mut().extend(page.items.iter().cloned());
         for data in new_cards {
             self.cards.push(data);
         }
-        load_posters(app, id, &window, &self.cards, &page.items);
+        load_posters(app, id, &window, &self.cards, &missing);
     }
 }
 
@@ -438,6 +443,35 @@ pub(crate) fn target_of(items: &[ItemSummary], id: &str) -> Option<Screen> {
 /// Opens `screen` on top of the current one.
 pub(crate) fn open_detail(app: &Rc<App>, screen: Screen) {
     app.dispatch(Msg::OpenItem(screen));
+}
+
+/// Cards for `items`, with the poster already loaded in `previous` for the same item.
+/// Also returns the items whose poster still has to be loaded.
+pub(crate) fn cards_with_posters(
+    items: &[ItemSummary],
+    previous: &[CardData],
+) -> (Vec<CardData>, Vec<ItemSummary>) {
+    let loaded: HashMap<&SharedString, &CardData> = previous
+        .iter()
+        .filter(|card| card.has_image)
+        .map(|card| (&card.id, card))
+        .collect();
+    let mut missing = Vec::new();
+    let cards = items
+        .iter()
+        .map(|item| {
+            let mut data = card(item);
+            match loaded.get(&data.id) {
+                Some(kept) => {
+                    data.image = kept.image.clone();
+                    data.has_image = true;
+                }
+                None => missing.push(item.clone()),
+            }
+            data
+        })
+        .collect();
+    (cards, missing)
 }
 
 /// Loads the posters of `items` into the matching cards of `cards`.
@@ -478,6 +512,43 @@ pub(crate) fn load_posters(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oxyfin_core::{ItemKind, UserState};
+
+    fn item(id: &str) -> ItemSummary {
+        ItemSummary {
+            id: id.into(),
+            kind: ItemKind::Movie,
+            title: id.into(),
+            year: None,
+            series_id: None,
+            series_name: None,
+            episode_label: None,
+            poster: None,
+            backdrop: None,
+            thumb: None,
+            duration: None,
+            user: UserState::default(),
+        }
+    }
+
+    #[test]
+    fn a_reload_keeps_the_posters_already_loaded() {
+        let pixels = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(2, 2);
+        let mut loaded = card(&item("a"));
+        loaded.image = slint::Image::from_rgba8(pixels);
+        loaded.has_image = true;
+        let previous = [loaded, card(&item("b"))];
+        let items = [item("a"), item("b"), item("c")];
+        let (cards, missing) = cards_with_posters(&items, &previous);
+        assert_eq!(
+            cards.iter().map(|c| c.has_image).collect::<Vec<_>>(),
+            [true, false, false]
+        );
+        assert_eq!(
+            missing.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
+            ["b", "c"]
+        );
+    }
 
     #[test]
     fn next_page_is_asked_only_when_there_is_more_and_nothing_is_in_flight() {

@@ -1,5 +1,6 @@
 //! Conversions from core models and errors to what the screens display.
 
+use std::collections::HashMap;
 use std::time::Duration;
 
 use oxyfin_core::{
@@ -151,6 +152,34 @@ pub fn episode_row(episode: &Episode) -> EpisodeData {
         watched: episode.user.played,
         progress: episode.user.progress.unwrap_or(0.0),
     }
+}
+
+/// Image tag of each episode that has a thumbnail, by episode id.
+pub fn thumbnail_tags(episodes: &[Episode]) -> HashMap<String, String> {
+    episodes
+        .iter()
+        .filter_map(|episode| {
+            let thumb = episode.thumb.as_ref()?;
+            Some((episode.id.as_str().to_owned(), thumb.tag.clone()))
+        })
+        .collect()
+}
+
+/// Thumbnails already loaded in `rows` that `episodes` still use: same episode and same image tag.
+/// `tags` holds the image tag each row was loaded with.
+pub fn kept_thumbnails(
+    rows: &[EpisodeData],
+    tags: &HashMap<String, String>,
+    episodes: &[Episode],
+) -> HashMap<String, slint::Image> {
+    let current = thumbnail_tags(episodes);
+    rows.iter()
+        .filter(|row| row.image.size().width > 0)
+        .filter_map(|row| {
+            let id = row.id.as_str();
+            (current.get(id)? == tags.get(id)?).then(|| (id.to_owned(), row.image.clone()))
+        })
+        .collect()
 }
 
 /// Card for an item. The image is loaded later.
@@ -565,6 +594,51 @@ mod tests {
         assert_eq!(cast_line(&cast), "A, B, C, D");
         assert_eq!(cast_line(&cast[..2]), "A, B");
         assert_eq!(cast_line(&[]), "");
+    }
+
+    fn loaded_row(id: &str) -> EpisodeData {
+        let pixels = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(2, 2);
+        EpisodeData {
+            id: id.into(),
+            image: slint::Image::from_rgba8(pixels),
+            ..episode_row(&episode_with_thumb(id, "t"))
+        }
+    }
+
+    fn episode_with_thumb(id: &str, tag: &str) -> Episode {
+        Episode {
+            id: id.into(),
+            thumb: Some(oxyfin_core::ImageRef {
+                item_id: id.into(),
+                image_type: oxyfin_api::ImageType::Primary,
+                tag: tag.into(),
+            }),
+            ..episode_at(None, None, 0, false)
+        }
+    }
+
+    #[test]
+    fn loaded_thumbnails_are_kept_for_unchanged_episodes_only() {
+        let rows = [loaded_row("a"), loaded_row("b"), loaded_row("c")];
+        let tags = thumbnail_tags(&[
+            episode_with_thumb("a", "t"),
+            episode_with_thumb("b", "t"),
+            episode_with_thumb("c", "t"),
+        ]);
+        let episodes = [
+            episode_with_thumb("a", "t"),
+            episode_with_thumb("b", "new"),
+            episode_with_thumb("d", "t"),
+        ];
+        let kept = kept_thumbnails(&rows, &tags, &episodes);
+        assert_eq!(kept.keys().collect::<Vec<_>>(), ["a"]);
+    }
+
+    #[test]
+    fn a_row_without_a_loaded_image_is_not_kept() {
+        let episodes = [episode_with_thumb("a", "t")];
+        let rows = [episode_row(&episodes[0])];
+        assert!(kept_thumbnails(&rows, &thumbnail_tags(&episodes), &episodes).is_empty());
     }
 
     #[test]

@@ -5,11 +5,13 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use oxyfin_core::{CoreError, ItemSummary, Page};
-use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
 use crate::app::App;
-use crate::present::{card, core_error_message};
-use crate::screens::library::{PAGE_SIZE, load_posters, open_detail, should_load_more, target_of};
+use crate::present::core_error_message;
+use crate::screens::library::{
+    PAGE_SIZE, cards_with_posters, load_posters, open_detail, should_load_more, target_of,
+};
 use crate::state::{GenerationId, Msg, Screen};
 use crate::{CardData, Messages};
 
@@ -261,6 +263,11 @@ impl SearchController {
                 return;
             }
         };
+        let previous: Vec<CardData> = if start == 0 {
+            self.cards.iter().collect()
+        } else {
+            Vec::new()
+        };
         if start == 0 {
             self.items.borrow_mut().clear();
             self.cards.set_vec(Vec::new());
@@ -268,11 +275,12 @@ impl SearchController {
         self.ready.set(true);
         self.total.set(page.total);
         window.set_search_total(i32::try_from(page.total).unwrap_or(i32::MAX));
+        let (new_cards, missing) = cards_with_posters(&page.items, &previous);
         self.items.borrow_mut().extend(page.items.iter().cloned());
-        for item in &page.items {
-            self.cards.push(card(item));
+        for data in new_cards {
+            self.cards.push(data);
         }
-        load_posters(app, id, &window, &self.cards, &page.items);
+        load_posters(app, id, &window, &self.cards, &missing);
     }
 }
 
