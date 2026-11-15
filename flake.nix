@@ -53,6 +53,7 @@
                   ffmpeg-headless
                   cargo-deny
                   slint-tr-extractor
+                  gettext
                 ]
                 ++ lib.optionals stdenv.hostPlatform.isLinux (linuxRuntimeLibs ++ [ dbus ]);
 
