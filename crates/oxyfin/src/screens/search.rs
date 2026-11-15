@@ -52,6 +52,14 @@ impl SearchController {
         }
     }
 
+    /// The page came back from the player: the first page of the current text loads again.
+    pub(crate) fn refresh(&self, app: &Rc<App>) {
+        let query = self.query.borrow().clone();
+        if self.active.get() && self.ready.get() && !query.is_empty() {
+            self.request(app, query, 0, false);
+        }
+    }
+
     /// A screen left the stack: the search page forgets its text and results.
     pub(crate) fn discard(&self, app: &App, screen: &Screen) {
         if *screen != Screen::Search {
@@ -126,7 +134,7 @@ impl SearchController {
             )
         {
             let query = self.query.borrow().clone();
-            self.request(app, query, loaded as u32);
+            self.request(app, query, loaded as u32, false);
         }
     }
 
@@ -134,7 +142,7 @@ impl SearchController {
     pub(crate) fn retry(&self, app: &Rc<App>) {
         let query = self.query.borrow().clone();
         if self.active.get() && !query.is_empty() {
-            self.request(app, query, 0);
+            self.request(app, query, 0, true);
         }
     }
 
@@ -142,7 +150,7 @@ impl SearchController {
     pub(crate) fn retry_more(&self, app: &Rc<App>) {
         let query = self.query.borrow().clone();
         if self.active.get() && !query.is_empty() {
-            self.request(app, query, self.items.borrow().len() as u32);
+            self.request(app, query, self.items.borrow().len() as u32, false);
         }
     }
 
@@ -154,7 +162,7 @@ impl SearchController {
             }
             return;
         }
-        self.request(app, text, 0);
+        self.request(app, text, 0, true);
     }
 
     /// Nothing is sent for the text: the results on screen stay and no loading is shown.
@@ -187,8 +195,9 @@ impl SearchController {
         }
     }
 
-    /// Requests the page of `text` starting at `start`; a first page replaces the results.
-    fn request(&self, app: &Rc<App>, text: String, start: u32) {
+    /// Requests the page of `text` starting at `start`. A first page replaces the
+    /// results; `clear` empties the grid at once instead of when the answer arrives.
+    fn request(&self, app: &Rc<App>, text: String, start: u32, clear: bool) {
         let Some((id, catalog, _)) = app.services() else {
             return;
         };
@@ -196,7 +205,7 @@ impl SearchController {
         let load = self.load.get();
         self.in_flight.set(true);
         self.more_failed.set(false);
-        if start == 0 {
+        if start == 0 && clear {
             *self.query.borrow_mut() = text.clone();
             self.ready.set(false);
             self.total.set(0);
@@ -210,7 +219,7 @@ impl SearchController {
             window.set_search_query(self.query.borrow().as_str().into());
             window.set_search_error(SharedString::default());
             window.set_search_more_failed(false);
-            window.set_search_loading(start == 0);
+            window.set_search_loading(start == 0 && self.items.borrow().is_empty());
             window.set_search_loading_more(start > 0);
         }
         app.spawn(
@@ -252,6 +261,10 @@ impl SearchController {
                 return;
             }
         };
+        if start == 0 {
+            self.items.borrow_mut().clear();
+            self.cards.set_vec(Vec::new());
+        }
         self.ready.set(true);
         self.total.set(page.total);
         window.set_search_total(i32::try_from(page.total).unwrap_or(i32::MAX));
