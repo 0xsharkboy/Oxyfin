@@ -69,11 +69,22 @@ export component SettingsScreen inherits Rectangle {
             reject
         }
 
-        Flickable {
+        flick := Flickable {
             y: top-bar.height;
             height: parent.height - self.y;
             content-width: self.width;
-            content-height: content.preferred-height;
+            content-height: max(content.preferred-height, self.height);
+
+            // The mouse back button, on whatever lies behind the content.
+            TouchArea {
+                width: flick.content-width;
+                height: flick.content-height;
+                pointer-event(event) => {
+                    if event.button == PointerEventButton.back && event.kind == PointerEventKind.up {
+                        root.back();
+                    }
+                }
+            }
 
             content := HorizontalLayout {
                 width: parent.width;
