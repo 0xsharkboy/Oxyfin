@@ -79,8 +79,9 @@ impl SearchController {
         // An answer for the previous text must not land on the new one.
         self.load.set(self.load.get() + 1);
         self.in_flight.set(false);
+        // Loading until the debounced request answers, so no stale "No results" shows.
         if let Some(window) = app.window() {
-            window.set_search_loading(false);
+            window.set_search_loading(true);
             window.set_search_loading_more(false);
         }
         let weak = Rc::downgrade(app);
