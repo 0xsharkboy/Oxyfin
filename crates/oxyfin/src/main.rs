@@ -3,6 +3,7 @@
 use std::process::ExitCode;
 use std::time::Duration;
 
+use oxyfin::locale::select_language;
 use oxyfin::{App, AppWindow};
 use oxyfin_core::{Paths, TokenVault};
 use slint::{BackendSelector, ComponentHandle};
@@ -35,6 +36,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let paths = Paths::from_system()?;
     let vault = TokenVault::system(&paths);
     let window = AppWindow::new()?;
+    select_language();
     let app = App::new(&window, runtime.handle().clone(), paths, vault)?;
     #[cfg(feature = "mpv")]
     {

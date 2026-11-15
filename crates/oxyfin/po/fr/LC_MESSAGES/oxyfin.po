@@ -1,0 +1,772 @@
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: oxyfin VERSION\n"
+"POT-Creation-Date: 2026-11-15 15:13+0000\n"
+"PO-Revision-Date: 2026-11-15 12:00+0000\n"
+"Last-Translator: Oxyfin contributors\n"
+"Language-Team: French\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: crates/oxyfin/ui/components/banner.slint:45
+msgctxt "Banner"
+msgid "FEATURED"
+msgstr "À LA UNE"
+
+#: crates/oxyfin/ui/components/banner.slint:67
+msgctxt "Banner"
+msgid "Play"
+msgstr "Lire"
+
+#: crates/oxyfin/ui/components/banner.slint:75
+msgctxt "Banner"
+msgid "More info"
+msgstr "Plus d'infos"
+
+#: crates/oxyfin/ui/components/detail_header.slint:56
+msgctxt "DetailHeader"
+msgid "{}h {}m"
+msgstr "{} h {} min"
+
+#: crates/oxyfin/ui/components/detail_header.slint:56
+msgctxt "DetailHeader"
+msgid "{}m"
+msgstr "{} min"
+
+#: crates/oxyfin/ui/components/detail_header.slint:91
+msgctxt "DetailHeader"
+msgid "Back"
+msgstr "Retour"
+
+#: crates/oxyfin/ui/components/detail_header.slint:137
+msgctxt "DetailHeader"
+msgid "{n} season"
+msgid_plural "{n} seasons"
+msgstr[0] "{n} saison"
+msgstr[1] "{n} saisons"
+
+#: crates/oxyfin/ui/components/detail_header.slint:188
+msgctxt "DetailHeader"
+msgid "Starring {}"
+msgstr "Avec {}"
+
+#: crates/oxyfin/ui/components/detail_header.slint:202
+msgctxt "DetailHeader"
+msgid "Mark as unwatched"
+msgstr "Marquer comme non vu"
+
+#: crates/oxyfin/ui/components/detail_header.slint:202
+msgctxt "DetailHeader"
+msgid "Mark as watched"
+msgstr "Marquer comme vu"
+
+#: crates/oxyfin/ui/components/detail_header.slint:216
+msgctxt "DetailHeader"
+msgid "Remove from favorites"
+msgstr "Retirer des favoris"
+
+#: crates/oxyfin/ui/components/detail_header.slint:216
+msgctxt "DetailHeader"
+msgid "Add to favorites"
+msgstr "Ajouter aux favoris"
+
+#: crates/oxyfin/ui/components/episode_row.slint:127
+msgctxt "EpisodeRow"
+msgid "{} min"
+msgstr "{} min"
+
+#: crates/oxyfin/ui/components/next_episode_toast.slint:13
+msgctxt "NextEpisodeToast"
+msgid "Next episode"
+msgstr "Épisode suivant"
+
+#: crates/oxyfin/ui/components/next_episode_toast.slint:52
+msgctxt "NextEpisodeToast"
+msgid "Next episode in {} s"
+msgstr "Épisode suivant dans {} s"
+
+#: crates/oxyfin/ui/components/next_episode_toast.slint:71
+msgctxt "NextEpisodeToast"
+msgid "Play now"
+msgstr "Lire maintenant"
+
+#: crates/oxyfin/ui/components/next_episode_toast.slint:81
+msgctxt "NextEpisodeToast"
+msgid "Cancel"
+msgstr "Annuler"
+
+#: crates/oxyfin/ui/components/notice_banner.slint:20
+msgctxt "NoticeBanner"
+msgid "Notice"
+msgstr "Notification"
+
+#: crates/oxyfin/ui/components/notice_banner.slint:50
+msgctxt "NoticeBanner"
+msgid "Close"
+msgstr "Fermer"
+
+#: crates/oxyfin/ui/components/player_controls.slint:126
+msgctxt "PlayerControls"
+msgid "Seek"
+msgstr "Position"
+
+#: crates/oxyfin/ui/components/player_controls.slint:149
+msgctxt "PlayerControls"
+msgid "Previous"
+msgstr "Précédent"
+
+#: crates/oxyfin/ui/components/player_controls.slint:159
+msgctxt "PlayerControls"
+msgid "Back 10 seconds"
+msgstr "Reculer de 10 secondes"
+
+#: crates/oxyfin/ui/components/player_controls.slint:169
+msgctxt "PlayerControls"
+msgid "Play"
+msgstr "Lire"
+
+#: crates/oxyfin/ui/components/player_controls.slint:169
+msgctxt "PlayerControls"
+msgid "Pause"
+msgstr "Pause"
+
+#: crates/oxyfin/ui/components/player_controls.slint:179
+msgctxt "PlayerControls"
+msgid "Forward 10 seconds"
+msgstr "Avancer de 10 secondes"
+
+#: crates/oxyfin/ui/components/player_controls.slint:189
+msgctxt "PlayerControls"
+msgid "Next"
+msgstr "Suivant"
+
+#: crates/oxyfin/ui/components/player_controls.slint:197
+msgctxt "PlayerControls"
+msgid "{} / {}"
+msgstr "{} / {}"
+
+#: crates/oxyfin/ui/components/player_controls.slint:213
+msgctxt "PlayerControls"
+msgid "Unmute"
+msgstr "Réactiver le son"
+
+#: crates/oxyfin/ui/components/player_controls.slint:213
+msgctxt "PlayerControls"
+msgid "Mute"
+msgstr "Couper le son"
+
+#: crates/oxyfin/ui/components/player_controls.slint:226
+msgctxt "PlayerControls"
+msgid "Volume"
+msgstr "Volume"
+
+#: crates/oxyfin/ui/components/player_controls.slint:245
+msgctxt "PlayerControls"
+msgid "Audio and subtitles"
+msgstr "Audio et sous-titres"
+
+#: crates/oxyfin/ui/components/player_controls.slint:256
+msgctxt "PlayerControls"
+msgid "Playback speed"
+msgstr "Vitesse de lecture"
+
+#: crates/oxyfin/ui/components/player_controls.slint:267
+msgctxt "PlayerControls"
+msgid "Exit fullscreen"
+msgstr "Quitter le plein écran"
+
+#: crates/oxyfin/ui/components/player_controls.slint:267
+msgctxt "PlayerControls"
+msgid "Fullscreen"
+msgstr "Plein écran"
+
+#: crates/oxyfin/ui/components/poster_grid.slint:53
+msgctxt "PosterGrid"
+msgid "Titles"
+msgstr "Titres"
+
+#: crates/oxyfin/ui/components/speed_menu.slint:10
+msgctxt "SpeedMenu"
+msgid "Playback speed"
+msgstr "Vitesse de lecture"
+
+#: crates/oxyfin/ui/components/speed_menu.slint:13
+msgctxt "SpeedMenu"
+msgid "SPEED"
+msgstr "VITESSE"
+
+#: crates/oxyfin/ui/components/speed_menu.slint:17
+msgctxt "SpeedMenu"
+msgid "Normal"
+msgstr "Normale"
+
+#: crates/oxyfin/ui/components/speed_menu.slint:17
+msgctxt "SpeedMenu"
+msgid "{}×"
+msgstr "{}×"
+
+#: crates/oxyfin/ui/components/top_bar.slint:21
+msgctxt "TopBar"
+msgid "Navigation"
+msgstr "Navigation"
+
+#: crates/oxyfin/ui/components/top_bar.slint:51
+msgctxt "TopBar"
+msgid "Home"
+msgstr "Accueil"
+
+#: crates/oxyfin/ui/components/top_bar.slint:58
+msgctxt "TopBar"
+msgid "Movies"
+msgstr "Films"
+
+#: crates/oxyfin/ui/components/top_bar.slint:65
+msgctxt "TopBar"
+msgid "Shows"
+msgstr "Séries"
+
+#: crates/oxyfin/ui/components/top_bar.slint:72
+msgctxt "TopBar"
+msgid "Favorites"
+msgstr "Favoris"
+
+#: crates/oxyfin/ui/components/top_bar.slint:87
+msgctxt "TopBar"
+msgid "Search"
+msgstr "Recherche"
+
+#: crates/oxyfin/ui/components/top_bar.slint:98
+msgctxt "TopBar"
+msgid "Settings"
+msgstr "Paramètres"
+
+#: crates/oxyfin/ui/components/track_menu.slint:142
+msgctxt "TrackMenu"
+msgid "Forced"
+msgstr "Forcés"
+
+#: crates/oxyfin/ui/components/track_menu.slint:142
+msgctxt "TrackMenu"
+msgid "External"
+msgstr "Externe"
+
+#: crates/oxyfin/ui/components/track_menu.slint:146
+msgctxt "TrackMenu"
+msgid "Audio and subtitles"
+msgstr "Audio et sous-titres"
+
+#: crates/oxyfin/ui/components/track_menu.slint:149
+msgctxt "TrackMenu"
+msgid "AUDIO"
+msgstr "AUDIO"
+
+#: crates/oxyfin/ui/components/track_menu.slint:164
+msgctxt "TrackMenu"
+msgid "SUBTITLES"
+msgstr "SOUS-TITRES"
+
+#: crates/oxyfin/ui/components/track_menu.slint:168
+msgctxt "TrackMenu"
+msgid "Off"
+msgstr "Désactivés"
+
+#: crates/oxyfin/ui/screens/home.slint:33
+msgctxt "HomeTitles"
+msgid "Continue Watching"
+msgstr "Reprendre la lecture"
+
+#: crates/oxyfin/ui/screens/home.slint:36
+msgctxt "HomeTitles"
+msgid "Next Up"
+msgstr "À suivre"
+
+#: crates/oxyfin/ui/screens/home.slint:39
+msgctxt "HomeTitles"
+msgid "Recently Added in {}"
+msgstr "Ajoutés récemment dans {}"
+
+#: crates/oxyfin/ui/screens/home.slint:131
+msgctxt "HomeScreen"
+msgid "Home"
+msgstr "Accueil"
+
+#: crates/oxyfin/ui/screens/home.slint:139
+msgctxt "HomeScreen"
+msgid "{}h {}m"
+msgstr "{} h {} min"
+
+#: crates/oxyfin/ui/screens/home.slint:139
+msgctxt "HomeScreen"
+msgid "{}m"
+msgstr "{} min"
+
+#: crates/oxyfin/ui/screens/home.slint:186
+msgctxt "HomeScreen"
+msgid "Nothing to show yet"
+msgstr "Rien à afficher pour l'instant"
+
+#: crates/oxyfin/ui/screens/home.slint:191
+msgctxt "HomeScreen"
+msgid "Movies and shows you add or start watching will appear here."
+msgstr "Les films et séries que vous ajoutez ou commencez à regarder apparaîtront ici."
+
+#: crates/oxyfin/ui/screens/library.slint:12
+msgctxt "LibraryTitles"
+msgid "All genres"
+msgstr "Tous les genres"
+
+#: crates/oxyfin/ui/screens/library.slint:50
+msgctxt "LibraryScreen"
+msgid "Movies"
+msgstr "Films"
+
+#: crates/oxyfin/ui/screens/library.slint:50
+msgctxt "LibraryScreen"
+msgid "Shows"
+msgstr "Séries"
+
+#: crates/oxyfin/ui/screens/library.slint:50
+msgctxt "LibraryScreen"
+msgid "Favorites"
+msgstr "Favoris"
+
+#: crates/oxyfin/ui/screens/library.slint:51
+msgctxt "LibraryScreen"
+msgid "All"
+msgstr "Tous"
+
+#: crates/oxyfin/ui/screens/library.slint:51
+msgctxt "LibraryScreen"
+msgid "Unwatched"
+msgstr "Non vus"
+
+#: crates/oxyfin/ui/screens/library.slint:51
+msgctxt "LibraryScreen"
+msgid "In progress"
+msgstr "En cours"
+
+#: crates/oxyfin/ui/screens/library.slint:51
+msgctxt "LibraryScreen"
+msgid "Watched"
+msgstr "Vus"
+
+#: crates/oxyfin/ui/screens/library.slint:52
+msgctxt "LibraryScreen"
+msgid "Date added"
+msgstr "Date d'ajout"
+
+#: crates/oxyfin/ui/screens/library.slint:52
+msgctxt "LibraryScreen"
+msgid "Title"
+msgstr "Titre"
+
+#: crates/oxyfin/ui/screens/library.slint:52
+msgctxt "LibraryScreen"
+msgid "Year"
+msgstr "Année"
+
+#: crates/oxyfin/ui/screens/library.slint:83
+msgctxt "LibraryScreen"
+msgid "{n} title"
+msgid_plural "{n} titles"
+msgstr[0] "{n} titre"
+msgstr[1] "{n} titres"
+
+#: crates/oxyfin/ui/screens/library.slint:101
+msgctxt "LibraryScreen"
+msgid "Genre"
+msgstr "Genre"
+
+#: crates/oxyfin/ui/screens/library.slint:113
+msgctxt "LibraryScreen"
+msgid "Descending"
+msgstr "Décroissant"
+
+#: crates/oxyfin/ui/screens/library.slint:113
+msgctxt "LibraryScreen"
+msgid "Ascending"
+msgstr "Croissant"
+
+#: crates/oxyfin/ui/screens/library.slint:120
+msgctxt "LibraryScreen"
+msgid "Sort"
+msgstr "Trier"
+
+#: crates/oxyfin/ui/screens/library.slint:148
+msgctxt "LibraryScreen"
+msgid "Loading"
+msgstr "Chargement"
+
+#: crates/oxyfin/ui/screens/library.slint:166
+msgctxt "LibraryScreen"
+msgid "Cannot load more titles"
+msgstr "Impossible de charger d'autres titres"
+
+#: crates/oxyfin/ui/screens/library.slint:171
+#: crates/oxyfin/ui/screens/library.slint:171
+msgctxt "LibraryScreen"
+msgid "Retry"
+msgstr "Réessayer"
+
+#: crates/oxyfin/ui/screens/library.slint:186
+msgctxt "LibraryScreen"
+msgid "No titles match these filters"
+msgstr "Aucun titre ne correspond à ces filtres"
+
+#: crates/oxyfin/ui/screens/library.slint:186
+msgctxt "LibraryScreen"
+msgid "Nothing here yet"
+msgstr "Rien ici pour l'instant"
+
+#: crates/oxyfin/ui/screens/movie.slint:47
+msgctxt "MovieScreen"
+msgid "Movie"
+msgstr "Film"
+
+#: crates/oxyfin/ui/screens/movie.slint:109
+msgctxt "MovieScreen"
+msgid "Resume from {}"
+msgstr "Reprendre à {}"
+
+#: crates/oxyfin/ui/screens/movie.slint:116
+msgctxt "MovieScreen"
+msgid "Play"
+msgstr "Lire"
+
+#: crates/oxyfin/ui/screens/movie.slint:136
+msgctxt "MovieScreen"
+msgid "Back"
+msgstr "Retour"
+
+#: crates/oxyfin/ui/screens/movie.slint:143
+msgctxt "MovieScreen"
+msgid "Loading"
+msgstr "Chargement"
+
+#: crates/oxyfin/ui/screens/movie.slint:155
+msgctxt "MovieScreen"
+msgid "Retry"
+msgstr "Réessayer"
+
+#: crates/oxyfin/ui/screens/player.slint:97
+msgctxt "PlayerScreen"
+msgid "Player"
+msgstr "Lecteur"
+
+#: crates/oxyfin/ui/screens/player.slint:221
+msgctxt "PlayerScreen"
+msgid "Back"
+msgstr "Retour"
+
+#: crates/oxyfin/ui/screens/quick_connect.slint:16
+#: crates/oxyfin/ui/screens/quick_connect.slint:16
+msgctxt "QuickConnectScreen"
+msgid "Quick Connect"
+msgstr "Quick Connect"
+
+#: crates/oxyfin/ui/screens/quick_connect.slint:24
+msgctxt "QuickConnectScreen"
+msgid "On a device that is already signed in, open Settings › Quick Connect and enter this code."
+msgstr "Sur un appareil déjà connecté, ouvrez Paramètres › Quick Connect et saisissez ce code."
+
+#: crates/oxyfin/ui/screens/quick_connect.slint:68
+msgctxt "QuickConnectScreen"
+msgid "Requesting a code…"
+msgstr "Demande d'un code…"
+
+#: crates/oxyfin/ui/screens/quick_connect.slint:68
+msgctxt "QuickConnectScreen"
+msgid "Waiting for approval"
+msgstr "En attente d'approbation"
+
+#: crates/oxyfin/ui/screens/quick_connect.slint:82
+msgctxt "QuickConnectScreen"
+msgid "Get a new code"
+msgstr "Obtenir un nouveau code"
+
+#: crates/oxyfin/ui/screens/quick_connect.slint:89
+msgctxt "QuickConnectScreen"
+msgid "Back"
+msgstr "Retour"
+
+#: crates/oxyfin/ui/screens/search.slint:11
+msgctxt "SearchTitles"
+msgid "No results for “{}”"
+msgstr "Aucun résultat pour « {} »"
+
+#: crates/oxyfin/ui/screens/search.slint:39
+msgctxt "SearchScreen"
+msgid "Search"
+msgstr "Recherche"
+
+#: crates/oxyfin/ui/screens/search.slint:56
+msgctxt "SearchScreen"
+msgid "Search titles"
+msgstr "Rechercher des titres"
+
+#: crates/oxyfin/ui/screens/search.slint:58
+msgctxt "SearchScreen"
+msgid "Type a title"
+msgstr "Saisissez un titre"
+
+#: crates/oxyfin/ui/screens/search.slint:68
+msgctxt "SearchScreen"
+msgid "{n} title"
+msgid_plural "{n} titles"
+msgstr[0] "{n} titre"
+msgstr[1] "{n} titres"
+
+#: crates/oxyfin/ui/screens/search.slint:90
+msgctxt "SearchScreen"
+msgid "Loading"
+msgstr "Chargement"
+
+#: crates/oxyfin/ui/screens/search.slint:108
+msgctxt "SearchScreen"
+msgid "Cannot load more titles"
+msgstr "Impossible de charger d'autres titres"
+
+#: crates/oxyfin/ui/screens/search.slint:113
+#: crates/oxyfin/ui/screens/search.slint:113
+msgctxt "SearchScreen"
+msgid "Retry"
+msgstr "Réessayer"
+
+#: crates/oxyfin/ui/screens/search.slint:128
+msgctxt "SearchScreen"
+msgid "Search movies and shows"
+msgstr "Rechercher des films et des séries"
+
+#: crates/oxyfin/ui/screens/series.slint:75
+msgctxt "SeriesScreen"
+msgid "Series"
+msgstr "Série"
+
+#: crates/oxyfin/ui/screens/series.slint:137
+msgctxt "SeriesScreen"
+msgid "Resume {}"
+msgstr "Reprendre {}"
+
+#: crates/oxyfin/ui/screens/series.slint:137
+msgctxt "SeriesScreen"
+msgid "Play {}"
+msgstr "Lire {}"
+
+#: crates/oxyfin/ui/screens/series.slint:137
+msgctxt "SeriesScreen"
+msgid "Play"
+msgstr "Lire"
+
+#: crates/oxyfin/ui/screens/series.slint:187
+#: crates/oxyfin/ui/screens/series.slint:187
+msgctxt "SeriesScreen"
+msgid "Loading"
+msgstr "Chargement"
+
+#: crates/oxyfin/ui/screens/series.slint:199
+#: crates/oxyfin/ui/screens/series.slint:199
+msgctxt "SeriesScreen"
+msgid "Retry"
+msgstr "Réessayer"
+
+#: crates/oxyfin/ui/screens/series.slint:219
+msgctxt "SeriesScreen"
+msgid "Back"
+msgstr "Retour"
+
+#: crates/oxyfin/ui/screens/settings.slint:57
+#: crates/oxyfin/ui/screens/settings.slint:57
+msgctxt "SettingsScreen"
+msgid "Settings"
+msgstr "Paramètres"
+
+#: crates/oxyfin/ui/screens/settings.slint:93
+msgctxt "SettingsScreen"
+msgid "Account"
+msgstr "Compte"
+
+#: crates/oxyfin/ui/screens/settings.slint:96
+msgctxt "SettingsScreen"
+msgid "Server"
+msgstr "Serveur"
+
+#: crates/oxyfin/ui/screens/settings.slint:97
+msgctxt "SettingsScreen"
+msgid "{} ({})"
+msgstr "{} ({})"
+
+#: crates/oxyfin/ui/screens/settings.slint:100
+msgctxt "SettingsScreen"
+msgid "Signed in as"
+msgstr "Connecté en tant que"
+
+#: crates/oxyfin/ui/screens/settings.slint:104
+msgctxt "SettingsScreen"
+msgid "Sign-in token"
+msgstr "Jeton de connexion"
+
+#: crates/oxyfin/ui/screens/settings.slint:105
+msgctxt "SettingsScreen"
+msgid "Stored in a private file"
+msgstr "Stocké dans un fichier privé"
+
+#: crates/oxyfin/ui/screens/settings.slint:105
+msgctxt "SettingsScreen"
+msgid "Stored in the system keyring"
+msgstr "Stocké dans le trousseau du système"
+
+#: crates/oxyfin/ui/screens/settings.slint:112
+msgctxt "SettingsScreen"
+msgid "Sign out"
+msgstr "Se déconnecter"
+
+#: crates/oxyfin/ui/screens/settings.slint:122
+msgctxt "SettingsScreen"
+msgid "About"
+msgstr "À propos"
+
+#: crates/oxyfin/ui/screens/settings.slint:125
+msgctxt "SettingsScreen"
+msgid "Version"
+msgstr "Version"
+
+#: crates/oxyfin/ui/screens/sign_in.slint:36
+#: crates/oxyfin/ui/screens/sign_in.slint:36
+#: crates/oxyfin/ui/screens/sign_in.slint:36
+msgctxt "SignInScreen"
+msgid "Sign in"
+msgstr "Se connecter"
+
+#: crates/oxyfin/ui/screens/sign_in.slint:43
+msgctxt "SignInScreen"
+msgid "Server address"
+msgstr "Adresse du serveur"
+
+#: crates/oxyfin/ui/screens/sign_in.slint:44
+msgctxt "SignInScreen"
+msgid "https://jellyfin.example.com"
+msgstr "https://jellyfin.example.com"
+
+#: crates/oxyfin/ui/screens/sign_in.slint:61
+msgctxt "SignInScreen"
+msgid "Username"
+msgstr "Nom d'utilisateur"
+
+#: crates/oxyfin/ui/screens/sign_in.slint:70
+msgctxt "SignInScreen"
+msgid "Password"
+msgstr "Mot de passe"
+
+#: crates/oxyfin/ui/screens/sign_in.slint:93
+msgctxt "SignInScreen"
+msgid "Checking the server…"
+msgstr "Vérification du serveur…"
+
+#: crates/oxyfin/ui/screens/sign_in.slint:127
+msgctxt "SignInScreen"
+msgid "or"
+msgstr "ou"
+
+#: crates/oxyfin/ui/screens/sign_in.slint:141
+msgctxt "SignInScreen"
+msgid "Use Quick Connect"
+msgstr "Utiliser Quick Connect"
+
+#: crates/oxyfin/ui/screens/starting.slint:7
+msgctxt "StartingScreen"
+msgid "Starting"
+msgstr "Démarrage"
+
+#: crates/oxyfin/ui/theme.slint:141
+msgctxt "Messages"
+msgid "Server found (Jellyfin {})"
+msgstr "Serveur trouvé (Jellyfin {})"
+
+#: crates/oxyfin/ui/theme.slint:143
+msgctxt "Messages"
+msgid "Server found: {} (Jellyfin {})"
+msgstr "Serveur trouvé : {} (Jellyfin {})"
+
+#: crates/oxyfin/ui/theme.slint:149
+msgctxt "Messages"
+msgid "Cannot reach the server. Check the address and your connection."
+msgstr "Impossible de joindre le serveur. Vérifiez l'adresse et votre connexion."
+
+#: crates/oxyfin/ui/theme.slint:152
+msgctxt "Messages"
+msgid "This server address is not valid."
+msgstr "Cette adresse de serveur n'est pas valide."
+
+#: crates/oxyfin/ui/theme.slint:155
+msgctxt "Messages"
+msgid "This Jellyfin version is not supported (installed / required: {})."
+msgstr "Cette version de Jellyfin n'est pas prise en charge (installée / requise : {})."
+
+#: crates/oxyfin/ui/theme.slint:158
+msgctxt "Messages"
+msgid "Incorrect username or password."
+msgstr "Nom d'utilisateur ou mot de passe incorrect."
+
+#: crates/oxyfin/ui/theme.slint:161
+msgctxt "Messages"
+msgid "Quick Connect is disabled on this server."
+msgstr "Quick Connect est désactivé sur ce serveur."
+
+#: crates/oxyfin/ui/theme.slint:164
+msgctxt "Messages"
+msgid "The Quick Connect code has expired."
+msgstr "Le code Quick Connect a expiré."
+
+#: crates/oxyfin/ui/theme.slint:167
+msgctxt "Messages"
+msgid "The server ran into an error. Please try again later."
+msgstr "Le serveur a rencontré une erreur. Réessayez plus tard."
+
+#: crates/oxyfin/ui/theme.slint:170
+msgctxt "Messages"
+msgid "The server sent a response Oxyfin does not understand."
+msgstr "Le serveur a envoyé une réponse qu'Oxyfin ne comprend pas."
+
+#: crates/oxyfin/ui/theme.slint:173
+msgctxt "Messages"
+msgid "Oxyfin could not read or save its settings."
+msgstr "Oxyfin n'a pas pu lire ou enregistrer ses paramètres."
+
+#: crates/oxyfin/ui/theme.slint:176
+msgctxt "Messages"
+msgid "Your session has expired. Please sign in again."
+msgstr "Votre session a expiré. Veuillez vous reconnecter."
+
+#: crates/oxyfin/ui/theme.slint:179
+msgctxt "Messages"
+msgid "The system keyring is unavailable, so your sign-in token is stored in a file only you can read."
+msgstr "Le trousseau du système est indisponible : votre jeton de connexion est donc stocké dans un fichier que vous seul pouvez lire."
+
+#: crates/oxyfin/ui/theme.slint:182
+msgctxt "Messages"
+msgid "Oxyfin cannot play this item directly."
+msgstr "Oxyfin ne peut pas lire cet élément directement."
+
+#: crates/oxyfin/ui/theme.slint:185
+msgctxt "Messages"
+msgid "There is nothing left to play in this series."
+msgstr "Il ne reste rien à lire dans cette série."
+
+#: crates/oxyfin/ui/theme.slint:188
+msgctxt "Messages"
+msgid "This item could not be loaded."
+msgstr "Cet élément n'a pas pu être chargé."
+
+#: crates/oxyfin/ui/theme.slint:191
+msgctxt "Messages"
+msgid "The player could not complete that action."
+msgstr "Le lecteur n'a pas pu effectuer cette action."
+
+#: crates/oxyfin/ui/theme.slint:194
+msgctxt "Messages"
+msgid "Playback is not available in this build of Oxyfin."
+msgstr "La lecture n'est pas disponible dans cette version d'Oxyfin."

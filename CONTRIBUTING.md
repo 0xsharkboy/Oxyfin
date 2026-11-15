@@ -77,6 +77,8 @@ The hooks in `.githooks/` run the fast checks locally. CI runs the same checks, 
 - `unsafe` is only allowed in `oxyfin-player`, around libmpv. Every `unsafe` block has a `// SAFETY:` comment explaining why it is sound.
 - Prototypes under `spikes/` are exempt from the `unsafe`, `println!` and test rules.
 - Every user-facing string goes through Slint translations (`@tr(...)`). After changing one, regenerate the catalog with `find crates/oxyfin/ui -name "*.slint" | sort | xargs slint-tr-extractor --package-name oxyfin -o crates/oxyfin/po/oxyfin.pot` (the extractor is in the Nix dev shell).
+- Translations are bundled into the binary from `crates/oxyfin/po/<lang>/LC_MESSAGES/oxyfin.po`. After regenerating the catalog, update each language with `msgmerge --update crates/oxyfin/po/<lang>/LC_MESSAGES/oxyfin.po crates/oxyfin/po/oxyfin.pot` (`msgmerge` comes from gettext) and translate the new and fuzzy entries; the `french_catalog_is_complete` test fails while a French entry is missing or empty.
+- To add a language, copy the catalog to `crates/oxyfin/po/<lang>/LC_MESSAGES/oxyfin.po` (`<lang>` is the two-letter code, such as `de`), set `Language` and `Plural-Forms` in its header, translate every entry, and add a completeness test like the French one. Keep `Oxyfin`, `Jellyfin` and `Quick Connect` untranslated and the `{}` and `{n}` placeholders unchanged. At startup the app picks the language from `LANGUAGE`, `LC_ALL`, `LC_MESSAGES` and `LANG`, then from the system locale, and falls back to English.
 - The UI follows the [reference design](https://www.figma.com/design/KjhDn8ypMS0CP6UQNP5Lbv). Colors, spacing and radii come from the `Theme` global, never from literal values.
 
 ## Documentation and comments

@@ -31,6 +31,7 @@ slint = { version = "=1.18.1", default-features = false, features = ["std", "com
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 gethostname = "1"
+sys-locale = "0.3"
 log = "0.4"
 env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
 
