@@ -74,7 +74,7 @@ impl SearchController {
             return self.reset(app);
         };
         if *self.query.borrow() == text && self.ready.get() {
-            return;
+            return self.settle(app);
         }
         // An answer for the previous text must not land on the new one.
         self.load.set(self.load.get() + 1);
@@ -149,9 +149,20 @@ impl SearchController {
     fn run(&self, app: &Rc<App>, text: String) {
         let busy = self.ready.get() || self.in_flight.get();
         if *self.query.borrow() == text && busy {
+            if self.ready.get() {
+                self.settle(app);
+            }
             return;
         }
         self.request(app, text, 0);
+    }
+
+    /// Nothing is sent for the text: the results on screen stay and no loading is shown.
+    fn settle(&self, app: &App) {
+        if let Some(window) = app.window() {
+            window.set_search_loading(false);
+            window.set_search_loading_more(false);
+        }
     }
 
     /// Empties the results and the invite state.

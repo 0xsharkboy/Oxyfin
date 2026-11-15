@@ -133,6 +133,18 @@ fn search_waits_for_the_typing_to_stop_and_ignores_stale_answers() {
             }
         }
 
+        // Editing the text back to the one already searched sends nothing and ends the loading.
+        type_text(&window, "x");
+        press(&window, Key::Backspace);
+        pause(Duration::from_millis(100)).await;
+        wait_visible(&window, "2 titles").await?;
+        pause(Duration::from_millis(500)).await;
+        press(&window, Key::Return);
+        pause(Duration::from_millis(100)).await;
+        if searches(&log).len() != 1 || !exists(&window, "2 titles") {
+            return Err("the unchanged text was searched again or lost its count".into());
+        }
+
         for _ in 0..3 {
             press(&window, Key::Backspace);
         }
