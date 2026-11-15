@@ -22,6 +22,8 @@ const SEASON_1: &str = "0407e3d02b7d70abe4a2d37241b02fea";
 const SEASON_2: &str = "1507e3d02b7d70abe4a2d37241b02feb";
 const PLAYED: &str =
     r#"{"PlaybackPositionTicks":0,"PlayCount":1,"IsFavorite":false,"Played":true}"#;
+const FAVORED: &str =
+    r#"{"PlaybackPositionTicks":0,"PlayCount":1,"IsFavorite":true,"Played":true}"#;
 
 struct Counted {
     calls: Arc<AtomicUsize>,
@@ -35,7 +37,24 @@ impl Respond for Counted {
     }
 }
 
-/// Answers `Shows/<id>/Episodes`: Season 2 is fast the first time and slow afterwards.
+/// Answers `Items/<id>`: the second answer is slow, like a reload started by a toggle.
+struct SeriesItem {
+    calls: Arc<AtomicUsize>,
+}
+
+impl Respond for SeriesItem {
+    fn respond(&self, _: &Request) -> ResponseTemplate {
+        let response = json(fixture("item_series"));
+        if self.calls.fetch_add(1, Ordering::SeqCst) == 1 {
+            response.set_delay(Duration::from_millis(2000))
+        } else {
+            response
+        }
+    }
+}
+
+/// Answers `Shows/<id>/Episodes`: Season 2 is fast the first time, slow the second
+/// time and fails afterwards.
 struct Episodes {
     log: QueryLog,
     season_2_calls: Arc<Mutex<usize>>,
@@ -57,10 +76,10 @@ impl Respond for Episodes {
             })
             .unwrap_or(1);
         let response = json(fixture("episodes_season_2"));
-        if call > 1 {
-            response.set_delay(Duration::from_millis(900))
-        } else {
-            response
+        match call {
+            1 => response,
+            2 => response.set_delay(Duration::from_millis(900)),
+            _ => ResponseTemplate::new(500),
         }
     }
 }
@@ -74,6 +93,30 @@ fn episode_requests(log: &QueryLog) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Waits for the episode row `title`. Rows that arrive after the list was hidden are only
+/// instantiated once the window handles an event, which a small scroll provides.
+async fn wait_row(window: &oxyfin::AppWindow, title: &str) -> Result<ElementHandle, String> {
+    let start = std::time::Instant::now();
+    loop {
+        window
+            .window()
+            .dispatch_event(WindowEvent::PointerScrolled {
+                position: LogicalPosition::new(640., 400.),
+                delta_x: 0.,
+                delta_y: -1.,
+            });
+        if let Some(row) = ElementHandle::find_by_accessible_label(window, title).find(|row| {
+            row.size().height > 0. && row.accessible_role() == Some(AccessibleRole::Button)
+        }) {
+            return Ok(row);
+        }
+        if start.elapsed() > Duration::from_secs(10) {
+            return Err(format!("timed out waiting for the row {title}"));
+        }
+        pause(Duration::from_millis(10)).await;
+    }
 }
 
 fn scroll_down(window: &oxyfin::AppWindow) {
@@ -105,6 +148,10 @@ fn a_series_opens_with_seasons_and_episodes() {
     let calls = Arc::new(Mutex::new(0));
     let posted = Arc::new(AtomicUsize::new(0));
     let played_calls = Arc::clone(&posted);
+    let favored = Arc::new(AtomicUsize::new(0));
+    let favored_calls = Arc::clone(&favored);
+    let series_calls = Arc::new(AtomicUsize::new(0));
+    let series_served = Arc::clone(&series_calls);
     let flow = start_with(
         move |mock: MockServer| async move {
             mount_browse_basics(&mock, &fixture("next_up_series")).await;
@@ -115,7 +162,17 @@ fn a_series_opens_with_seasons_and_episodes() {
                 .await;
             Mock::given(method("GET"))
                 .and(path(format!("/Items/{SERIES}")))
-                .respond_with(json(fixture("item_series")))
+                .respond_with(SeriesItem {
+                    calls: series_served,
+                })
+                .mount(&mock)
+                .await;
+            Mock::given(method("POST"))
+                .and(path(format!("/UserFavoriteItems/{SERIES}")))
+                .respond_with(Counted {
+                    calls: favored_calls,
+                    response: json(FAVORED),
+                })
                 .mount(&mock)
                 .await;
             Mock::given(method("POST"))
@@ -201,8 +258,8 @@ fn a_series_opens_with_seasons_and_episodes() {
         }
 
         click(&window, &season_1);
-        wait_visible(&window, "Pilot Light").await?;
-        wait_visible(&window, "Second Watch").await?;
+        wait_row(&window, "Pilot Light").await?;
+        wait_row(&window, "Second Watch").await?;
         if exists(&window, "The Pact") {
             return Err("the rows of Season 2 are still shown".into());
         }
@@ -227,14 +284,18 @@ fn a_series_opens_with_seasons_and_episodes() {
                 .is_some_and(|query| has_param(query, "seasonId", SEASON_2))
         })
         .await?;
+        wait_visible(&window, "Loading").await?;
+        if exists(&window, "Pilot Light") || exists(&window, "Second Watch") {
+            return Err("the rows of Season 1 stay under the Season 2 pill".into());
+        }
         let season_1 = wait_role(&window, "Season 1", AccessibleRole::Button).await?;
         click(&window, &season_1);
-        wait_visible(&window, "Pilot Light").await?;
+        wait_row(&window, "Pilot Light").await?;
         pause(Duration::from_millis(1300)).await;
         if exists(&window, "The Pact") {
             return Err("an answer for a season that was left replaced the rows".into());
         }
-        wait_visible(&window, "Second Watch").await?;
+        wait_row(&window, "Second Watch").await?;
 
         // Marking the series watched reloads the episodes.
         let before = episode_requests(&log).len();
@@ -248,10 +309,37 @@ fn a_series_opens_with_seasons_and_episodes() {
         let watched = wait_role(&window, "Mark as watched", AccessibleRole::Button).await?;
         click(&window, &watched);
         wait_until("the watched request", || posted.load(Ordering::SeqCst) == 1).await?;
+        // A favorite change while the series reload is in flight must not drop that reload.
+        wait_until("the series reload", || {
+            series_calls.load(Ordering::SeqCst) == 2
+        })
+        .await?;
+        let favorite = wait_role(&window, "Add to favorites", AccessibleRole::Button).await?;
+        click(&window, &favorite);
+        wait_until("the favorite request", || {
+            favored.load(Ordering::SeqCst) == 1
+        })
+        .await?;
+        wait_until("the series reloaded again", || {
+            series_calls.load(Ordering::SeqCst) == 3
+        })
+        .await?;
         wait_until("the episodes reload", || {
             episode_requests(&log).len() > before
         })
         .await?;
+
+        // A season whose episodes fail does not show the rows of another season.
+        scroll_down(&window);
+        let season_2 = wait_role(&window, "Season 2", AccessibleRole::Button).await?;
+        click(&window, &season_2);
+        wait_role(&window, "Retry", AccessibleRole::Button).await?;
+        if exists(&window, "Pilot Light") || exists(&window, "Second Watch") {
+            return Err("the rows of Season 1 are shown after Season 2 failed".into());
+        }
+        let season_1 = wait_role(&window, "Season 1", AccessibleRole::Button).await?;
+        click(&window, &season_1);
+        wait_row(&window, "Second Watch").await?;
         scroll_down(&window);
 
         #[cfg(not(feature = "mpv"))]

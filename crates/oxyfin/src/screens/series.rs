@@ -35,6 +35,8 @@ pub(crate) struct SeriesController {
     current: RefCell<Option<String>>,
     details: RefCell<Option<SeriesDetails>>,
     season: Cell<Option<usize>>,
+    rows_season: RefCell<Option<Option<String>>>,
+    reloading: Cell<bool>,
     episodes: Rc<VecModel<EpisodeData>>,
     images_requested: Cell<bool>,
 }
@@ -130,6 +132,8 @@ impl SeriesController {
         self.current.borrow_mut().take();
         self.details.borrow_mut().take();
         self.season.set(None);
+        self.rows_season.borrow_mut().take();
+        self.reloading.set(false);
         self.episodes.set_vec(Vec::new());
         self.images_requested.set(false);
         if let Some(window) = app.window() {
@@ -143,6 +147,7 @@ impl SeriesController {
             window.set_series_seasons(ModelRc::default());
             window.set_series_season(-1);
             window.set_series_episodes_loading(false);
+            window.set_series_episodes_stale(false);
             window.set_series_episodes_error(SharedString::default());
         }
     }
@@ -155,6 +160,7 @@ impl SeriesController {
         };
         self.load.set(self.load.get() + 1);
         let load = self.load.get();
+        self.reloading.set(true);
         if let Some(window) = app.window() {
             window.set_series_error(SharedString::default());
             window.set_series_loading(self.details.borrow().is_none());
@@ -176,13 +182,14 @@ impl SeriesController {
             return;
         }
         let Some(window) = app.window() else { return };
+        self.reloading.set(false);
         window.set_series_loading(false);
         match result {
             Ok(details) => {
+                // The chosen season is kept by id: the list may be reordered by a reload.
                 let chosen = self
-                    .season
-                    .get()
-                    .filter(|index| *index < details.seasons.len())
+                    .chosen_season_id()
+                    .and_then(|chosen| details.seasons.iter().position(|s| s.id.as_str() == chosen))
                     .or_else(|| initial_season(&details));
                 self.season.set(chosen);
                 *self.details.borrow_mut() = Some(details);
@@ -209,21 +216,21 @@ impl SeriesController {
         else {
             return;
         };
-        let season = {
-            let details = self.details.borrow();
-            let Some(details) = details.as_ref() else {
-                return;
-            };
-            self.season
-                .get()
-                .and_then(|index| details.seasons.get(index))
-                .map(|season| season.id.clone())
-        };
+        let season = self.chosen_season_id();
+        let wanted = Some(season.clone());
+        let changed = self.rows_season.replace(wanted.clone()) != wanted;
+        let season = season.map(ItemId::from);
         self.episodes_load.set(self.episodes_load.get() + 1);
         let load = self.episodes_load.get();
         if let Some(window) = app.window() {
             window.set_series_episodes_error(SharedString::default());
-            window.set_series_episodes_loading(self.episodes.row_count() == 0);
+            // Rows of another season are hidden, not shown under the new pill.
+            if changed {
+                window.set_series_episodes_stale(true);
+            }
+            window.set_series_episodes_loading(
+                window.get_series_episodes_stale() || self.episodes.row_count() == 0,
+            );
         }
         app.spawn(
             async move {
@@ -235,6 +242,14 @@ impl SeriesController {
             },
             move |app, result| app.series.episodes_answered(app, load, id, result),
         );
+    }
+
+    fn chosen_season_id(&self) -> Option<String> {
+        let details = self.details.borrow();
+        self.season
+            .get()
+            .and_then(|index| details.as_ref()?.seasons.get(index))
+            .map(|season| season.id.as_str().to_owned())
     }
 
     fn episodes_answered(
@@ -266,6 +281,7 @@ impl SeriesController {
         };
         self.episodes
             .set_vec(episodes.iter().map(episode_row).collect::<Vec<_>>());
+        window.set_series_episodes_stale(false);
         let Some((_, _, images)) = app.services() else {
             return;
         };
@@ -400,9 +416,10 @@ impl SeriesController {
                     details.summary.user = state;
                 }
                 // A reload that started before the change would bring the old state back.
+                let dropped = self.reloading.get();
                 self.load.set(self.load.get() + 1);
                 self.publish(app, id, &window);
-                if matches!(flag, Flag::Watched) {
+                if matches!(flag, Flag::Watched) || dropped {
                     self.request(app);
                 }
             }

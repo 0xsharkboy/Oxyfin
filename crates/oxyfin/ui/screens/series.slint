@@ -57,6 +57,8 @@ export component SeriesScreen inherits Rectangle {
     in property <int> season: -1;
     in property <[EpisodeData]> episodes;
     in property <bool> episodes-loading;
+    // True while the episodes belong to another season than the chosen one.
+    in property <bool> episodes-stale;
     in property <string> episodes-error;
     callback play();
     callback play-episode(id: string);
@@ -146,30 +148,38 @@ export component SeriesScreen inherits Rectangle {
                     padding-bottom: Theme.space-3xl;
                     spacing: Theme.space-lg;
 
-                    if root.seasons.length > 0: HorizontalLayout {
+                    VerticalLayout {
                         padding-top: Theme.space-lg;
                         spacing: Theme.space-sm;
-                        alignment: start;
 
-                        for name[index] in root.seasons: Chip {
-                            label: name;
-                            selected: index == root.season;
-                            clicked => {
-                                root.select-season(index);
+                        if root.seasons.length > 0: HorizontalLayout {
+                            spacing: Theme.space-sm;
+                            alignment: start;
+
+                            for name[index] in root.seasons: Chip {
+                                label: name;
+                                selected: index == root.season;
+                                clicked => {
+                                    root.select-season(index);
+                                }
                             }
                         }
-                    }
 
-                    for episode in root.episodes: EpisodeRow {
-                        number: episode.number;
-                        title: episode.title;
-                        overview: episode.overview;
-                        minutes: episode.minutes;
-                        image: episode.image;
-                        status: episode.watched ? CardStatus.watched : (episode.progress > 0 ? CardStatus.in-progress : CardStatus.default);
-                        progress: episode.progress;
-                        clicked => {
-                            root.play-episode(episode.id);
+                        if !root.episodes-stale: VerticalLayout {
+                            spacing: Theme.space-sm;
+
+                            for episode in root.episodes: EpisodeRow {
+                                number: episode.number;
+                                title: episode.title;
+                                overview: episode.overview;
+                                minutes: episode.minutes;
+                                image: episode.image;
+                                status: episode.watched ? CardStatus.watched : (episode.progress > 0 ? CardStatus.in-progress : CardStatus.default);
+                                progress: episode.progress;
+                                clicked => {
+                                    root.play-episode(episode.id);
+                                }
+                            }
                         }
                     }
 
