@@ -3,8 +3,8 @@
 use oxyfin_api::{BaseItemDto, BaseItemKind, ItemId, ItemSortBy, ItemsQuery, Session, SortOrder};
 
 use crate::models::{
-    Episode, ItemSummary, Library, LibraryKind, MovieDetails, Page, Season, SeriesDetails,
-    UserState,
+    Episode, ItemKind, ItemSummary, Library, LibraryKind, MovieDetails, Page, Season,
+    SeriesDetails, UserState,
 };
 use crate::{CoreError, Result};
 
@@ -42,6 +42,23 @@ pub enum BrowseSource {
     Favorites,
 }
 
+/// Watch state a listing is restricted to.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WatchFilter {
+    /// No restriction.
+    #[default]
+    All,
+    /// Items not played yet.
+    Unplayed,
+    /// Movies and videos that can be resumed, and series with a next episode.
+    InProgress,
+    /// Items played to the end.
+    Played,
+}
+
+/// Cap on each list of candidates for the in-progress filter.
+const IN_PROGRESS_CAP: u32 = 200;
+
 /// Field a listing is sorted by.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SortField {
@@ -64,8 +81,8 @@ pub struct BrowseQuery {
     pub descending: bool,
     /// Only items of this genre.
     pub genre: Option<String>,
-    /// Only played (`true`) or unplayed (`false`) items.
-    pub played: Option<bool>,
+    /// Watch state to keep.
+    pub watch: WatchFilter,
     /// Index of the first item.
     pub start: u32,
     /// Maximum number of items.
@@ -94,15 +111,19 @@ fn page(result: oxyfin_api::QueryResult<BaseItemDto>) -> Page<ItemSummary> {
     }
 }
 
+fn movies_series_videos() -> Vec<BaseItemKind> {
+    vec![
+        BaseItemKind::Movie,
+        BaseItemKind::Series,
+        BaseItemKind::Video,
+    ]
+}
+
 fn kinds_of(kind: LibraryKind) -> Vec<BaseItemKind> {
     match kind {
         LibraryKind::Movies => vec![BaseItemKind::Movie],
         LibraryKind::Shows => vec![BaseItemKind::Series],
-        LibraryKind::Mixed => vec![
-            BaseItemKind::Movie,
-            BaseItemKind::Series,
-            BaseItemKind::Video,
-        ],
+        LibraryKind::Mixed => movies_series_videos(),
         LibraryKind::Other => vec![BaseItemKind::Movie, BaseItemKind::Series],
     }
 }
@@ -178,7 +199,11 @@ impl Catalog {
                 SortOrder::Ascending
             }),
             genres: query.genre.iter().cloned().collect(),
-            is_played: query.played,
+            is_played: match query.watch {
+                WatchFilter::Unplayed => Some(false),
+                WatchFilter::Played => Some(true),
+                WatchFilter::All | WatchFilter::InProgress => None,
+            },
             start_index: Some(query.start),
             limit: Some(query.limit),
             ..ItemsQuery::default()
@@ -192,15 +217,52 @@ impl Catalog {
                 items.include_item_types = vec![kind.item_kind()];
             }
             BrowseSource::Favorites => {
-                items.include_item_types = vec![
-                    BaseItemKind::Movie,
-                    BaseItemKind::Series,
-                    BaseItemKind::Video,
-                ];
+                items.include_item_types = movies_series_videos();
                 items.is_favorite = Some(true);
             }
         }
+        if query.watch == WatchFilter::InProgress {
+            items.ids = self.in_progress_ids().await?;
+            if items.ids.is_empty() {
+                return Ok(Page {
+                    items: Vec::new(),
+                    total: 0,
+                    start: query.start,
+                });
+            }
+        }
         Ok(page(self.session.items(&items).await?))
+    }
+
+    /// Collects the movies and videos to resume and the series with a next episode.
+    async fn in_progress_ids(&self) -> Result<Vec<ItemId>> {
+        let (resume, next_up) = tokio::join!(
+            self.session.resume(IN_PROGRESS_CAP),
+            self.session.next_up(None, IN_PROGRESS_CAP)
+        );
+        let (resume, next_up) = (
+            resume.map_err(CoreError::from),
+            next_up.map_err(CoreError::from),
+        );
+        let expired = |result: &Result<_>| matches!(result, Err(CoreError::SessionExpired));
+        if expired(&resume) || expired(&next_up) {
+            return Err(CoreError::SessionExpired);
+        }
+        let (resume, next_up) = (resume?, next_up?);
+        let resumable = summaries(&resume.items)
+            .into_iter()
+            .filter(|item| matches!(item.kind, ItemKind::Movie | ItemKind::Video))
+            .map(|item| item.id);
+        let series = summaries(&next_up.items)
+            .into_iter()
+            .filter_map(|item| item.series_id);
+        let mut ids: Vec<ItemId> = Vec::new();
+        for id in resumable.chain(series) {
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        Ok(ids)
     }
 
     /// Lists the genres of a source.
@@ -212,18 +274,7 @@ impl Catalog {
                 self.session.genres(Some(id), &kinds_of(*kind)).await?
             }
             BrowseSource::All(kind) => self.session.genres(None, &[kind.item_kind()]).await?,
-            BrowseSource::Favorites => {
-                self.session
-                    .genres(
-                        None,
-                        &[
-                            BaseItemKind::Movie,
-                            BaseItemKind::Series,
-                            BaseItemKind::Video,
-                        ],
-                    )
-                    .await?
-            }
+            BrowseSource::Favorites => self.session.genres(None, &movies_series_videos()).await?,
         };
         Ok(result
             .items
