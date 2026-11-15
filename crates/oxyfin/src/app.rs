@@ -170,7 +170,7 @@ impl App {
 
     /// Plays `item` on the player screen. Only the home screen and the detail pages start playback.
     pub(crate) fn play(self: &Rc<Self>, item: ItemId, mode: PlayMode) {
-        if !can_play_from(&self.state.borrow().screen()) {
+        if !self.state.borrow().screen().can_play() {
             return;
         }
         #[cfg(not(feature = "mpv"))]
@@ -214,9 +214,11 @@ impl App {
         self.dispatch(Msg::OpenPlayer);
     }
 
-    /// Builds the player of generation `id` off the Slint thread, then plays `item` with it.
+    /// Builds the player of generation `id` off the Slint thread, then plays `item` with it
+    /// if the screen that asked for it is still shown.
     #[cfg(feature = "mpv")]
     fn create_player(&self, id: GenerationId, item: ItemId, mode: PlayMode) {
+        let from = self.state.borrow().screen();
         use oxyfin_core::player_events;
         use oxyfin_player::{Player, PlayerOptions};
 
@@ -235,7 +237,7 @@ impl App {
                     .map_err(|error| error.to_string())
                     .and_then(|built| built)
             },
-            move |app, built| app.player_built(id, item, mode, built),
+            move |app, built| app.player_built(id, item, mode, from, built),
         );
     }
 
@@ -246,6 +248,7 @@ impl App {
         id: GenerationId,
         item: ItemId,
         mode: PlayMode,
+        from: Screen,
         built: Result<(Arc<oxyfin_player::Player>, oxyfin_core::PlayerEvents), String>,
     ) {
         use crate::generation::{Built, Playback};
@@ -269,7 +272,7 @@ impl App {
                 return;
             }
         };
-        let decision = crate::generation::built(id, current, self.state.borrow().screen());
+        let decision = crate::generation::built(id, current, &self.state.borrow().screen(), &from);
         let handle = {
             let mut current = self.generation.borrow_mut();
             match current.as_mut() {
@@ -899,11 +902,6 @@ fn stale_after_stop(stack: &[Screen], closed_player: bool) -> &[Screen] {
         Some((_, below)) if closed_player => below,
         _ => stack,
     }
-}
-
-/// Whether `screen` can start playback.
-fn can_play_from(screen: &Screen) -> bool {
-    matches!(screen, Screen::Home | Screen::Movie(_) | Screen::Series(_))
 }
 
 /// Whether a notice showing `message` stays when `screen` is shown.

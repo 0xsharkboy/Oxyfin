@@ -70,6 +70,11 @@ impl Screen {
         )
     }
 
+    /// Whether playback can start from the screen: the home screen and the detail pages.
+    pub fn can_play(&self) -> bool {
+        matches!(self, Screen::Home | Screen::Movie(_) | Screen::Series(_))
+    }
+
     fn has_controller(&self) -> bool {
         matches!(
             self,
