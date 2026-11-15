@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use oxyfin_core::{
-    AudioOption, CoreError, Episode, ImageSize, ItemKind, ItemSummary, PlaybackError,
+    AudioOption, CoreError, Episode, ImageSize, ItemKind, ItemSummary, Person, PlaybackError,
     PlaybackTitle, SubtitleOption,
 };
 use slint::SharedString;
@@ -80,6 +80,18 @@ pub fn detail_target(item: &ItemSummary) -> Option<Screen> {
             .as_ref()
             .map(|series| Screen::Series(series.as_str().to_owned())),
     }
+}
+
+/// Number of actors named in the "Starring" line.
+const STARRING: usize = 4;
+
+/// The leading names of `cast`, separated by commas; empty without cast.
+pub fn cast_line(cast: &[Person]) -> String {
+    cast.iter()
+        .take(STARRING)
+        .map(|person| person.name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Card for an item. The image is loaded later.
@@ -202,7 +214,7 @@ pub fn device_name(hostname: Option<&str>, device_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oxyfin_core::UserState;
+    use oxyfin_core::{Person, UserState};
 
     fn summary(kind: ItemKind) -> ItemSummary {
         ItemSummary {
@@ -475,6 +487,25 @@ mod tests {
         assert_eq!(subtitle, "S01E01 \u{b7} Pilot");
         let (_, subtitle) = playback_title(&playing(Some("Show"), None));
         assert_eq!(subtitle, "Pilot");
+    }
+
+    fn person(name: &str) -> Person {
+        Person {
+            name: name.into(),
+            role: None,
+            image: None,
+        }
+    }
+
+    #[test]
+    fn cast_line_lists_the_first_four_names() {
+        let cast: Vec<Person> = ["A", "B", "C", "D", "E", "F"]
+            .into_iter()
+            .map(person)
+            .collect();
+        assert_eq!(cast_line(&cast), "A, B, C, D");
+        assert_eq!(cast_line(&cast[..2]), "A, B");
+        assert_eq!(cast_line(&[]), "");
     }
 
     #[test]

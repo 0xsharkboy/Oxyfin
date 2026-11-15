@@ -9,7 +9,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
 use crate::app::App;
 use crate::present::{card, core_error_message};
-use crate::screens::library::{PAGE_SIZE, load_posters, should_load_more};
+use crate::screens::library::{PAGE_SIZE, load_posters, open_detail, should_load_more, target_of};
 use crate::state::{GenerationId, Msg, Screen};
 use crate::{CardData, Messages};
 
@@ -105,6 +105,14 @@ impl SearchController {
         }
     }
 
+    /// The card of item `id` was clicked.
+    pub(crate) fn open(&self, app: &Rc<App>, id: &str) {
+        let target = target_of(&self.items.borrow(), id);
+        if let Some(screen) = target {
+            open_detail(app, screen);
+        }
+    }
+
     /// The end of the grid is near: asks for the next page when there is one.
     pub(crate) fn near_end(&self, app: &Rc<App>) {
         let loaded = self.items.borrow().len();
@@ -158,6 +166,7 @@ impl SearchController {
         self.items.borrow_mut().clear();
         self.cards.set_vec(Vec::new());
         if let Some(window) = app.window() {
+            window.set_search_viewport_y(0.0);
             window.set_search_query(SharedString::default());
             window.set_search_total(0);
             window.set_search_loading(false);
@@ -182,6 +191,9 @@ impl SearchController {
             self.total.set(0);
             self.items.borrow_mut().clear();
             self.cards.set_vec(Vec::new());
+            if let Some(window) = app.window() {
+                window.set_search_viewport_y(0.0);
+            }
         }
         if let Some(window) = app.window() {
             window.set_search_query(self.query.borrow().as_str().into());

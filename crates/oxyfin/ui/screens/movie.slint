@@ -1,0 +1,194 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { TopBar, TopBarPage } from "../components/top_bar.slint";
+import { DetailHeader } from "../components/detail_header.slint";
+import { Button, ButtonStyle } from "../components/button.slint";
+import { IconButton } from "../components/icon_button.slint";
+import { BodyText } from "../components/text.slint";
+
+// What the movie page shows about its movie; Rust fills it from the core.
+export struct MovieData {
+    title: string,
+    year: string,
+    minutes: int,
+    rating: string,
+    official-rating: string,
+    genres: [string],
+    overview: string,
+    cast: string,
+    watched: bool,
+    favorite: bool,
+    // True when playback can resume from `resume-from`.
+    can-resume: bool,
+    resume-from: string,
+}
+
+// Movie page: the detail header with its playback buttons.
+export component MovieScreen inherits Rectangle {
+    in property <TopBarPage> page: TopBarPage.none;
+    // True once the movie is known; before that only the back arrow and the loading state show.
+    in property <bool> loaded;
+    in property <bool> loading;
+    in property <string> error;
+    in property <MovieData> movie;
+    in property <image> poster;
+    in property <image> backdrop;
+    in property <bool> busy;
+    // `from-start` is false to resume where the movie was left.
+    callback play(from-start: bool);
+    callback toggle-watched();
+    callback toggle-favorite();
+    callback retry();
+    callback back();
+    callback open-tab(page: TopBarPage);
+    callback open-settings();
+
+    accessible-role: groupbox;
+    accessible-label: @tr("Movie");
+
+    background: Theme.bg-base;
+    forward-focus: keys;
+
+    // Wraps the content so Escape reaches it from any focused control.
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.back();
+                return accept;
+            }
+            reject
+        }
+
+        flick := Flickable {
+            height: parent.height;
+            content-width: self.width;
+            content-height: max(content.preferred-height, self.height);
+
+            // The mouse back button, on whatever lies behind the content.
+            TouchArea {
+                width: flick.content-width;
+                height: flick.content-height;
+                pointer-event(event) => {
+                    if event.button == PointerEventButton.back && event.kind == PointerEventKind.up {
+                        root.back();
+                    }
+                }
+            }
+
+            content := VerticalLayout {
+                width: parent.width;
+                alignment: start;
+
+                if root.loaded: DetailHeader {
+                    height: self.preferred-height;
+                    backdrop: root.backdrop;
+                    poster: root.poster;
+                    title: root.movie.title;
+                    year: root.movie.year;
+                    minutes: root.movie.minutes;
+                    rating: root.movie.rating;
+                    official-rating: root.movie.official-rating;
+                    genres: root.movie.genres;
+                    overview: root.movie.overview;
+                    cast: root.movie.cast;
+                    watched: root.movie.watched;
+                    favorite: root.movie.favorite;
+                    busy: root.busy;
+                    top-inset: top-bar.height;
+                    back => {
+                        root.back();
+                    }
+                    toggle-watched => {
+                        root.toggle-watched();
+                    }
+                    toggle-favorite => {
+                        root.toggle-favorite();
+                    }
+
+                    if root.movie.can-resume: Button {
+                        label: @tr("Resume from {}", root.movie.resume-from);
+                        icon: Icons.play;
+                        clicked => {
+                            root.play(false);
+                        }
+                    }
+                    Button {
+                        label: @tr("Play");
+                        icon: Icons.play;
+                        style: root.movie.can-resume ? ButtonStyle.secondary : ButtonStyle.primary;
+                        clicked => {
+                            root.play(true);
+                        }
+                    }
+                }
+
+                if !root.loaded: VerticalLayout {
+                    padding-top: top-bar.height + Theme.space-lg;
+                    padding-left: Theme.space-3xl;
+                    padding-right: Theme.space-3xl;
+                    spacing: Theme.space-xl;
+
+                    HorizontalLayout {
+                        alignment: start;
+
+                        IconButton {
+                            icon: Icons.arrow-left;
+                            label: @tr("Back");
+                            clicked => {
+                                root.back();
+                            }
+                        }
+                    }
+                    if root.loading: BodyText {
+                        text: @tr("Loading");
+                        color: Theme.text-secondary;
+                    }
+                    if root.error != "": BodyText {
+                        text: root.error;
+                        color: Theme.text-secondary;
+                        wrap: word-wrap;
+                    }
+                    if root.error != "": HorizontalLayout {
+                        alignment: start;
+
+                        Button {
+                            label: @tr("Retry");
+                            style: ButtonStyle.secondary;
+                            clicked => {
+                                root.retry();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    top-bar := TopBar {
+        y: 0;
+        height: self.preferred-height;
+        current: root.page;
+        home-clicked => {
+            root.open-tab(TopBarPage.home);
+        }
+        movies-clicked => {
+            root.open-tab(TopBarPage.movies);
+        }
+        shows-clicked => {
+            root.open-tab(TopBarPage.shows);
+        }
+        favorites-clicked => {
+            root.open-tab(TopBarPage.favorites);
+        }
+        search-clicked => {
+            root.open-tab(TopBarPage.search);
+        }
+        settings-clicked => {
+            root.open-settings();
+        }
+    }
+
+    init => {
+        keys.focus();
+    }
+}

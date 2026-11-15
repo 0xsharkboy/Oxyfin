@@ -22,6 +22,7 @@ use crate::generation::{Route, route};
 use crate::present::device_name;
 use crate::screens::home::HomeController;
 use crate::screens::library::LibraryController;
+use crate::screens::movie::MovieController;
 use crate::screens::player;
 use crate::screens::search::SearchController;
 use crate::screens::settings;
@@ -66,6 +67,7 @@ pub struct App {
     pub(crate) home: HomeController,
     pub(crate) library: LibraryController,
     pub(crate) search: SearchController,
+    pub(crate) movie: MovieController,
 }
 
 impl App {
@@ -102,6 +104,7 @@ impl App {
             home: HomeController::default(),
             library: LibraryController::default(),
             search: SearchController::default(),
+            movie: MovieController::default(),
         });
         app.bind(window);
         app.restore();
@@ -422,7 +425,7 @@ impl App {
     /// Shows `message` in the notice banner, replacing the one shown. Messages
     /// that need no action leave after [`NOTICE_DURATION`]; the others stay
     /// until the user closes them.
-    fn notify(&self, message: Message) {
+    pub(crate) fn notify(&self, message: Message) {
         let Some(window) = self.window() else { return };
         let dismissible = is_persistent(message);
         window.set_notice(NoticeData {
@@ -468,6 +471,7 @@ impl App {
         match screen {
             Screen::Home => self.home.refresh(self),
             Screen::Library(_) => self.library.refresh(self),
+            Screen::Movie(_) => self.movie.refresh(self),
             _ => {}
         }
     }
@@ -580,6 +584,39 @@ impl App {
         window.on_search_retry(with(|app| app.search.retry(app)));
         window.on_search_retry_more(with(|app| app.search.retry_more(app)));
         window.on_search_near_end(with(|app| app.search.near_end(app)));
+        window.on_back(with(|app| app.dispatch(Msg::Back)));
+        window.on_movie_toggle_watched(with(|app| app.movie.toggle_watched(app)));
+        window.on_movie_toggle_favorite(with(|app| app.movie.toggle_favorite(app)));
+        window.on_movie_retry(with(|app| app.movie.retry(app)));
+        let this = self.this.clone();
+        window.on_movie_play(move |from_start| {
+            if let Some(app) = this.upgrade() {
+                let mode = if from_start {
+                    PlayMode::FromStart
+                } else {
+                    PlayMode::Auto
+                };
+                app.movie.play(&app, mode);
+            }
+        });
+        let this = self.this.clone();
+        window.on_open_item(move |id| {
+            if let Some(app) = this.upgrade() {
+                app.home.open(&app, &id);
+            }
+        });
+        let this = self.this.clone();
+        window.on_library_open(move |id| {
+            if let Some(app) = this.upgrade() {
+                app.library.open(&app, &id);
+            }
+        });
+        let this = self.this.clone();
+        window.on_search_open(move |id| {
+            if let Some(app) = this.upgrade() {
+                app.search.open(&app, &id);
+            }
+        });
         let this = self.this.clone();
         window.on_search_edited(move |text| {
             if let Some(app) = this.upgrade() {
@@ -739,11 +776,13 @@ impl App {
                 self.home.shown(self, &screen);
                 self.library.shown(self, &screen);
                 self.search.shown(self, &screen);
+                self.movie.shown(self, &screen);
             }
             Effect::Discard(screen) => {
                 self.home.discard(self, &screen);
                 self.library.discard(self, &screen);
                 self.search.discard(self, &screen);
+                self.movie.discard(self, &screen);
             }
             Effect::Refresh(screen) => self.refresh(&screen),
             Effect::Notify(notice) => self.notify(notice_message(notice)),

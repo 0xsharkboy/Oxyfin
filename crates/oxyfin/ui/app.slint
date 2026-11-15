@@ -11,6 +11,7 @@ import { PlayerScreen } from "screens/player.slint";
 import { SettingsScreen } from "screens/settings.slint";
 import { LibraryScreen, LibraryTitles } from "screens/library.slint";
 import { SearchScreen, SearchTitles } from "screens/search.slint";
+import { MovieScreen, MovieData } from "screens/movie.slint";
 import { TopBarPage } from "components/top_bar.slint";
 import { NoticeBanner, NoticeData } from "components/notice_banner.slint";
 
@@ -20,6 +21,7 @@ export { HomeBanner, HomeRow, HomeRowKind, HomeTitles }
 export { NoticeData }
 export { LibraryTitles }
 export { SearchTitles }
+export { MovieData }
 export { TopBarPage }
 
 // Mirrors the Rust `state::Screen` one to one.
@@ -49,7 +51,10 @@ export component AppWindow inherits Window {
     in property <[HomeRow]> home-rows;
     in property <bool> home-settled;
     callback play(id: string);
+    callback open-item(id: string);
     callback open-settings();
+    // Leaves a detail page for the screen below it.
+    callback back();
 
     // Tab of the top bar that stays underlined: the root of the screen stack.
     in property <TopBarPage> top-bar-page: TopBarPage.none;
@@ -67,11 +72,13 @@ export component AppWindow inherits Window {
     in property <int> library-genre;
     in property <int> library-sort-field;
     in property <bool> library-descending;
+    in-out property <length> library-viewport-y;
     callback library-watch-selected(index: int);
     callback library-genre-selected(index: int);
     callback library-sort-selected(index: int);
     callback library-direction-toggled();
     callback library-near-end();
+    callback library-open(id: string);
     callback library-retry();
     callback library-retry-more();
 
@@ -83,11 +90,25 @@ export component AppWindow inherits Window {
     in property <bool> search-loading-more;
     in property <string> search-error;
     in property <bool> search-more-failed;
+    in-out property <length> search-viewport-y;
     callback search-edited(text: string);
     callback search-accepted(text: string);
     callback search-near-end();
+    callback search-open(id: string);
     callback search-retry();
     callback search-retry-more();
+
+    in property <bool> movie-loaded;
+    in property <bool> movie-loading;
+    in property <string> movie-error;
+    in property <MovieData> movie-data;
+    in property <image> movie-poster;
+    in property <image> movie-backdrop;
+    in property <bool> movie-busy;
+    callback movie-play(from-start: bool);
+    callback movie-toggle-watched();
+    callback movie-toggle-favorite();
+    callback movie-retry();
 
     in property <string> player-title;
     in property <string> player-subtitle;
@@ -197,6 +218,9 @@ export component AppWindow inherits Window {
         play(id) => {
             root.play(id);
         }
+        open-item(id) => {
+            root.open-item(id);
+        }
         open-settings => {
             root.open-settings();
         }
@@ -216,6 +240,7 @@ export component AppWindow inherits Window {
         genre: root.library-genre;
         sort-field: root.library-sort-field;
         descending: root.library-descending;
+        viewport-y <=> root.library-viewport-y;
         watch-selected(index) => {
             root.library-watch-selected(index);
         }
@@ -230,6 +255,9 @@ export component AppWindow inherits Window {
         }
         near-end => {
             root.library-near-end();
+        }
+        open(id) => {
+            root.library-open(id);
         }
         retry => {
             root.library-retry();
@@ -255,6 +283,7 @@ export component AppWindow inherits Window {
         loading-more: root.search-loading-more;
         error: root.search-error;
         more-failed: root.search-more-failed;
+        viewport-y <=> root.search-viewport-y;
         edited(text) => {
             root.search-edited(text);
         }
@@ -264,11 +293,46 @@ export component AppWindow inherits Window {
         near-end => {
             root.search-near-end();
         }
+        open(id) => {
+            root.search-open(id);
+        }
         retry => {
             root.search-retry();
         }
         retry-more => {
             root.search-retry-more();
+        }
+        open-tab(page) => {
+            root.open-tab(page);
+        }
+        open-settings => {
+            root.open-settings();
+        }
+    }
+
+    if root.screen == Screen.movie: MovieScreen {
+        page: root.top-bar-page;
+        loaded: root.movie-loaded;
+        loading: root.movie-loading;
+        error: root.movie-error;
+        movie: root.movie-data;
+        poster: root.movie-poster;
+        backdrop: root.movie-backdrop;
+        busy: root.movie-busy;
+        play(from-start) => {
+            root.movie-play(from-start);
+        }
+        toggle-watched => {
+            root.movie-toggle-watched();
+        }
+        toggle-favorite => {
+            root.movie-toggle-favorite();
+        }
+        retry => {
+            root.movie-retry();
+        }
+        back => {
+            root.back();
         }
         open-tab(page) => {
             root.open-tab(page);
@@ -374,7 +438,7 @@ export component AppWindow inherits Window {
 
     // Below the top bar of the screens that have one.
     if root.notice.visible: NoticeBanner {
-        y: root.screen == Screen.home || root.screen == Screen.library || root.screen == Screen.search || root.screen == Screen.settings ? Theme.space-3xl + Theme.space-lg : Theme.space-lg;
+        y: root.screen == Screen.home || root.screen == Screen.library || root.screen == Screen.search || root.screen == Screen.movie || root.screen == Screen.settings ? Theme.space-3xl + Theme.space-lg : Theme.space-lg;
         x: (parent.width - self.width) / 2;
         width: min(parent.width - 2 * Theme.space-lg, 560px);
         notice: root.notice;

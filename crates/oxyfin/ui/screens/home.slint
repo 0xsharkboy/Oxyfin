@@ -41,6 +41,7 @@ export global HomeTitles {
 component HomeRowView inherits Rectangle {
     in property <HomeRow> section;
     callback play(id: string);
+    callback open(id: string);
 
     accessible-role: list;
     accessible-label: section.title;
@@ -104,7 +105,9 @@ component HomeRowView inherits Rectangle {
                     image: card.image;
                     status: root.status(card);
                     progress: card.progress;
-                    enabled: false;
+                    clicked => {
+                        root.open(card.id);
+                    }
                 }
             }
         }
@@ -119,6 +122,7 @@ export component HomeScreen inherits Rectangle {
     in property <bool> settled;
     callback open-tab(page: TopBarPage);
     callback play(id: string);
+    callback open-item(id: string);
     callback open-settings();
 
     accessible-role: groupbox;
@@ -152,6 +156,9 @@ export component HomeScreen inherits Rectangle {
                 play => {
                     root.play(root.banner.card.id);
                 }
+                more-info => {
+                    root.open-item(root.banner.card.id);
+                }
             }
             if !root.banner.has: Rectangle {
                 height: top-bar.height;
@@ -161,6 +168,9 @@ export component HomeScreen inherits Rectangle {
                 section: row;
                 play(id) => {
                     root.play(id);
+                }
+                open(id) => {
+                    root.open-item(id);
                 }
             }
 

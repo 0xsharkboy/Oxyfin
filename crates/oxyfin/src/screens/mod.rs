@@ -2,6 +2,7 @@
 
 pub(crate) mod home;
 pub(crate) mod library;
+pub(crate) mod movie;
 pub mod player;
 pub(crate) mod search;
 pub mod settings;
