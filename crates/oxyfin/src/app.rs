@@ -357,8 +357,10 @@ impl App {
                 return;
             }
             // The stop report is queued before this event: Continue Watching catches up.
-            let shown = self.shown.borrow().clone();
-            self.refresh(&shown);
+            let stacked = self.state.borrow().stack().to_vec();
+            for screen in &stacked {
+                self.refresh(screen);
+            }
         } else if ended && on_player && !window.get_player_has_next() {
             self.send_playback(PlaybackCommand::Stop);
             self.dispatch(Msg::ClosePlayer);
