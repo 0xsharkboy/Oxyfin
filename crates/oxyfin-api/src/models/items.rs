@@ -176,6 +176,8 @@ pub struct ItemsQuery {
     pub limit: Option<u32>,
     /// Optional fields to include.
     pub fields: Vec<ItemFields>,
+    /// Only these items, sent comma delimited.
+    pub ids: Vec<ItemId>,
 }
 
 fn join<'a>(values: impl Iterator<Item = &'a str>) -> String {
@@ -203,6 +205,9 @@ impl ItemsQuery {
         }
         if !self.genres.is_empty() {
             params.push(("genres", self.genres.join("|")));
+        }
+        if !self.ids.is_empty() {
+            params.push(("ids", join(self.ids.iter().map(ItemId::as_str))));
         }
         if let Some(played) = self.is_played {
             params.push(("isPlayed", played.to_string()));

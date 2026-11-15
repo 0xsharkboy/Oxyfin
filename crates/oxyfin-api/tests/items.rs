@@ -324,6 +324,7 @@ async fn items_query_serializes_parameters() {
         start_index: Some(20),
         limit: Some(50),
         fields: vec![ItemFields::Overview, ItemFields::Genres],
+        ids: Vec::new(),
     };
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
@@ -383,6 +384,42 @@ async fn items_query_serializes_parameters() {
     );
     let raw = requests[2].url.query().unwrap();
     assert!(raw.contains("genres=Drama%7CComedy"), "{raw}");
+}
+
+#[allow(clippy::unwrap_used)]
+async fn query_pairs_for(query: &ItemsQuery) -> Vec<(String, String)> {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"Items": []})))
+        .mount(&mock)
+        .await;
+    session(&mock).items(query).await.unwrap();
+    let requests = mock.received_requests().await.unwrap();
+    requests[0]
+        .url
+        .query_pairs()
+        .map(|(k, v)| (k.into_owned(), v.into_owned()))
+        .collect()
+}
+
+#[tokio::test]
+async fn items_query_sends_ids() {
+    let pairs = query_pairs_for(&ItemsQuery {
+        ids: vec!["a".into(), "b".into()],
+        ..ItemsQuery::default()
+    })
+    .await;
+    assert!(
+        pairs.contains(&("ids".to_string(), "a,b".to_string())),
+        "{pairs:?}"
+    );
+}
+
+#[tokio::test]
+async fn items_query_omits_empty_ids() {
+    let pairs = query_pairs_for(&ItemsQuery::default()).await;
+    assert!(pairs.iter().all(|(k, _)| k != "ids"), "{pairs:?}");
 }
 
 #[test]
