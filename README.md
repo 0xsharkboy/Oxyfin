@@ -2,7 +2,10 @@
 
 Oxyfin is a native Jellyfin desktop client written in Rust, with no web rendering of any kind: the interface is built with Slint and playback goes through libmpv.
 
-**Status:** early development. Nothing is usable yet.
+> [!WARNING]
+> **Work in progress.** Oxyfin is in early development and not ready for everyday use. Expect missing features, bugs and breaking changes. There are no releases or packages yet: it only runs from source.
+
+What works today: sign in (password or Quick Connect), home, movie and show libraries, search, movie and series pages, playback, settings, in English and French. See [ROADMAP.md](ROADMAP.md) for what comes next.
 
 ## Development
 
