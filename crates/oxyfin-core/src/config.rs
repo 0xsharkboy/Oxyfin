@@ -20,6 +20,9 @@ pub struct SavedSession {
     /// Server id, when known.
     #[serde(default)]
     pub server_id: Option<String>,
+    /// Display name of the server, when it published one.
+    #[serde(default)]
+    pub server_name: Option<String>,
 }
 
 /// Application configuration stored in `config_dir/config.json`.
@@ -112,6 +115,7 @@ mod tests {
             user_id: "u1".into(),
             user_name: "Ana".into(),
             server_id: Some("s1".into()),
+            server_name: Some("Home".into()),
         });
         config.save(&paths).unwrap();
         assert_eq!(Config::load_or_create(&paths).unwrap(), config);
@@ -143,6 +147,19 @@ mod tests {
     }
 
     #[test]
+    fn config_without_server_name_still_loads() {
+        let (_dir, paths) = temp();
+        fs::create_dir_all(&paths.config_dir).unwrap();
+        fs::write(
+            paths.config_dir.join("config.json"),
+            r#"{"device_id":"abc","session":{"server_url":"https://jf.example","user_id":"u1","user_name":"Ana","server_id":"s1"}}"#,
+        )
+        .unwrap();
+        let config = Config::load_or_create(&paths).unwrap();
+        assert_eq!(config.session.unwrap().server_name, None);
+    }
+
+    #[test]
     fn config_never_contains_a_token() {
         let (_dir, paths) = temp();
         let mut config = Config::load_or_create(&paths).unwrap();
@@ -151,6 +168,7 @@ mod tests {
             user_id: "u1".into(),
             user_name: "Ana".into(),
             server_id: None,
+            server_name: None,
         });
         let value = serde_json::to_value(&config).unwrap();
         for object in [&value, &value["session"]] {

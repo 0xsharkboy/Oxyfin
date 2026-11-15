@@ -30,6 +30,8 @@ pub struct SignedIn {
     pub user_name: String,
     /// Base URL of the server.
     pub server_url: String,
+    /// Display name of the server, when it published one.
+    pub server_name: Option<String>,
     /// Where the token is kept.
     pub token_storage: TokenStorage,
     /// True when the token sits in a plain file and the user was not told yet.
@@ -131,16 +133,16 @@ impl SessionManager {
                 }
             })?;
         let user_name = session.me().await?.name;
-        self.remember(&server.server, session, user_name).await
+        self.remember(server, session, user_name).await
     }
 
     pub(crate) async fn remember(
         &self,
-        server: &Server,
+        server: &ServerHandle,
         session: Session,
         user_name: String,
     ) -> Result<SignedIn> {
-        let server_url = server.base_url().to_string();
+        let server_url = server.server.base_url().to_string();
         let account = account_key(&server_url, session.user_id().as_str());
         let token = session.token().to_owned();
         let previous = self.config().session.clone();
@@ -155,6 +157,7 @@ impl SessionManager {
             user_id: session.user_id().to_string(),
             user_name: user_name.clone(),
             server_id: session.server_id().map(str::to_owned),
+            server_name: server.name.clone(),
         };
         let url = server_url.clone();
         let result = self.update(move |config| {
@@ -179,6 +182,7 @@ impl SessionManager {
             session,
             user_name,
             server_url,
+            server_name: server.name.clone(),
             token_storage,
             show_file_token_warning,
         })
@@ -203,6 +207,7 @@ impl SessionManager {
             session,
             user_name: saved.user_name,
             server_url: saved.server_url,
+            server_name: saved.server_name,
             token_storage,
             show_file_token_warning,
         }))

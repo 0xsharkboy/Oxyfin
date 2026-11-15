@@ -236,6 +236,7 @@ pub fn save_session(paths: &Paths, vault: &TokenVault, server_url: &str) {
         user_id: USER_ID.to_owned(),
         user_name: "oxyfin".to_owned(),
         server_id: None,
+        server_name: None,
     });
     config.last_server_url = Some(server_url.to_owned());
     config
