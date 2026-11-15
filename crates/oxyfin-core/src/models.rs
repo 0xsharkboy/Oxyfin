@@ -222,6 +222,10 @@ pub struct MovieDetails {
     pub cast: Vec<Person>,
     /// Whether playback can resume from a saved position.
     pub can_resume: bool,
+    /// Average community rating, out of 10.
+    pub community_rating: Option<f32>,
+    /// Content rating such as `PG-13`.
+    pub official_rating: Option<String>,
 }
 
 impl MovieDetails {
@@ -236,6 +240,8 @@ impl MovieDetails {
             genres: dto.genres.clone(),
             cast: cast(dto),
             can_resume,
+            community_rating: dto.community_rating,
+            official_rating: dto.official_rating.clone(),
         })
     }
 }
@@ -343,6 +349,10 @@ pub struct SeriesDetails {
     pub seasons: Vec<Season>,
     /// Episode to play next, `None` when there is none or the lookup failed.
     pub next_episode: Option<Episode>,
+    /// Average community rating, out of 10.
+    pub community_rating: Option<f32>,
+    /// Content rating such as `TV-14`.
+    pub official_rating: Option<String>,
 }
 
 impl SeriesDetails {
@@ -360,6 +370,8 @@ impl SeriesDetails {
             cast: cast(dto),
             seasons,
             next_episode,
+            community_rating: dto.community_rating,
+            official_rating: dto.official_rating.clone(),
         })
     }
 }
@@ -446,6 +458,29 @@ mod tests {
         assert!((progress - 0.2993).abs() < 0.001);
         let details = MovieDetails::from_dto(&dto).unwrap();
         assert_eq!(details.genres, ["Drama", "Comedy"]);
+    }
+
+    fn rated(json: &str) -> BaseItemDto {
+        let mut value: serde_json::Value = serde_json::from_str(json).unwrap();
+        value["CommunityRating"] = serde_json::json!(8.4);
+        value["OfficialRating"] = serde_json::json!("TV-14");
+        serde_json::from_value(value).unwrap()
+    }
+
+    #[test]
+    fn movie_details_carry_ratings() {
+        let dto = rated(include_str!("../tests/fixtures/item_movie.json"));
+        let details = MovieDetails::from_dto(&dto).unwrap();
+        assert_eq!(details.community_rating, Some(8.4));
+        assert_eq!(details.official_rating.as_deref(), Some("TV-14"));
+    }
+
+    #[test]
+    fn series_details_carry_ratings() {
+        let dto = rated(include_str!("../tests/fixtures/item_series.json"));
+        let details = SeriesDetails::from_dto(&dto, Vec::new(), None).unwrap();
+        assert_eq!(details.community_rating, Some(8.4));
+        assert_eq!(details.official_rating.as_deref(), Some("TV-14"));
     }
 
     #[test]
