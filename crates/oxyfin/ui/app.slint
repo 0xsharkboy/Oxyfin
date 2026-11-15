@@ -58,6 +58,7 @@ export component AppWindow inherits Window {
     in property <bool> library-loading;
     in property <bool> library-loading-more;
     in property <string> library-error;
+    in property <bool> library-more-failed;
     in property <bool> library-filtered;
     in property <int> library-watch;
     in property <[string]> library-genres;
@@ -70,6 +71,7 @@ export component AppWindow inherits Window {
     callback library-direction-toggled();
     callback library-near-end();
     callback library-retry();
+    callback library-retry-more();
 
     in property <string> player-title;
     in property <string> player-subtitle;
@@ -191,6 +193,7 @@ export component AppWindow inherits Window {
         loading: root.library-loading;
         loading-more: root.library-loading-more;
         error: root.library-error;
+        more-failed: root.library-more-failed;
         filtered: root.library-filtered;
         watch: root.library-watch;
         genres: root.library-genres;
@@ -214,6 +217,9 @@ export component AppWindow inherits Window {
         }
         retry => {
             root.library-retry();
+        }
+        retry-more => {
+            root.library-retry-more();
         }
         open-tab(page) => {
             root.open-tab(page);

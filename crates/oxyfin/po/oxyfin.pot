@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-15 12:57+0000\n"
+"POT-Creation-Date: 2026-11-15 13:12+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -262,101 +262,107 @@ msgctxt "LibraryTitles"
 msgid "All genres"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:44
+#: crates/oxyfin/ui/screens/library.slint:47
 msgctxt "LibraryScreen"
 msgid "Movies"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:44
+#: crates/oxyfin/ui/screens/library.slint:47
 msgctxt "LibraryScreen"
 msgid "Shows"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:44
+#: crates/oxyfin/ui/screens/library.slint:47
 msgctxt "LibraryScreen"
 msgid "Favorites"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:45
+#: crates/oxyfin/ui/screens/library.slint:48
 msgctxt "LibraryScreen"
 msgid "All"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:45
+#: crates/oxyfin/ui/screens/library.slint:48
 msgctxt "LibraryScreen"
 msgid "Unwatched"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:45
+#: crates/oxyfin/ui/screens/library.slint:48
 msgctxt "LibraryScreen"
 msgid "In progress"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:45
+#: crates/oxyfin/ui/screens/library.slint:48
 msgctxt "LibraryScreen"
 msgid "Watched"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:46
+#: crates/oxyfin/ui/screens/library.slint:49
 msgctxt "LibraryScreen"
 msgid "Date added"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:46
+#: crates/oxyfin/ui/screens/library.slint:49
 msgctxt "LibraryScreen"
 msgid "Title"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:46
+#: crates/oxyfin/ui/screens/library.slint:49
 msgctxt "LibraryScreen"
 msgid "Year"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:77
+#: crates/oxyfin/ui/screens/library.slint:80
 msgctxt "LibraryScreen"
 msgid "{n} title"
 msgid_plural "{n} titles"
 msgstr[0] ""
 msgstr[1] ""
 
-#: crates/oxyfin/ui/screens/library.slint:95
+#: crates/oxyfin/ui/screens/library.slint:98
 msgctxt "LibraryScreen"
 msgid "Genre"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:107
+#: crates/oxyfin/ui/screens/library.slint:110
 msgctxt "LibraryScreen"
 msgid "Descending"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:107
+#: crates/oxyfin/ui/screens/library.slint:110
 msgctxt "LibraryScreen"
 msgid "Ascending"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:114
+#: crates/oxyfin/ui/screens/library.slint:117
 msgctxt "LibraryScreen"
 msgid "Sort"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:139
+#: crates/oxyfin/ui/screens/library.slint:142
 msgctxt "LibraryScreen"
 msgid "Loading"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:152
+#: crates/oxyfin/ui/screens/library.slint:160
+msgctxt "LibraryScreen"
+msgid "Cannot load more titles"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:165
+#: crates/oxyfin/ui/screens/library.slint:165
+msgctxt "LibraryScreen"
+msgid "Retry"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:180
 msgctxt "LibraryScreen"
 msgid "No titles match these filters"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/library.slint:152
+#: crates/oxyfin/ui/screens/library.slint:180
 msgctxt "LibraryScreen"
 msgid "Nothing here yet"
-msgstr ""
-
-#: crates/oxyfin/ui/screens/library.slint:171
-msgctxt "LibraryScreen"
-msgid "Retry"
 msgstr ""
 
 #: crates/oxyfin/ui/screens/player.slint:97

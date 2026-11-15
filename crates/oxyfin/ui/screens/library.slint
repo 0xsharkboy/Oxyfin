@@ -22,6 +22,8 @@ export component LibraryScreen inherits Rectangle {
     in property <bool> loading;
     in property <bool> loading-more;
     in property <string> error;
+    // True when the page after the last one loaded could not be fetched.
+    in property <bool> more-failed;
     // True when a watch or genre filter narrows the list.
     in property <bool> filtered;
     in property <int> watch;
@@ -35,6 +37,7 @@ export component LibraryScreen inherits Rectangle {
     callback direction-toggled();
     callback near-end();
     callback retry();
+    callback retry-more();
     callback open-tab(page: TopBarPage);
     callback open-settings();
 
@@ -140,6 +143,31 @@ export component LibraryScreen inherits Rectangle {
                     color: Theme.text-secondary;
                     horizontal-alignment: center;
                     vertical-alignment: center;
+                }
+            }
+
+            if root.more-failed: Rectangle {
+                y: parent.height - self.height;
+                height: more-row.preferred-height;
+                background: Theme.bg-base;
+
+                more-row := HorizontalLayout {
+                    alignment: center;
+                    padding: Theme.space-md;
+                    spacing: Theme.space-lg;
+
+                    BodyText {
+                        text: @tr("Cannot load more titles");
+                        color: Theme.text-secondary;
+                        vertical-alignment: center;
+                    }
+                    Button {
+                        label: @tr("Retry");
+                        style: ButtonStyle.secondary;
+                        clicked => {
+                            root.retry-more();
+                        }
+                    }
                 }
             }
 
