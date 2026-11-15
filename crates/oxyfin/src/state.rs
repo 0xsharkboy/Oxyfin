@@ -654,6 +654,16 @@ mod tests {
     }
 
     #[test]
+    fn leaving_the_search_discards_its_controller() {
+        let (mut s, _) = signed_in();
+        s.update(Msg::OpenTab(Tab::Search));
+        assert_eq!(
+            s.update(Msg::OpenTab(Tab::Home)),
+            vec![Effect::Discard(Screen::Search), Effect::Show(Screen::Home)]
+        );
+    }
+
+    #[test]
     fn same_tab_does_nothing() {
         let (mut s, _) = signed_in();
         assert!(s.update(Msg::OpenTab(Tab::Home)).is_empty());

@@ -10,6 +10,7 @@ import { HomeScreen, HomeBanner, HomeRow, HomeRowKind, HomeTitles } from "screen
 import { PlayerScreen } from "screens/player.slint";
 import { SettingsScreen } from "screens/settings.slint";
 import { LibraryScreen, LibraryTitles } from "screens/library.slint";
+import { SearchScreen, SearchTitles } from "screens/search.slint";
 import { TopBarPage } from "components/top_bar.slint";
 import { NoticeBanner, NoticeData } from "components/notice_banner.slint";
 
@@ -18,6 +19,7 @@ export { ServerState, ServerStatus }
 export { HomeBanner, HomeRow, HomeRowKind, HomeTitles }
 export { NoticeData }
 export { LibraryTitles }
+export { SearchTitles }
 export { TopBarPage }
 
 // Mirrors the Rust `state::Screen` one to one.
@@ -72,6 +74,20 @@ export component AppWindow inherits Window {
     callback library-near-end();
     callback library-retry();
     callback library-retry-more();
+
+    in-out property <string> search-text;
+    in property <[CardData]> search-cards;
+    in property <int> search-total;
+    in property <string> search-query;
+    in property <bool> search-loading;
+    in property <bool> search-loading-more;
+    in property <string> search-error;
+    in property <bool> search-more-failed;
+    callback search-edited(text: string);
+    callback search-accepted(text: string);
+    callback search-near-end();
+    callback search-retry();
+    callback search-retry-more();
 
     in property <string> player-title;
     in property <string> player-subtitle;
@@ -229,6 +245,39 @@ export component AppWindow inherits Window {
         }
     }
 
+    if root.screen == Screen.search: SearchScreen {
+        page: root.top-bar-page;
+        text <=> root.search-text;
+        cards: root.search-cards;
+        total: root.search-total;
+        query: root.search-query;
+        loading: root.search-loading;
+        loading-more: root.search-loading-more;
+        error: root.search-error;
+        more-failed: root.search-more-failed;
+        edited(text) => {
+            root.search-edited(text);
+        }
+        accepted(text) => {
+            root.search-accepted(text);
+        }
+        near-end => {
+            root.search-near-end();
+        }
+        retry => {
+            root.search-retry();
+        }
+        retry-more => {
+            root.search-retry-more();
+        }
+        open-tab(page) => {
+            root.open-tab(page);
+        }
+        open-settings => {
+            root.open-settings();
+        }
+    }
+
     if root.screen == Screen.player: PlayerScreen {
         title: root.player-title;
         subtitle: root.player-subtitle;
@@ -325,7 +374,7 @@ export component AppWindow inherits Window {
 
     // Below the top bar of the screens that have one.
     if root.notice.visible: NoticeBanner {
-        y: root.screen == Screen.home || root.screen == Screen.library || root.screen == Screen.settings ? Theme.space-3xl + Theme.space-lg : Theme.space-lg;
+        y: root.screen == Screen.home || root.screen == Screen.library || root.screen == Screen.search || root.screen == Screen.settings ? Theme.space-3xl + Theme.space-lg : Theme.space-lg;
         x: (parent.width - self.width) / 2;
         width: min(parent.width - 2 * Theme.space-lg, 560px);
         notice: root.notice;
