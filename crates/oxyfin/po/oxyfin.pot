@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-14 23:01+0000\n"
+"POT-Creation-Date: 2026-11-15 02:04+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -295,53 +295,58 @@ msgctxt "QuickConnectScreen"
 msgid "Back"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:54
-#: crates/oxyfin/ui/screens/settings.slint:54
+#: crates/oxyfin/ui/screens/settings.slint:55
+#: crates/oxyfin/ui/screens/settings.slint:55
 msgctxt "SettingsScreen"
 msgid "Settings"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:90
+#: crates/oxyfin/ui/screens/settings.slint:91
 msgctxt "SettingsScreen"
 msgid "Account"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:93
+#: crates/oxyfin/ui/screens/settings.slint:94
 msgctxt "SettingsScreen"
 msgid "Server"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:97
+#: crates/oxyfin/ui/screens/settings.slint:95
+msgctxt "SettingsScreen"
+msgid "{} ({})"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/settings.slint:98
 msgctxt "SettingsScreen"
 msgid "Signed in as"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:101
+#: crates/oxyfin/ui/screens/settings.slint:102
 msgctxt "SettingsScreen"
 msgid "Sign-in token"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:102
+#: crates/oxyfin/ui/screens/settings.slint:103
 msgctxt "SettingsScreen"
 msgid "Stored in a private file"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:102
+#: crates/oxyfin/ui/screens/settings.slint:103
 msgctxt "SettingsScreen"
 msgid "Stored in the system keyring"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:109
+#: crates/oxyfin/ui/screens/settings.slint:110
 msgctxt "SettingsScreen"
 msgid "Sign out"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:119
+#: crates/oxyfin/ui/screens/settings.slint:120
 msgctxt "SettingsScreen"
 msgid "About"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:122
+#: crates/oxyfin/ui/screens/settings.slint:123
 msgctxt "SettingsScreen"
 msgid "Version"
 msgstr ""

@@ -686,6 +686,7 @@ fn session_info(signed: &SignedIn) -> SessionInfo {
     SessionInfo {
         user_name: signed.user_name.clone(),
         server_url: signed.server_url.clone(),
+        server_name: signed.server_name.clone(),
         token_in_file: signed.token_storage == TokenStorage::File,
         show_file_token_warning: signed.show_file_token_warning,
     }

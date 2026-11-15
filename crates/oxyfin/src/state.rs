@@ -28,6 +28,8 @@ pub struct SessionInfo {
     pub user_name: String,
     /// Server address.
     pub server_url: String,
+    /// Display name of the server, when it published one.
+    pub server_name: Option<String>,
     /// Whether the token is stored in a file rather than the keyring.
     pub token_in_file: bool,
     /// Whether the file-token warning must be shown.
@@ -272,6 +274,7 @@ mod tests {
         SessionInfo {
             user_name: "alice".into(),
             server_url: "https://jf.example".into(),
+            server_name: None,
             token_in_file: warn,
             show_file_token_warning: warn,
         }

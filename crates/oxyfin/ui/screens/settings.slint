@@ -43,6 +43,7 @@ component SettingSection inherits Rectangle {
 
 // Settings: the signed-in account, the application version and the sign-out action.
 export component SettingsScreen inherits Rectangle {
+    in property <string> server-name;
     in property <string> server-address;
     in property <string> user-name;
     in property <bool> token-in-file;
@@ -91,7 +92,7 @@ export component SettingsScreen inherits Rectangle {
 
                         SettingRow {
                             label: @tr("Server");
-                            value: root.server-address;
+                            value: root.server-name != "" ? @tr("{} ({})", root.server-name, root.server-address) : root.server-address;
                         }
                         SettingRow {
                             label: @tr("Signed in as");
