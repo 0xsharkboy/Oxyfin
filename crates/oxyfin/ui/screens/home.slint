@@ -117,6 +117,7 @@ export component HomeScreen inherits Rectangle {
     in property <[HomeRow]> rows;
     // True once every source of the screen has answered.
     in property <bool> settled;
+    callback open-tab(page: TopBarPage);
     callback play(id: string);
     callback open-settings();
 
@@ -186,6 +187,15 @@ export component HomeScreen inherits Rectangle {
         y: 0;
         height: self.preferred-height;
         current: TopBarPage.home;
+        movies-clicked => {
+            root.open-tab(TopBarPage.movies);
+        }
+        shows-clicked => {
+            root.open-tab(TopBarPage.shows);
+        }
+        favorites-clicked => {
+            root.open-tab(TopBarPage.favorites);
+        }
         settings-clicked => {
             root.open-settings();
         }

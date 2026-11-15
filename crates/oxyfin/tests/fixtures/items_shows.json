@@ -1,0 +1,27 @@
+{
+  "Items": [
+    {
+      "Name": "Test Show",
+      "ServerId": "87fcca6823684ae692e5c60378bf931d",
+      "Id": "9ea196e7ccc3ae17d2c3f75c3ab34406",
+      "ChannelId": null,
+      "ProductionYear": 2021,
+      "IsFolder": true,
+      "Type": "Series",
+      "UserData": {
+        "PlayedPercentage": 25,
+        "UnplayedItemCount": 3,
+        "PlaybackPositionTicks": 0,
+        "PlayCount": 0,
+        "IsFavorite": false,
+        "Played": false,
+        "Key": "9ea196e7-ccc3-ae17-d2c3-f75c3ab34406",
+        "ItemId": "9ea196e7ccc3ae17d2c3f75c3ab34406"
+      },
+      "ImageTags": {},
+      "BackdropImageTags": []
+    }
+  ],
+  "TotalRecordCount": 1,
+  "StartIndex": 0
+}

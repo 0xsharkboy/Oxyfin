@@ -1,0 +1,202 @@
+import { Theme, CardData } from "../theme.slint";
+import { TopBar, TopBarPage } from "../components/top_bar.slint";
+import { PosterGrid } from "../components/poster_grid.slint";
+import { Dropdown } from "../components/dropdown.slint";
+import { Chip } from "../components/chip.slint";
+import { Button, ButtonStyle } from "../components/button.slint";
+import { BodyText, DisplayText, HeadingText } from "../components/text.slint";
+
+// Texts of the library lists, translated here because Rust builds the lists.
+export global LibraryTitles {
+    public pure function all-genres() -> string {
+        @tr("All genres")
+    }
+}
+
+// Movies, shows or favorites: header, filters, sort and the paged poster grid.
+export component LibraryScreen inherits Rectangle {
+    in property <TopBarPage> page: TopBarPage.movies;
+    in property <[CardData]> cards;
+    in property <int> total;
+    // True until the first page of the current settings has answered.
+    in property <bool> loading;
+    in property <bool> loading-more;
+    in property <string> error;
+    // True when a watch or genre filter narrows the list.
+    in property <bool> filtered;
+    in property <int> watch;
+    in property <[string]> genres;
+    in property <int> genre;
+    in property <int> sort-field;
+    in property <bool> descending;
+    callback watch-selected(index: int);
+    callback genre-selected(index: int);
+    callback sort-selected(index: int);
+    callback direction-toggled();
+    callback near-end();
+    callback retry();
+    callback open-tab(page: TopBarPage);
+    callback open-settings();
+
+    accessible-role: groupbox;
+    accessible-label: root.title;
+
+    property <string> title: root.page == TopBarPage.movies ? @tr("Movies") : root.page == TopBarPage.shows ? @tr("Shows") : @tr("Favorites");
+    property <[string]> watch-options: [@tr("All"), @tr("Unwatched"), @tr("In progress"), @tr("Watched")];
+    property <[string]> sort-options: [@tr("Date added"), @tr("Title"), @tr("Year")];
+
+    background: Theme.bg-base;
+
+    function settings-changed() {
+        grid.viewport-y = 0;
+    }
+
+    VerticalLayout {
+        Rectangle {
+            height: top-bar.height;
+        }
+
+        // Above the grid: the open dropdown lists overlap it, and z only orders siblings.
+        header := VerticalLayout {
+            z: 10;
+            padding-left: Theme.space-3xl;
+            padding-right: Theme.space-3xl;
+            padding-top: Theme.space-lg;
+            padding-bottom: Theme.space-xl;
+            spacing: Theme.space-xl;
+
+            HorizontalLayout {
+                spacing: Theme.space-md;
+                alignment: start;
+
+                DisplayText {
+                    text: root.title;
+                    vertical-alignment: bottom;
+                }
+                if !root.loading && root.error == "": BodyText {
+                    text: @tr("{n} title" | "{n} titles" % root.total);
+                    color: Theme.text-muted;
+                    vertical-alignment: bottom;
+                }
+            }
+
+            HorizontalLayout {
+                spacing: Theme.space-sm;
+
+                for option[index] in root.watch-options: Chip {
+                    label: option;
+                    selected: index == root.watch;
+                    clicked => {
+                        root.settings-changed();
+                        root.watch-selected(index);
+                    }
+                }
+                if root.genres.length > 0: Dropdown {
+                    label: @tr("Genre");
+                    options: root.genres;
+                    selected: root.genre;
+                    chosen(index) => {
+                        root.settings-changed();
+                        root.genre-selected(index);
+                    }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+                Chip {
+                    label: root.descending ? @tr("Descending") : @tr("Ascending");
+                    clicked => {
+                        root.settings-changed();
+                        root.direction-toggled();
+                    }
+                }
+                Dropdown {
+                    label: @tr("Sort");
+                    options: root.sort-options;
+                    selected: root.sort-field;
+                    chosen(index) => {
+                        root.settings-changed();
+                        root.sort-selected(index);
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+
+            grid := PosterGrid {
+                cards: root.cards;
+                near-end => {
+                    root.near-end();
+                }
+            }
+
+            if root.loading || root.loading-more: Rectangle {
+                y: parent.height - self.height;
+                height: Theme.space-3xl;
+                BodyText {
+                    text: @tr("Loading");
+                    color: Theme.text-secondary;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            if !root.loading && root.error == "" && root.cards.length == 0: VerticalLayout {
+                alignment: start;
+                padding-top: Theme.space-3xl;
+                padding-left: Theme.space-3xl;
+
+                HeadingText {
+                    text: root.filtered ? @tr("No titles match these filters") : @tr("Nothing here yet");
+                    color: Theme.text-secondary;
+                }
+            }
+
+            if root.error != "": VerticalLayout {
+                alignment: start;
+                padding-top: Theme.space-3xl;
+                padding-left: Theme.space-3xl;
+                spacing: Theme.space-lg;
+
+                BodyText {
+                    text: root.error;
+                    color: Theme.text-secondary;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    Button {
+                        label: @tr("Retry");
+                        style: ButtonStyle.secondary;
+                        clicked => {
+                            root.retry();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    top-bar := TopBar {
+        y: 0;
+        height: self.preferred-height;
+        current: root.page;
+        home-clicked => {
+            root.open-tab(TopBarPage.home);
+        }
+        movies-clicked => {
+            root.open-tab(TopBarPage.movies);
+        }
+        shows-clicked => {
+            root.open-tab(TopBarPage.shows);
+        }
+        favorites-clicked => {
+            root.open-tab(TopBarPage.favorites);
+        }
+        settings-clicked => {
+            root.open-settings();
+        }
+    }
+}

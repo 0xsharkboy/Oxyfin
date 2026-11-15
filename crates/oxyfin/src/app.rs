@@ -21,11 +21,14 @@ use crate::generation::Generation;
 use crate::generation::{Route, route};
 use crate::present::device_name;
 use crate::screens::home::HomeController;
+use crate::screens::library::LibraryController;
 use crate::screens::player;
 use crate::screens::settings;
 use crate::screens::sign_in::SignInController;
-use crate::state::{AppState, Effect, GenerationId, Msg, Notice, Screen, SessionInfo};
-use crate::{AppWindow, Message, NoticeData};
+use crate::state::{
+    AppState, Effect, GenerationId, LibraryTab, Msg, Notice, Screen, SessionInfo, Tab,
+};
+use crate::{AppWindow, Message, NoticeData, TopBarPage};
 
 /// Logical size of the next episode thumbnail, as laid out by the toast.
 #[cfg(feature = "mpv")]
@@ -60,6 +63,7 @@ pub struct App {
     creating_player: Cell<Option<GenerationId>>,
     pub(crate) sign_in: SignInController,
     pub(crate) home: HomeController,
+    pub(crate) library: LibraryController,
 }
 
 impl App {
@@ -94,6 +98,7 @@ impl App {
             creating_player: Cell::new(None),
             sign_in: SignInController::default(),
             home: HomeController::default(),
+            library: LibraryController::default(),
         });
         app.bind(window);
         app.restore();
@@ -457,8 +462,10 @@ impl App {
 
     /// Reloads `screen` when it is one that loads its own content.
     fn refresh(self: &Rc<Self>, screen: &Screen) {
-        if *screen == Screen::Home {
-            self.home.refresh(self);
+        match screen {
+            Screen::Home => self.home.refresh(self),
+            Screen::Library(_) => self.library.refresh(self),
+            _ => {}
         }
     }
 
@@ -566,6 +573,33 @@ impl App {
         window.on_close_settings(with(|app| app.dispatch(Msg::CloseSettings)));
         window.on_sign_out(with(|app| app.dispatch(Msg::SignOut)));
         window.on_dismiss_notice(with(|app| app.dismiss_notice()));
+        window.on_library_retry(with(|app| app.library.retry(app)));
+        window.on_library_near_end(with(|app| app.library.near_end(app)));
+        window.on_library_direction_toggled(with(|app| app.library.toggle_direction(app)));
+        let this = self.this.clone();
+        window.on_open_tab(move |page| {
+            if let (Some(app), Some(tab)) = (this.upgrade(), tab_of(page)) {
+                app.dispatch(Msg::OpenTab(tab));
+            }
+        });
+        let this = self.this.clone();
+        window.on_library_watch_selected(move |index| {
+            if let Some(app) = this.upgrade() {
+                app.library.set_watch(&app, index);
+            }
+        });
+        let this = self.this.clone();
+        window.on_library_genre_selected(move |index| {
+            if let Some(app) = this.upgrade() {
+                app.library.set_genre(&app, index);
+            }
+        });
+        let this = self.this.clone();
+        window.on_library_sort_selected(move |index| {
+            if let Some(app) = this.upgrade() {
+                app.library.set_sort(&app, index);
+            }
+        });
 
         let this = self.this.clone();
         window.on_server_changed(move |address| {
@@ -640,6 +674,7 @@ impl App {
                 );
             }
             Effect::EndGeneration { id, end } => {
+                self.library.end_generation();
                 let generation = {
                     let mut current = self.generation.borrow_mut();
                     match &*current {
@@ -674,6 +709,8 @@ impl App {
                     if screen != Screen::Player {
                         player::leave(&window);
                     }
+                    let root = self.state.borrow().stack().first().cloned();
+                    window.set_top_bar_page(top_bar_page(root.as_ref()));
                     if screen == Screen::Settings {
                         settings::show(&window, self.state.borrow().session());
                     }
@@ -681,8 +718,12 @@ impl App {
                 }
                 self.sign_in.shown(self, &screen, &previous);
                 self.home.shown(self, &screen);
+                self.library.shown(self, &screen);
             }
-            Effect::Discard(screen) => self.home.discard(self, &screen),
+            Effect::Discard(screen) => {
+                self.home.discard(self, &screen);
+                self.library.discard(self, &screen);
+            }
             Effect::Refresh(screen) => self.refresh(&screen),
             Effect::Notify(notice) => self.notify(notice_message(notice)),
             Effect::Quit => {
@@ -717,6 +758,27 @@ fn slint_screen(screen: &Screen) -> crate::Screen {
         Screen::Series(_) => crate::Screen::Series,
         Screen::Player => crate::Screen::Player,
         Screen::Settings => crate::Screen::Settings,
+    }
+}
+
+fn top_bar_page(root: Option<&Screen>) -> TopBarPage {
+    match root {
+        Some(Screen::Home) => TopBarPage::Home,
+        Some(Screen::Library(LibraryTab::Movies)) => TopBarPage::Movies,
+        Some(Screen::Library(LibraryTab::Shows)) => TopBarPage::Shows,
+        Some(Screen::Library(LibraryTab::Favorites)) => TopBarPage::Favorites,
+        Some(Screen::Search) => TopBarPage::Search,
+        _ => TopBarPage::None,
+    }
+}
+
+fn tab_of(page: TopBarPage) -> Option<Tab> {
+    match page {
+        TopBarPage::Home => Some(Tab::Home),
+        TopBarPage::Movies => Some(Tab::Library(LibraryTab::Movies)),
+        TopBarPage::Shows => Some(Tab::Library(LibraryTab::Shows)),
+        TopBarPage::Favorites => Some(Tab::Library(LibraryTab::Favorites)),
+        TopBarPage::Search | TopBarPage::None => None,
     }
 }
 

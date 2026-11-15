@@ -1,0 +1,24 @@
+{
+  "Items": [
+    {
+      "Name": "Animation",
+      "ServerId": "87fcca6823684ae692e5c60378bf931d",
+      "Id": "074229225b7254292f131f9f49f8dcd6",
+      "ChannelId": null,
+      "Type": "Genre",
+      "ImageTags": {},
+      "BackdropImageTags": []
+    },
+    {
+      "Name": "Comedy",
+      "ServerId": "87fcca6823684ae692e5c60378bf931d",
+      "Id": "08d31605d366d63a7a924f944b4417f1",
+      "ChannelId": null,
+      "Type": "Genre",
+      "ImageTags": {},
+      "BackdropImageTags": []
+    }
+  ],
+  "TotalRecordCount": 2,
+  "StartIndex": 0
+}
