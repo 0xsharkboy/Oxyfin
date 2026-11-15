@@ -150,7 +150,15 @@ fn search_waits_for_the_typing_to_stop_and_ignores_stale_answers() {
         type_text(&window, "slow");
         press(&window, Key::Return);
         wait_until("the slow search", || searches(&log).len() == 2).await?;
-        for _ in 0..4 {
+        type_text(&window, "x");
+        let edited_at = std::time::Instant::now();
+        while edited_at.elapsed() < Duration::from_millis(200) {
+            if exists(&window, "No results for “slow”") {
+                return Err("an empty result is shown while the text is edited".into());
+            }
+            pause(Duration::from_millis(10)).await;
+        }
+        for _ in 0..5 {
             press(&window, Key::Backspace);
         }
         wait_visible(&window, "Search movies and shows").await?;
