@@ -300,3 +300,74 @@ pub async fn wait_visible(
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
 }
+
+/// Waits for a `role` element labelled `label` with a non-zero size.
+pub async fn wait_role(
+    window: &impl ComponentHandle,
+    label: &str,
+    role: i_slint_backend_testing::AccessibleRole,
+) -> Result<ElementHandle, String> {
+    let start = std::time::Instant::now();
+    loop {
+        let found = ElementHandle::find_by_accessible_label(window, label).find(|element| {
+            let size = element.size();
+            element.accessible_role() == Some(role) && size.width > 0. && size.height > 0.
+        });
+        if let Some(element) = found {
+            return Ok(element);
+        }
+        if start.elapsed() > DEADLINE {
+            return Err(format!(
+                "timed out waiting for {role:?} {label} to be visible"
+            ));
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
+/// Whether an element labelled `label` exists.
+pub fn exists(window: &impl ComponentHandle, label: &str) -> bool {
+    ElementHandle::find_by_accessible_label(window, label)
+        .next()
+        .is_some()
+}
+
+/// Mounts what the home screen and the library pages need besides `Items`: the libraries,
+/// the resume list, `next_up` as the next episodes, the latest items and the genres.
+pub async fn mount_browse_basics(mock: &MockServer, next_up: &str) {
+    mount_me(mock).await;
+    Mock::given(method("GET"))
+        .and(path("/UserViews"))
+        .respond_with(json(fixture("user_views")))
+        .mount(mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/UserItems/Resume"))
+        .respond_with(json(fixture("user_items_resume")))
+        .mount(mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/Shows/NextUp"))
+        .respond_with(json(next_up.to_owned()))
+        .mount(mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/Items/Latest"))
+        .respond_with(json(fixture("items_latest")))
+        .mount(mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/Genres"))
+        .respond_with(json(fixture("genres")))
+        .mount(mock)
+        .await;
+}
+
+/// Query strings of the requests a responder received, in order.
+pub type QueryLog = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
+
+/// Whether `query` carries `key=value`.
+pub fn has_param(query: &str, key: &str, value: &str) -> bool {
+    let wanted = format!("{key}={value}");
+    query.split('&').any(|pair| pair == wanted)
+}

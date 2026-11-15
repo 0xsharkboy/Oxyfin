@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-15 12:28+0000\n"
+"POT-Creation-Date: 2026-11-15 12:57+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -232,29 +232,131 @@ msgctxt "HomeTitles"
 msgid "Recently Added in {}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/home.slint:124
+#: crates/oxyfin/ui/screens/home.slint:125
 msgctxt "HomeScreen"
 msgid "Home"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/home.slint:132
+#: crates/oxyfin/ui/screens/home.slint:133
 msgctxt "HomeScreen"
 msgid "{}h {}m"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/home.slint:132
+#: crates/oxyfin/ui/screens/home.slint:133
 msgctxt "HomeScreen"
 msgid "{}m"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/home.slint:172
+#: crates/oxyfin/ui/screens/home.slint:173
 msgctxt "HomeScreen"
 msgid "Nothing to show yet"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/home.slint:177
+#: crates/oxyfin/ui/screens/home.slint:178
 msgctxt "HomeScreen"
 msgid "Movies and shows you add or start watching will appear here."
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:12
+msgctxt "LibraryTitles"
+msgid "All genres"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:44
+msgctxt "LibraryScreen"
+msgid "Movies"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:44
+msgctxt "LibraryScreen"
+msgid "Shows"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:44
+msgctxt "LibraryScreen"
+msgid "Favorites"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:45
+msgctxt "LibraryScreen"
+msgid "All"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:45
+msgctxt "LibraryScreen"
+msgid "Unwatched"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:45
+msgctxt "LibraryScreen"
+msgid "In progress"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:45
+msgctxt "LibraryScreen"
+msgid "Watched"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:46
+msgctxt "LibraryScreen"
+msgid "Date added"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:46
+msgctxt "LibraryScreen"
+msgid "Title"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:46
+msgctxt "LibraryScreen"
+msgid "Year"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:77
+msgctxt "LibraryScreen"
+msgid "{n} title"
+msgid_plural "{n} titles"
+msgstr[0] ""
+msgstr[1] ""
+
+#: crates/oxyfin/ui/screens/library.slint:95
+msgctxt "LibraryScreen"
+msgid "Genre"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:107
+msgctxt "LibraryScreen"
+msgid "Descending"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:107
+msgctxt "LibraryScreen"
+msgid "Ascending"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:114
+msgctxt "LibraryScreen"
+msgid "Sort"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:139
+msgctxt "LibraryScreen"
+msgid "Loading"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:152
+msgctxt "LibraryScreen"
+msgid "No titles match these filters"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:152
+msgctxt "LibraryScreen"
+msgid "Nothing here yet"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/library.slint:171
+msgctxt "LibraryScreen"
+msgid "Retry"
 msgstr ""
 
 #: crates/oxyfin/ui/screens/player.slint:97
@@ -300,58 +402,58 @@ msgctxt "QuickConnectScreen"
 msgid "Back"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:55
-#: crates/oxyfin/ui/screens/settings.slint:55
+#: crates/oxyfin/ui/screens/settings.slint:57
+#: crates/oxyfin/ui/screens/settings.slint:57
 msgctxt "SettingsScreen"
 msgid "Settings"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:91
+#: crates/oxyfin/ui/screens/settings.slint:93
 msgctxt "SettingsScreen"
 msgid "Account"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:94
+#: crates/oxyfin/ui/screens/settings.slint:96
 msgctxt "SettingsScreen"
 msgid "Server"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:95
+#: crates/oxyfin/ui/screens/settings.slint:97
 msgctxt "SettingsScreen"
 msgid "{} ({})"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:98
+#: crates/oxyfin/ui/screens/settings.slint:100
 msgctxt "SettingsScreen"
 msgid "Signed in as"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:102
+#: crates/oxyfin/ui/screens/settings.slint:104
 msgctxt "SettingsScreen"
 msgid "Sign-in token"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:103
+#: crates/oxyfin/ui/screens/settings.slint:105
 msgctxt "SettingsScreen"
 msgid "Stored in a private file"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:103
+#: crates/oxyfin/ui/screens/settings.slint:105
 msgctxt "SettingsScreen"
 msgid "Stored in the system keyring"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:110
+#: crates/oxyfin/ui/screens/settings.slint:112
 msgctxt "SettingsScreen"
 msgid "Sign out"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:120
+#: crates/oxyfin/ui/screens/settings.slint:122
 msgctxt "SettingsScreen"
 msgid "About"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/settings.slint:123
+#: crates/oxyfin/ui/screens/settings.slint:125
 msgctxt "SettingsScreen"
 msgid "Version"
 msgstr ""

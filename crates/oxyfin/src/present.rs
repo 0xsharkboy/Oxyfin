@@ -8,6 +8,7 @@ use oxyfin_core::{
 };
 use slint::SharedString;
 
+use crate::state::Screen;
 use crate::{CardData, Message, TrackRow};
 
 /// Message and detail to show for a core error.
@@ -66,6 +67,18 @@ pub fn image_size(logical_width: f32, logical_height: f32, scale: f32) -> ImageS
     ImageSize {
         max_width: pixels(logical_width),
         max_height: pixels(logical_height),
+    }
+}
+
+/// Detail page an item opens: movies and videos their own, series their own, episodes their series.
+pub fn detail_target(item: &ItemSummary) -> Option<Screen> {
+    match item.kind {
+        ItemKind::Movie | ItemKind::Video => Some(Screen::Movie(item.id.as_str().to_owned())),
+        ItemKind::Series => Some(Screen::Series(item.id.as_str().to_owned())),
+        ItemKind::Episode => item
+            .series_id
+            .as_ref()
+            .map(|series| Screen::Series(series.as_str().to_owned())),
     }
 }
 
@@ -356,6 +369,26 @@ mod tests {
         assert_eq!(card(&item).subtitle, "Show \u{b7} S01E02");
         item.series_name = None;
         assert_eq!(card(&item).subtitle, "S01E02");
+    }
+
+    #[test]
+    fn detail_target_follows_the_kind() {
+        assert_eq!(
+            detail_target(&summary(ItemKind::Movie)),
+            Some(Screen::Movie("abc".into()))
+        );
+        assert_eq!(
+            detail_target(&summary(ItemKind::Video)),
+            Some(Screen::Movie("abc".into()))
+        );
+        assert_eq!(
+            detail_target(&summary(ItemKind::Series)),
+            Some(Screen::Series("abc".into()))
+        );
+        let mut episode = summary(ItemKind::Episode);
+        assert_eq!(detail_target(&episode), None);
+        episode.series_id = Some("show".into());
+        assert_eq!(detail_target(&episode), Some(Screen::Series("show".into())));
     }
 
     fn audio(index: i32, language: Option<&str>, channels: Option<u32>) -> AudioOption {

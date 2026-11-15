@@ -1,0 +1,47 @@
+{
+  "Items": [
+    {
+      "Name": "Test Movie (2020)",
+      "ServerId": "87fcca6823684ae692e5c60378bf931d",
+      "Id": "76282b1c408f374beeee50519e9157a4",
+      "ChannelId": null,
+      "ProductionYear": 2020,
+      "IsFolder": false,
+      "Type": "Movie",
+      "UserData": {
+        "PlayedPercentage": 29.931158335827597,
+        "PlaybackPositionTicks": 30000000,
+        "PlayCount": 1,
+        "IsFavorite": true,
+        "Played": false,
+        "Key": "76282b1c-408f-374b-eeee-50519e9157a4",
+        "ItemId": "76282b1c408f374beeee50519e9157a4"
+      },
+      "ImageTags": {},
+      "BackdropImageTags": [],
+      "MediaType": "Video"
+    },
+    {
+      "Name": "Second Feature (2021)",
+      "ServerId": "87fcca6823684ae692e5c60378bf931d",
+      "Id": "b4c9a0c1d2e34f5a8b6c7d8e9f0a1b2c",
+      "ChannelId": null,
+      "ProductionYear": 2021,
+      "IsFolder": false,
+      "Type": "Movie",
+      "UserData": {
+        "PlaybackPositionTicks": 0,
+        "PlayCount": 0,
+        "IsFavorite": false,
+        "Played": false,
+        "Key": "b4c9a0c1-d2e3-4f5a-8b6c-7d8e9f0a1b2c",
+        "ItemId": "b4c9a0c1d2e34f5a8b6c7d8e9f0a1b2c"
+      },
+      "ImageTags": {},
+      "BackdropImageTags": [],
+      "MediaType": "Video"
+    }
+  ],
+  "TotalRecordCount": 2,
+  "StartIndex": 0
+}
