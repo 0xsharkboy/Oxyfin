@@ -1,0 +1,109 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { LabelText } from "text.slint";
+import { MenuPanel, MenuOption } from "track_menu.slint";
+
+// Pill that opens a floating list of options; Escape or a click outside closes it.
+// The list is drawn inside the pill, so the instance needs a `z` above what the list overlaps.
+export component Dropdown inherits Rectangle {
+    in property <string> label;
+    in property <[string]> options;
+    in property <int> selected: -1;
+    callback chosen(index: int);
+
+    property <bool> open;
+    property <string> text: root.selected >= 0 && root.selected < root.options.length ? root.label + ": " + root.options[root.selected] : root.label;
+
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-expandable: true;
+    accessible-expanded: root.open;
+    accessible-action-default => {
+        root.open = !root.open;
+    }
+    forward-focus: focus;
+
+    max-width: self.preferred-width;
+    max-height: self.preferred-height;
+    preferred-width: row.preferred-width;
+    preferred-height: row.preferred-height;
+    border-radius: Theme.radius-full;
+    background: touch.has-hover ? Theme.bg-hover : Theme.bg-elevated;
+    border-width: focus.has-focus ? Theme.border-focus : Theme.border-thin;
+    border-color: focus.has-focus ? Theme.accent : Theme.border-default;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            focus.focus();
+            root.open = !root.open;
+        }
+    }
+
+    focus := FocusScope {
+        // Clicks go to the TouchArea: a focusing FocusScope on top would swallow the first one.
+        focus-on-click: false;
+        key-pressed(event) => {
+            if event.text == Key.Escape && root.open {
+                root.open = false;
+                return accept;
+            }
+            if event.text == Key.Return || event.text == " " {
+                root.open = !root.open;
+                return accept;
+            }
+            reject
+        }
+    }
+
+    row := HorizontalLayout {
+        padding-left: Theme.space-lg;
+        padding-right: Theme.space-md;
+        padding-top: Theme.space-chip-y;
+        padding-bottom: Theme.space-chip-y;
+        spacing: Theme.space-xs;
+
+        LabelText {
+            accessible-role: none;
+            text: root.text;
+            color: Theme.text-secondary;
+            vertical-alignment: center;
+        }
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: Icons.chevron-down;
+                width: 14px;
+                height: 14px;
+                colorize: Theme.text-secondary;
+            }
+        }
+    }
+
+    if root.open: TouchArea {
+        x: -10000px;
+        y: -10000px;
+        width: 20000px;
+        height: 20000px;
+        clicked => {
+            root.open = false;
+        }
+    }
+
+    if root.open: MenuPanel {
+        x: 0;
+        y: root.height + Theme.space-xs;
+        width: max(root.width, 200px);
+        accessible-role: list;
+        accessible-label: root.label;
+
+        for option[index] in root.options: MenuOption {
+            label: option;
+            selected: index == root.selected;
+            chosen => {
+                root.open = false;
+                root.chosen(index);
+            }
+        }
+    }
+}

@@ -1,0 +1,76 @@
+import { Theme, CardData } from "../theme.slint";
+import { PosterCard } from "poster_card.slint";
+import { CardStatus } from "card.slint";
+
+// Scrollable grid of posters; the columns follow the width and every card reports its own click.
+export component PosterGrid inherits Rectangle {
+    in property <[CardData]> cards;
+    in-out property <length> viewport-y <=> flick.content-y;
+    callback open(card: CardData);
+    // Emitted when less than one view height is left to scroll.
+    callback near-end();
+
+    property <length> gap: Theme.space-xl;
+    property <length> margin: Theme.space-3xl;
+    property <length> row-height: measure.preferred-height;
+    property <int> columns: max(1, floor((self.width - 2 * margin + gap) / (Theme.poster-width + gap)));
+    property <int> rows: ceil(cards.length / columns);
+    property <length> grid-height: rows == 0 ? 0px : rows * row-height + (rows - 1) * gap + margin;
+
+    pure function status(card: CardData) -> CardStatus {
+        if card.watched {
+            return CardStatus.watched;
+        }
+        card.progress > 0 ? CardStatus.in-progress : CardStatus.default
+    }
+
+    function check-end() {
+        if root.height > 0 && root.grid-height + flick.content-y - root.height < root.height {
+            root.near-end();
+        }
+    }
+
+    changed grid-height => {
+        root.check-end();
+    }
+    changed height => {
+        root.check-end();
+    }
+
+    horizontal-stretch: 1;
+    vertical-stretch: 1;
+
+    accessible-role: list;
+    accessible-label: @tr("Titles");
+
+    measure := PosterCard {
+        visible: false;
+        title: "M";
+        subtitle: "M";
+    }
+
+    flick := Flickable {
+        width: parent.width;
+        height: parent.height;
+        content-width: self.width;
+        content-height: root.grid-height;
+
+        changed content-y => {
+            root.check-end();
+        }
+
+        for card[index] in root.cards: PosterCard {
+            x: root.margin + mod(index, root.columns) * (Theme.poster-width + root.gap);
+            y: floor(index / root.columns) * (root.row-height + root.gap);
+            height: root.row-height;
+            title: card.title;
+            subtitle: card.subtitle;
+            image: card.image;
+            status: root.status(card);
+            progress: card.progress;
+            clicked => {
+                root.open(card);
+            }
+        }
+    }
+}
