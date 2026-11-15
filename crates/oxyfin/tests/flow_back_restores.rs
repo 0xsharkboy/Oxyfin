@@ -168,16 +168,7 @@ fn coming_back_keeps_the_grid_where_it_was() {
             return Err("the settings round trip moved the grid or reloaded it".into());
         }
 
-        // A bound position is not clamped by the Flickable when the content shrinks.
-        let few: Vec<CardData> = (0..5)
-            .map(|index| CardData {
-                title: format!("Few {index}").into(),
-                ..CardData::default()
-            })
-            .collect();
-        window.set_library_cards(ModelRc::new(VecModel::from(few)));
-        wait_until("the shrunk grid", || window.get_library_viewport_y() == 0.).await?;
-
+        // The new tab starts at the top even though the old one was scrolled.
         let shows = wait_role(&window, "Shows", AccessibleRole::Tab).await?;
         click(&window, &shows);
         wait_until("the shows", || {
@@ -191,6 +182,30 @@ fn coming_back_keeps_the_grid_where_it_was() {
                 window.get_library_viewport_y()
             ));
         }
+
+        let movies = wait_role(&window, "Movies", AccessibleRole::Tab).await?;
+        click(&window, &movies);
+        wait_visible(&window, "120 titles").await?;
+        scroll_down(&window);
+        wait_until("the second page again", || {
+            window.get_library_cards().row_count() == TOTAL
+        })
+        .await?;
+        scroll_down(&window);
+        pause(Duration::from_millis(300)).await;
+        if window.get_library_viewport_y() >= 0. {
+            return Err("the grid did not scroll before shrinking".into());
+        }
+
+        // A bound position is not clamped by the Flickable when the content shrinks.
+        let few: Vec<CardData> = (0..5)
+            .map(|index| CardData {
+                title: format!("Few {index}").into(),
+                ..CardData::default()
+            })
+            .collect();
+        window.set_library_cards(ModelRc::new(VecModel::from(few)));
+        wait_until("the shrunk grid", || window.get_library_viewport_y() == 0.).await?;
 
         let magnifier = wait_role(&window, "Search", AccessibleRole::Button).await?;
         click(&window, &magnifier);
