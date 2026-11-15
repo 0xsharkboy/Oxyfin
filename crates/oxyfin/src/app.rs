@@ -574,6 +574,7 @@ impl App {
         window.on_sign_out(with(|app| app.dispatch(Msg::SignOut)));
         window.on_dismiss_notice(with(|app| app.dismiss_notice()));
         window.on_library_retry(with(|app| app.library.retry(app)));
+        window.on_library_retry_more(with(|app| app.library.retry_more(app)));
         window.on_library_near_end(with(|app| app.library.near_end(app)));
         window.on_library_direction_toggled(with(|app| app.library.toggle_direction(app)));
         let this = self.this.clone();

@@ -82,6 +82,27 @@ fn should_load_more(loaded: usize, total: u32, in_flight: bool, ready: bool) -> 
     ready && !in_flight && loaded < total as usize
 }
 
+/// The settings after `update`, or `None` when it changed nothing.
+fn updated(
+    current: &LibrarySettings,
+    update: impl FnOnce(&mut LibrarySettings),
+) -> Option<LibrarySettings> {
+    let mut settings = current.clone();
+    update(&mut settings);
+    (settings != *current).then_some(settings)
+}
+
+/// Genres offered by the dropdown: the server list, plus the saved genre when it is missing.
+fn genre_options(server: &[String], saved: Option<&str>) -> Vec<String> {
+    let mut options = server.to_vec();
+    if let Some(saved) = saved
+        && !options.iter().any(|name| name == saved)
+    {
+        options.push(saved.to_owned());
+    }
+    options
+}
+
 /// State of the library page of the current tab.
 #[derive(Default)]
 pub(crate) struct LibraryController {
@@ -92,10 +113,12 @@ pub(crate) struct LibraryController {
     items: RefCell<Vec<ItemSummary>>,
     cards: Rc<VecModel<CardData>>,
     genres: RefCell<Vec<String>>,
+    options: RefCell<Vec<String>>,
     genre_names: Rc<VecModel<SharedString>>,
     total: Cell<u32>,
     in_flight: Cell<bool>,
     ready: Cell<bool>,
+    more_failed: Cell<bool>,
 }
 
 impl LibraryController {
@@ -153,7 +176,7 @@ impl LibraryController {
             .and_then(|index| index.checked_sub(1))
         {
             None => None,
-            Some(position) => match self.genres.borrow().get(position) {
+            Some(position) => match self.options.borrow().get(position) {
                 Some(name) => Some(name.clone()),
                 None => return,
             },
@@ -181,6 +204,7 @@ impl LibraryController {
     pub(crate) fn near_end(&self, app: &Rc<App>) {
         let loaded = self.items.borrow().len();
         if self.tab.get().is_some()
+            && !self.more_failed.get()
             && should_load_more(
                 loaded,
                 self.total.get(),
@@ -192,10 +216,18 @@ impl LibraryController {
         }
     }
 
-    /// Asks again after a failure.
+    /// Asks again after the first page failed.
     pub(crate) fn retry(&self, app: &Rc<App>) {
         if self.tab.get().is_some() {
+            self.load_genres(app);
             self.request(app, 0, true);
+        }
+    }
+
+    /// Asks again for the page after the last one loaded, which failed.
+    pub(crate) fn retry_more(&self, app: &Rc<App>) {
+        if self.tab.get().is_some() {
+            self.request(app, self.items.borrow().len() as u32, false);
         }
     }
 
@@ -209,8 +241,9 @@ impl LibraryController {
 
     fn change(&self, app: &Rc<App>, update: impl FnOnce(&mut LibrarySettings)) {
         let Some(tab) = self.tab.get() else { return };
-        let mut settings = self.settings(tab);
-        update(&mut settings);
+        let Some(settings) = updated(&self.settings(tab), update) else {
+            return;
+        };
         self.settings.borrow_mut().insert(tab, settings);
         if let Some(window) = app.window() {
             self.publish(&window);
@@ -225,13 +258,23 @@ impl LibraryController {
         window.set_library_sort_field(settings.sort_index());
         window.set_library_descending(settings.descending);
         window.set_library_filtered(settings.filtered());
+        let options = genre_options(&self.genres.borrow(), settings.genre.as_deref());
         let genre = settings.genre.as_ref().and_then(|genre| {
-            self.genres
-                .borrow()
+            options
                 .iter()
                 .position(|name| name == genre)
                 .map(|position| position as i32 + 1)
         });
+        let all = window.global::<LibraryTitles>().invoke_all_genres();
+        let shown: Vec<SharedString> = if options.is_empty() {
+            Vec::new()
+        } else {
+            std::iter::once(all)
+                .chain(options.iter().map(|name| name.as_str().into()))
+                .collect()
+        };
+        *self.options.borrow_mut() = options;
+        self.genre_names.set_vec(shown);
         window.set_library_genre(genre.unwrap_or(0));
     }
 
@@ -240,13 +283,16 @@ impl LibraryController {
         self.epoch.set(self.epoch.get() + 1);
         self.tab.set(None);
         self.in_flight.set(false);
+        self.more_failed.set(false);
         self.ready.set(false);
         self.total.set(0);
         self.items.borrow_mut().clear();
         self.cards.set_vec(Vec::new());
         self.genres.borrow_mut().clear();
+        self.options.borrow_mut().clear();
         self.genre_names.set_vec(Vec::new());
         if let Some(window) = app.window() {
+            window.set_library_more_failed(false);
             window.set_library_total(0);
             window.set_library_loading(false);
             window.set_library_loading_more(false);
@@ -278,15 +324,7 @@ impl LibraryController {
 
     fn genres_loaded(&self, app: &App, names: Vec<String>) {
         let Some(window) = app.window() else { return };
-        if names.is_empty() {
-            return;
-        }
-        let all = window.global::<LibraryTitles>().invoke_all_genres();
-        let shown: Vec<SharedString> = std::iter::once(all)
-            .chain(names.iter().map(|name| name.as_str().into()))
-            .collect();
         *self.genres.borrow_mut() = names;
-        self.genre_names.set_vec(shown);
         self.publish(&window);
     }
 
@@ -299,6 +337,7 @@ impl LibraryController {
         self.load.set(self.load.get() + 1);
         let load = self.load.get();
         self.in_flight.set(true);
+        self.more_failed.set(false);
         if start == 0 && clear {
             self.ready.set(false);
             self.total.set(0);
@@ -307,6 +346,7 @@ impl LibraryController {
         }
         if let Some(window) = app.window() {
             window.set_library_error(SharedString::default());
+            window.set_library_more_failed(false);
             if start == 0 {
                 window.set_library_loading(self.items.borrow().is_empty());
             } else {
@@ -355,6 +395,9 @@ impl LibraryController {
                         .global::<Messages>()
                         .invoke_message_text(message, detail);
                     window.set_library_error(text);
+                } else {
+                    self.more_failed.set(true);
+                    window.set_library_more_failed(true);
                 }
                 return;
             }
@@ -419,6 +462,28 @@ mod tests {
         assert!(!should_load_more(130, 130, false, true));
         assert!(!should_load_more(60, 130, true, true));
         assert!(!should_load_more(0, 130, false, false));
+    }
+
+    #[test]
+    fn choosing_the_current_setting_changes_nothing() {
+        let current = LibrarySettings::default();
+        assert_eq!(updated(&current, |s| s.watch = WatchFilter::All), None);
+        assert_eq!(updated(&current, |s| s.sort = SortField::DateAdded), None);
+        assert_eq!(updated(&current, |s| s.genre = None), None);
+        let changed = updated(&current, |s| s.watch = WatchFilter::Played);
+        assert_eq!(changed.map(|s| s.watch), Some(WatchFilter::Played));
+        let flipped = updated(&current, |s| s.descending = !s.descending);
+        assert_eq!(flipped.map(|s| s.descending), Some(false));
+    }
+
+    #[test]
+    fn a_saved_genre_stays_listed_when_the_server_list_lacks_it() {
+        let server = vec!["Comedy".to_owned()];
+        assert_eq!(genre_options(&server, None), ["Comedy"]);
+        assert_eq!(genre_options(&server, Some("Comedy")), ["Comedy"]);
+        assert_eq!(genre_options(&server, Some("Drama")), ["Comedy", "Drama"]);
+        assert_eq!(genre_options(&[], Some("Drama")), ["Drama"]);
+        assert!(genre_options(&[], None).is_empty());
     }
 
     #[test]
