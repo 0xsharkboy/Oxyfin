@@ -474,6 +474,7 @@ impl App {
         match screen {
             Screen::Home => self.home.refresh(self),
             Screen::Library(_) => self.library.refresh(self),
+            Screen::Search => self.search.refresh(self),
             Screen::Movie(_) => self.movie.refresh(self),
             Screen::Series(_) => self.series.refresh(self),
             _ => {}
