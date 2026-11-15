@@ -218,21 +218,18 @@ impl SessionManager {
         match session.me().await {
             Ok(_) => Ok(()),
             Err(error) if error.is_unauthorized() => {
-                self.expire().await?;
+                self.expire(session).await?;
                 Err(CoreError::SessionExpired)
             }
             Err(error) => Err(error.into()),
         }
     }
 
-    /// Forgets the token and the remembered session, keeping the last server address.
-    pub async fn expire(&self) -> Result<()> {
-        let saved = self.config().session.clone();
-        if let Some(saved) = saved {
-            let account = account_key(&saved.server_url, &saved.user_id);
-            self.vault_call(move |vault| vault.clear(&account)).await?;
-        }
-        self.update(|config| config.session = None)
+    /// Forgets `session` after the server rejected its token, keeping the last server address.
+    ///
+    /// Like `sign_out`, it leaves alone a later sign-in on the same account.
+    pub async fn expire(&self, session: &Session) -> Result<()> {
+        self.forget(session).await
     }
 
     /// Forgets `session` locally, then ends it on the server, ignoring any server error.

@@ -58,7 +58,7 @@ impl Generation {
             playback.handle.shutdown().await;
         }
         let result = match end {
-            SessionEnd::Expire => manager.expire().await,
+            SessionEnd::Expire => manager.expire(&self.session).await,
             SessionEnd::SignOut => manager.sign_out(&self.session).await,
             SessionEnd::Close => Ok(()),
         };
