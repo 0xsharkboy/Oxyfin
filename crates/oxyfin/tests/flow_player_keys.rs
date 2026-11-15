@@ -1,16 +1,19 @@
 //! Player shortcuts send their commands; typing in the sign-in form sends none.
 
+mod common;
+
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
+use common::click;
 use i_slint_backend_testing::{AccessibleRole, ElementHandle};
 use oxyfin::screens::player;
 use oxyfin::{AppWindow, NextUp, Screen};
 use oxyfin_core::{PlaybackCommand, SEEK_STEP};
 use oxyfin_player::SeekTarget;
-use slint::platform::{Key, PointerEventButton, WindowEvent};
-use slint::{ComponentHandle, LogicalPosition, LogicalSize};
+use slint::platform::{Key, WindowEvent};
+use slint::{ComponentHandle, LogicalSize};
 
 fn press(window: &AppWindow, text: impl Into<slint::SharedString>) {
     let text = text.into();
@@ -22,32 +25,6 @@ fn press(window: &AppWindow, text: impl Into<slint::SharedString>) {
         .dispatch_event(WindowEvent::KeyReleased { text });
 }
 
-fn center(element: &ElementHandle) -> LogicalPosition {
-    let position = element.absolute_position();
-    let size = element.size();
-    LogicalPosition::new(position.x + size.width / 2., position.y + size.height / 2.)
-}
-
-/// Clicks `element`. The first move can reveal the controls and shift the
-/// element, so the click lands where the element is after it.
-fn click(window: &AppWindow, element: &ElementHandle) {
-    window.window().dispatch_event(WindowEvent::PointerMoved {
-        position: center(element),
-    });
-    let position = center(element);
-    for event in [
-        WindowEvent::PointerPressed {
-            position,
-            button: PointerEventButton::Left,
-        },
-        WindowEvent::PointerReleased {
-            position,
-            button: PointerEventButton::Left,
-        },
-    ] {
-        window.window().dispatch_event(event);
-    }
-}
 fn find(window: &AppWindow, label: &str, role: AccessibleRole) -> ElementHandle {
     ElementHandle::find_by_accessible_label(window, label)
         .find(|element| element.accessible_role() == Some(role))

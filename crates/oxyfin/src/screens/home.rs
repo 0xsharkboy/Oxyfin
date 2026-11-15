@@ -279,7 +279,7 @@ impl HomeController {
         };
         self.upsert(key, Some((row, cards)));
 
-        let Some((_, _, images)) = app.services() else {
+        let Some((generation, _, images)) = app.services() else {
             return;
         };
         let (width, height) = match kind {
@@ -298,7 +298,7 @@ impl HomeController {
             let target = window.as_weak();
             let row_title = title.clone();
             let item_id: SharedString = item.id.as_str().into();
-            load_into(&images, app.runtime(), artwork, size, move |image| {
+            load_into(app, generation, &images, artwork, size, move |image| {
                 if let Some(window) = target.upgrade() {
                     set_card_image(&window, &row_title, &item_id, image);
                 }
@@ -419,7 +419,7 @@ impl HomeController {
         artwork: ImageRef,
         item_id: SharedString,
     ) {
-        let Some((_, _, images)) = app.services() else {
+        let Some((generation, _, images)) = app.services() else {
             return;
         };
         let scale = window.window().scale_factor();
@@ -427,7 +427,7 @@ impl HomeController {
         let (width, height) = banner_box(width);
         let size = image_size(width, height, scale);
         let target = window.as_weak();
-        load_into(&images, app.runtime(), artwork, size, move |image| {
+        load_into(app, generation, &images, artwork, size, move |image| {
             let Some(window) = target.upgrade() else {
                 return;
             };
