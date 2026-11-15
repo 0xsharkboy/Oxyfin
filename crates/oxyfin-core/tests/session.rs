@@ -108,6 +108,20 @@ async fn sign_in_persists_and_restores() {
 }
 
 #[tokio::test]
+async fn sign_in_remembers_the_server_name() {
+    let mock = MockServer::start().await;
+    mount_public_info(&mock).await;
+    mount_sign_in(&mock).await;
+    let dir = TempDir::new().unwrap();
+    let manager = manager(&mock, &dir, memory_vault());
+    let handle = manager.connect(&mock.uri()).await.unwrap();
+    let signed = manager.sign_in(&handle, "oxyfin", "pw").await.unwrap();
+    assert_eq!(signed.server_name.as_deref(), Some("49667124a8b5"));
+    let restored = manager.restore().await.unwrap().unwrap();
+    assert_eq!(restored.server_name.as_deref(), Some("49667124a8b5"));
+}
+
+#[tokio::test]
 async fn wrong_password_is_invalid_credentials() {
     let mock = MockServer::start().await;
     mount_public_info(&mock).await;
@@ -355,6 +369,7 @@ mod quick_connect {
         let flow = manager.start_quick_connect(&handle).await.unwrap();
         assert_eq!(flow.code, "668908");
         let signed = manager.finish_quick_connect(&handle, flow).await.unwrap();
+        assert_eq!(signed.server_name.as_deref(), Some("49667124a8b5"));
         assert_eq!(signed.user_name, "oxyfin");
         assert_eq!(poll_count(&mock).await, 3);
         assert!(manager.restore().await.unwrap().is_some());

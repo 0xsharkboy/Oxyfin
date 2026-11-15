@@ -70,6 +70,6 @@ impl SessionManager {
             .await
             .map_err(expired)?;
         let user_name = session.me().await?.name;
-        self.remember(&server.server, session, user_name).await
+        self.remember(server, session, user_name).await
     }
 }
