@@ -4,7 +4,8 @@ import { LabelText } from "text.slint";
 import { MenuPanel, MenuOption } from "track_menu.slint";
 
 // Pill that opens a floating list of options; Escape or a click outside closes it.
-// The list is drawn inside the pill, so the instance needs a `z` above what the list overlaps.
+// The list is drawn inside the pill and `z` only orders siblings, so the screen must put a `z` on
+// the ancestor of the Dropdown that is a sibling of what the list overlaps, not on the Dropdown.
 export component Dropdown inherits Rectangle {
     in property <string> label;
     in property <[string]> options;
