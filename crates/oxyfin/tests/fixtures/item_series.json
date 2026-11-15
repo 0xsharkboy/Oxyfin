@@ -1,0 +1,32 @@
+{
+  "Name": "Test Show",
+  "ServerId": "87fcca6823684ae692e5c60378bf931d",
+  "Id": "9ea196e7ccc3ae17d2c3f75c3ab34406",
+  "ChannelId": null,
+  "Overview": "A generated test show.",
+  "Genres": [
+    "Mystery",
+    "Thriller"
+  ],
+  "ProductionYear": 2021,
+  "CommunityRating": 7.9,
+  "OfficialRating": "TV-MA",
+  "IsFolder": true,
+  "Type": "Series",
+  "People": [
+    { "Name": "Gia Gate", "Id": "11111111111111111111111111111111", "Role": "Lead", "Type": "Actor" },
+    { "Name": "Hal Hash", "Id": "22222222222222222222222222222222", "Role": "Sidekick", "Type": "Actor" }
+  ],
+  "UserData": {
+    "PlayedPercentage": 25,
+    "UnplayedItemCount": 3,
+    "PlaybackPositionTicks": 0,
+    "PlayCount": 0,
+    "IsFavorite": false,
+    "Played": false,
+    "Key": "9ea196e7-ccc3-ae17-d2c3-f75c3ab34406",
+    "ItemId": "9ea196e7ccc3ae17d2c3f75c3ab34406"
+  },
+  "ImageTags": {},
+  "BackdropImageTags": []
+}

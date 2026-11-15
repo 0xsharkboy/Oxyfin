@@ -12,6 +12,7 @@ import { SettingsScreen } from "screens/settings.slint";
 import { LibraryScreen, LibraryTitles } from "screens/library.slint";
 import { SearchScreen, SearchTitles } from "screens/search.slint";
 import { MovieScreen, MovieData } from "screens/movie.slint";
+import { SeriesScreen, SeriesData, SeriesPlayKind, EpisodeData } from "screens/series.slint";
 import { TopBarPage } from "components/top_bar.slint";
 import { NoticeBanner, NoticeData } from "components/notice_banner.slint";
 
@@ -22,6 +23,7 @@ export { NoticeData }
 export { LibraryTitles }
 export { SearchTitles }
 export { MovieData }
+export { SeriesData, SeriesPlayKind, EpisodeData }
 export { TopBarPage }
 
 // Mirrors the Rust `state::Screen` one to one.
@@ -109,6 +111,26 @@ export component AppWindow inherits Window {
     callback movie-toggle-watched();
     callback movie-toggle-favorite();
     callback movie-retry();
+
+    in property <bool> series-loaded;
+    in property <bool> series-loading;
+    in property <string> series-error;
+    in property <SeriesData> series-data;
+    in property <image> series-poster;
+    in property <image> series-backdrop;
+    in property <bool> series-busy;
+    in property <[string]> series-seasons;
+    in property <int> series-season: -1;
+    in property <[EpisodeData]> series-episodes;
+    in property <bool> series-episodes-loading;
+    in property <string> series-episodes-error;
+    callback series-play();
+    callback series-play-episode(id: string);
+    callback series-select-season(index: int);
+    callback series-toggle-watched();
+    callback series-toggle-favorite();
+    callback series-retry();
+    callback series-retry-episodes();
 
     in property <string> player-title;
     in property <string> player-subtitle;
@@ -342,6 +364,52 @@ export component AppWindow inherits Window {
         }
     }
 
+    if root.screen == Screen.series: SeriesScreen {
+        page: root.top-bar-page;
+        loaded: root.series-loaded;
+        loading: root.series-loading;
+        error: root.series-error;
+        series: root.series-data;
+        poster: root.series-poster;
+        backdrop: root.series-backdrop;
+        busy: root.series-busy;
+        seasons: root.series-seasons;
+        season: root.series-season;
+        episodes: root.series-episodes;
+        episodes-loading: root.series-episodes-loading;
+        episodes-error: root.series-episodes-error;
+        play => {
+            root.series-play();
+        }
+        play-episode(id) => {
+            root.series-play-episode(id);
+        }
+        select-season(index) => {
+            root.series-select-season(index);
+        }
+        toggle-watched => {
+            root.series-toggle-watched();
+        }
+        toggle-favorite => {
+            root.series-toggle-favorite();
+        }
+        retry => {
+            root.series-retry();
+        }
+        retry-episodes => {
+            root.series-retry-episodes();
+        }
+        back => {
+            root.back();
+        }
+        open-tab(page) => {
+            root.open-tab(page);
+        }
+        open-settings => {
+            root.open-settings();
+        }
+    }
+
     if root.screen == Screen.player: PlayerScreen {
         title: root.player-title;
         subtitle: root.player-subtitle;
@@ -438,7 +506,7 @@ export component AppWindow inherits Window {
 
     // Below the top bar of the screens that have one.
     if root.notice.visible: NoticeBanner {
-        y: root.screen == Screen.home || root.screen == Screen.library || root.screen == Screen.search || root.screen == Screen.movie || root.screen == Screen.settings ? Theme.space-3xl + Theme.space-lg : Theme.space-lg;
+        y: root.screen == Screen.home || root.screen == Screen.library || root.screen == Screen.search || root.screen == Screen.movie || root.screen == Screen.series || root.screen == Screen.settings ? Theme.space-3xl + Theme.space-lg : Theme.space-lg;
         x: (parent.width - self.width) / 2;
         width: min(parent.width - 2 * Theme.space-lg, 560px);
         notice: root.notice;

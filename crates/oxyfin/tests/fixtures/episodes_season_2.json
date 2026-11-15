@@ -1,0 +1,37 @@
+{ "Items": [
+    {
+      "Name": "The Lighthouse",
+      "ServerId": "87fcca6823684ae692e5c60378bf931d",
+      "Id": "a2000000000000000000000000000004",
+      "Overview": "Back to the harbor.",
+      "RunTimeTicks": 31000000000,
+      "IndexNumber": 4,
+      "ParentIndexNumber": 2,
+      "IsFolder": false,
+      "Type": "Episode",
+      "UserData": { "PlaybackPositionTicks": 0, "PlayCount": 0, "IsFavorite": false, "Played": true },
+      "SeriesName": "Test Show",
+      "SeriesId": "9ea196e7ccc3ae17d2c3f75c3ab34406",
+      "SeasonId": "1507e3d02b7d70abe4a2d37241b02feb",
+      "ImageTags": {},
+      "MediaType": "Video"
+    }
+,
+    {
+      "Name": "The Pact",
+      "ServerId": "87fcca6823684ae692e5c60378bf931d",
+      "Id": "a2000000000000000000000000000005",
+      "Overview": "The town braces for winter.",
+      "RunTimeTicks": 28000000000,
+      "IndexNumber": 5,
+      "ParentIndexNumber": 2,
+      "IsFolder": false,
+      "Type": "Episode",
+      "UserData": { "PlayedPercentage": 42.8, "PlaybackPositionTicks": 12000000000, "PlayCount": 0, "IsFavorite": false, "Played": false },
+      "SeriesName": "Test Show",
+      "SeriesId": "9ea196e7ccc3ae17d2c3f75c3ab34406",
+      "SeasonId": "1507e3d02b7d70abe4a2d37241b02feb",
+      "ImageTags": {},
+      "MediaType": "Video"
+    }
+], "TotalRecordCount": 2, "StartIndex": 0 }

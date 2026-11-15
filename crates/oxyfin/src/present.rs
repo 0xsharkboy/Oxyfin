@@ -4,12 +4,12 @@ use std::time::Duration;
 
 use oxyfin_core::{
     AudioOption, CoreError, Episode, ImageSize, ItemKind, ItemSummary, Person, PlaybackError,
-    PlaybackTitle, SubtitleOption,
+    PlaybackTitle, SeriesDetails, SubtitleOption,
 };
 use slint::SharedString;
 
 use crate::state::Screen;
-use crate::{CardData, Message, TrackRow};
+use crate::{CardData, EpisodeData, Message, TrackRow};
 
 /// Message and detail to show for a core error.
 ///
@@ -92,6 +92,65 @@ pub fn cast_line(cast: &[Person]) -> String {
         .map(|person| person.name.as_str())
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// Index of the season shown first: the one of the next episode to watch, else the first.
+/// `None` when the series has no season.
+pub fn initial_season(details: &SeriesDetails) -> Option<usize> {
+    if details.seasons.is_empty() {
+        return None;
+    }
+    let next = details
+        .next_episode
+        .as_ref()
+        .and_then(|episode| episode.season_id.as_ref());
+    Some(next.map_or(0, |season| {
+        details
+            .seasons
+            .iter()
+            .position(|candidate| &candidate.id == season)
+            .unwrap_or(0)
+    }))
+}
+
+/// What the main button of the series page plays; the string is the `SxxEyy` label.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SeriesPlay {
+    /// No episode to name: the button just says "Play".
+    Play,
+    /// An episode not started yet.
+    PlayEpisode(String),
+    /// An episode started and not finished.
+    ResumeEpisode(String),
+}
+
+/// Main button of the series page for the next episode to watch.
+pub fn series_play(next: Option<&Episode>) -> SeriesPlay {
+    match next.and_then(|episode| Some((episode.label.clone()?, episode.can_resume()))) {
+        Some((label, true)) => SeriesPlay::ResumeEpisode(label),
+        Some((label, false)) => SeriesPlay::PlayEpisode(label),
+        None => SeriesPlay::Play,
+    }
+}
+
+/// Row of the episode list for `episode`. The thumbnail is loaded later.
+pub fn episode_row(episode: &Episode) -> EpisodeData {
+    EpisodeData {
+        id: episode.id.as_str().into(),
+        number: episode
+            .number
+            .map(|number| number.to_string())
+            .unwrap_or_default()
+            .into(),
+        title: episode.title.as_str().into(),
+        overview: episode.overview.clone().unwrap_or_default().into(),
+        minutes: episode.duration.map_or(0, |duration| {
+            i32::try_from(duration.as_secs() / 60).unwrap_or(0)
+        }),
+        image: Default::default(),
+        watched: episode.user.played,
+        progress: episode.user.progress.unwrap_or(0.0),
+    }
 }
 
 /// Card for an item. The image is loaded later.
@@ -214,7 +273,7 @@ pub fn device_name(hostname: Option<&str>, device_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oxyfin_core::{Person, UserState};
+    use oxyfin_core::{Person, Season, SeriesDetails, UserState};
 
     fn summary(kind: ItemKind) -> ItemSummary {
         ItemSummary {
@@ -513,5 +572,107 @@ mod tests {
         let (title, subtitle) = playback_title(&playing(None, None));
         assert_eq!(title, "Pilot");
         assert!(subtitle.is_empty());
+    }
+
+    fn episode_at(
+        label: Option<&str>,
+        season: Option<&str>,
+        position: u64,
+        played: bool,
+    ) -> Episode {
+        Episode {
+            id: "ep".into(),
+            series_id: "abc".into(),
+            series_name: None,
+            season_id: season.map(Into::into),
+            title: "Episode".into(),
+            season_number: None,
+            number: None,
+            label: label.map(Into::into),
+            overview: None,
+            thumb: None,
+            duration: None,
+            user: UserState {
+                played,
+                position: Duration::from_secs(position),
+                ..UserState::default()
+            },
+        }
+    }
+
+    fn series(seasons: &[&str], next: Option<Episode>) -> SeriesDetails {
+        SeriesDetails {
+            summary: summary(ItemKind::Series),
+            overview: None,
+            genres: Vec::new(),
+            cast: Vec::new(),
+            seasons: seasons
+                .iter()
+                .map(|id| Season {
+                    id: (*id).into(),
+                    name: format!("Season {id}"),
+                    number: None,
+                    poster: None,
+                    user: UserState::default(),
+                })
+                .collect(),
+            next_episode: next,
+            community_rating: None,
+            official_rating: None,
+        }
+    }
+
+    #[test]
+    fn the_first_season_shown_is_the_one_of_the_next_episode() {
+        let details = series(
+            &["s1", "s2", "s3"],
+            Some(episode_at(None, Some("s2"), 0, false)),
+        );
+        assert_eq!(initial_season(&details), Some(1));
+    }
+
+    #[test]
+    fn without_a_next_episode_the_first_season_is_shown() {
+        assert_eq!(initial_season(&series(&["s1", "s2"], None)), Some(0));
+        let elsewhere = series(
+            &["s1", "s2"],
+            Some(episode_at(None, Some("gone"), 0, false)),
+        );
+        assert_eq!(initial_season(&elsewhere), Some(0));
+        let unplaced = series(&["s1", "s2"], Some(episode_at(None, None, 0, false)));
+        assert_eq!(initial_season(&unplaced), Some(0));
+    }
+
+    #[test]
+    fn a_series_without_seasons_has_no_season_shown() {
+        assert_eq!(initial_season(&series(&[], None)), None);
+    }
+
+    #[test]
+    fn a_started_episode_is_resumed_and_a_new_one_played() {
+        let started = episode_at(Some("S02E05"), None, 1200, false);
+        assert_eq!(
+            series_play(Some(&started)),
+            SeriesPlay::ResumeEpisode("S02E05".into())
+        );
+        let fresh = episode_at(Some("S02E06"), None, 0, false);
+        assert_eq!(
+            series_play(Some(&fresh)),
+            SeriesPlay::PlayEpisode("S02E06".into())
+        );
+        let finished = episode_at(Some("S02E07"), None, 1200, true);
+        assert_eq!(
+            series_play(Some(&finished)),
+            SeriesPlay::PlayEpisode("S02E07".into())
+        );
+    }
+
+    #[test]
+    fn without_a_next_episode_or_its_label_the_button_just_plays() {
+        assert_eq!(series_play(None), SeriesPlay::Play);
+        assert_eq!(
+            series_play(Some(&episode_at(None, None, 0, false))),
+            SeriesPlay::Play
+        );
     }
 }
