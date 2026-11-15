@@ -245,6 +245,9 @@ impl MovieController {
                 // A reload that started before the change would bring the old state back.
                 self.load.set(self.load.get() + 1);
                 self.publish(app, id, &window);
+                if let Some(movie) = self.current.borrow().clone() {
+                    app.dispatch(Msg::ItemChanged(Screen::Movie(movie)));
+                }
             }
             Err(CoreError::SessionExpired) => app.dispatch(Msg::Expired(id)),
             Err(error) => {

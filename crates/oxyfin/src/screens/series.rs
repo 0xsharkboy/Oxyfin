@@ -198,6 +198,9 @@ impl SeriesController {
                 self.season.set(chosen);
                 *self.details.borrow_mut() = Some(details);
                 self.publish(app, id, &window);
+                if let Some(series) = self.current.borrow().clone() {
+                    app.dispatch(Msg::ItemChanged(Screen::Series(series)));
+                }
                 self.request_episodes(app);
             }
             Err(CoreError::SessionExpired) => app.dispatch(Msg::Expired(id)),
