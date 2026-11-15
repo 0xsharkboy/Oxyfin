@@ -191,10 +191,10 @@ export component DetailHeader inherits Rectangle {
                     max-width: 640px;
                 }
 
-                HorizontalLayout {
+                FlexboxLayout {
                     padding-top: Theme.space-sm;
                     spacing: Theme.space-md;
-                    alignment: start;
+                    cross-axis-alignment: center;
 
                     @children
 
@@ -207,17 +207,13 @@ export component DetailHeader inherits Rectangle {
                             root.toggle-watched();
                         }
                     }
-                    VerticalLayout {
-                        alignment: center;
-
-                        IconButton {
-                            icon: root.favorite ? Icons.heart-filled : Icons.heart;
-                            icon-color: root.favorite ? Theme.accent : Theme.text-primary;
-                            label: root.favorite ? @tr("Remove from favorites") : @tr("Add to favorites");
-                            enabled: !root.busy;
-                            clicked => {
-                                root.toggle-favorite();
-                            }
+                    IconButton {
+                        icon: root.favorite ? Icons.heart-filled : Icons.heart;
+                        icon-color: root.favorite ? Theme.accent : Theme.text-primary;
+                        label: root.favorite ? @tr("Remove from favorites") : @tr("Add to favorites");
+                        enabled: !root.busy;
+                        clicked => {
+                            root.toggle-favorite();
                         }
                     }
                 }

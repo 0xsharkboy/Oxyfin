@@ -1,14 +1,15 @@
-//! Switches the interface to French: the sign-in label, then the home and movie pages at 900 px.
+//! Switches the interface to French: the sign-in label, the home page and the movie actions.
 
 mod common;
 
 use common::{
-    click, fixture, json, mount_browse_basics, run, server, start, wait_role, wait_until,
+    click, fixture, json, mount_browse_basics, pause, run, server, start, wait_role, wait_until,
     wait_visible,
 };
-use i_slint_backend_testing::{AccessibleRole, ElementHandle};
+use i_slint_backend_testing::AccessibleRole;
 use oxyfin::{Screen, ServerState};
 use slint::{ComponentHandle, LogicalSize};
+use std::time::Duration;
 use wiremock::Mock;
 use wiremock::matchers::{method, path};
 
@@ -62,25 +63,38 @@ fn the_interface_follows_the_selected_language() {
         wait_until("the movie", || window.get_screen() == Screen::Movie).await?;
         wait_visible(&window, "Avec Ada Actor, Ben Bit, Cleo Code, Dan Data").await?;
         wait_role(&window, "Retirer des favoris", AccessibleRole::Button).await?;
-        window.window().set_size(LogicalSize::new(900., 700.));
-        for label in ["Reprendre à 0:03", "Lire", "Marquer comme vu"] {
-            let button = wait_role(&window, label, AccessibleRole::Button).await?;
-            let (left, top) = (button.absolute_position().x, button.absolute_position().y);
-            let (right, bottom) = (left + button.size().width, top + button.size().height);
-            let texts: Vec<ElementHandle> =
-                ElementHandle::find_by_element_id(&window, "Button::label-text")
-                    .filter(|text| {
-                        let (x, y) = (text.absolute_position().x, text.absolute_position().y);
-                        x >= left && x <= right && y >= top && y <= bottom
-                    })
-                    .collect();
-            let [text] = texts.as_slice() else {
-                return Err(format!("{label}: expected one text, found {}", texts.len()));
-            };
-            let (x, y) = (text.absolute_position().x, text.absolute_position().y);
-            let (width, height) = (text.size().width, text.size().height);
-            if x + width > right + 0.5 || y + height > bottom + 0.5 {
-                return Err(format!("the text of {label} overflows its button"));
+        for width in [900., 760.] {
+            window.window().set_size(LogicalSize::new(width, 700.));
+            pause(Duration::from_millis(200)).await;
+            let header = wait_role(&window, "Test Movie (2020)", AccessibleRole::Groupbox).await?;
+            let header_bottom = header.absolute_position().y + header.size().height;
+            let mut boxes = Vec::new();
+            for label in [
+                "Reprendre à 0:03",
+                "Marquer comme vu",
+                "Retirer des favoris",
+            ] {
+                let button = wait_role(&window, label, AccessibleRole::Button).await?;
+                let (x, y) = (button.absolute_position().x, button.absolute_position().y);
+                let (w, h) = (button.size().width, button.size().height);
+                if x < -0.5 || x + w > width + 0.5 {
+                    return Err(format!("{label} leaves the {width} px window: x={x} w={w}"));
+                }
+                if y + h > header_bottom + 0.5 {
+                    return Err(format!("{label} sticks out of the header at {width} px"));
+                }
+                boxes.push((label, x, y, w, h));
+            }
+            for (index, first) in boxes.iter().enumerate() {
+                for second in boxes.iter().skip(index + 1) {
+                    let apart = first.1 + first.3 <= second.1 + 0.5
+                        || second.1 + second.3 <= first.1 + 0.5
+                        || first.2 + first.4 <= second.2 + 0.5
+                        || second.2 + second.4 <= first.2 + 0.5;
+                    if !apart {
+                        return Err(format!("{} overlaps {} at {width} px", first.0, second.0));
+                    }
+                }
             }
         }
         Ok(())
