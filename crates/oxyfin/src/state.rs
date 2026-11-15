@@ -123,6 +123,8 @@ pub enum Msg {
     OpenTab(Tab),
     /// The user opened a detail page: only `Screen::Movie` or `Screen::Series`.
     OpenItem(Screen),
+    /// A watched or favorite change succeeded on a detail page: the screens below are stale.
+    ItemChanged(Screen),
     /// The user went back to the previous screen.
     Back,
     /// Playback was requested.
@@ -183,7 +185,7 @@ pub enum Effect {
     Show(Screen),
     /// A screen left the stack: release its controller.
     Discard(Screen),
-    /// A screen came back from the player: reload it.
+    /// A screen came back from the player or holds data a change made stale: reload it.
     Refresh(Screen),
     /// Show a message.
     Notify(Notice),
@@ -199,6 +201,8 @@ pub struct AppState {
     next_id: u64,
     session: Option<SessionInfo>,
     closing: Option<GenerationId>,
+    /// The screens at the bottom of the stack below this depth hold data a change made stale.
+    stale_below: usize,
 }
 
 impl Default for AppState {
@@ -216,6 +220,7 @@ impl AppState {
             next_id: 1,
             session: None,
             closing: None,
+            stale_below: 0,
         }
     }
 
@@ -293,8 +298,12 @@ impl AppState {
                     return Vec::new();
                 }
                 if self.stack[0] == target {
+                    let stale = self.stale_below > 0;
                     let mut effects = self.pop_to_root();
-                    effects.push(Effect::Show(target));
+                    effects.push(Effect::Show(target.clone()));
+                    if stale {
+                        effects.push(Effect::Refresh(target));
+                    }
                     return effects;
                 }
                 let mut effects = self.discard_all();
@@ -308,6 +317,12 @@ impl AppState {
                     && screen.is_detail() =>
             {
                 vec![self.push(screen)]
+            }
+            Msg::ItemChanged(screen) if on_connected => {
+                if let Some(index) = self.stack.iter().rposition(|shown| *shown == screen) {
+                    self.stale_below = self.stale_below.max(index);
+                }
+                Vec::new()
             }
             Msg::Back if on_connected && !on_player && self.stack.len() > 1 => self.pop(),
             Msg::OpenPlayer if on_connected && !on_player && *self.top() != Screen::Settings => {
@@ -367,6 +382,7 @@ impl AppState {
 
     /// Replaces the whole stack by `screen`.
     fn root(&mut self, screen: Screen) -> Effect {
+        self.stale_below = 0;
         self.stack = vec![screen.clone()];
         Effect::Show(screen)
     }
@@ -384,12 +400,21 @@ impl AppState {
         {
             effects.push(Effect::Discard(popped));
         }
-        effects.push(Effect::Show(self.top().clone()));
+        let top = self.top().clone();
+        effects.push(Effect::Show(top.clone()));
+        let revealed = self.stack.len().saturating_sub(1);
+        if revealed < self.stale_below {
+            self.stale_below = revealed;
+            if top.has_controller() {
+                effects.push(Effect::Refresh(top));
+            }
+        }
         effects
     }
 
     /// Pops every screen above the root, discarding their controllers.
     fn pop_to_root(&mut self) -> Vec<Effect> {
+        self.stale_below = 0;
         let mut effects = Vec::new();
         while self.stack.len() > 1 {
             if let Some(popped) = self.stack.pop()
@@ -403,6 +428,7 @@ impl AppState {
 
     /// Empties the stack, discarding the controllers from the top down.
     fn discard_all(&mut self) -> Vec<Effect> {
+        self.stale_below = 0;
         self.stack
             .drain(..)
             .rev()
@@ -834,5 +860,119 @@ mod tests {
         assert!(s.update(Msg::ClosePlayer).is_empty());
         assert!(s.update(Msg::GenerationEnded(GenerationId(9))).is_empty());
         assert!(s.update(Msg::Restored(Some(info(false)))).is_empty());
+    }
+
+    #[test]
+    fn back_after_a_change_refreshes_the_screen_below() {
+        let mut s = on_movies_grid();
+        s.update(Msg::OpenItem(movie("m")));
+        assert!(s.update(Msg::ItemChanged(movie("m"))).is_empty());
+        assert_eq!(
+            s.update(Msg::Back),
+            vec![
+                Effect::Discard(movie("m")),
+                Effect::Show(movies()),
+                Effect::Refresh(movies())
+            ]
+        );
+        s.update(Msg::OpenItem(movie("n")));
+        assert_eq!(
+            s.update(Msg::Back),
+            vec![Effect::Discard(movie("n")), Effect::Show(movies())]
+        );
+    }
+
+    #[test]
+    fn back_without_a_change_emits_no_refresh() {
+        let mut s = on_movies_grid();
+        s.update(Msg::OpenItem(movie("m")));
+        assert_eq!(
+            s.update(Msg::Back),
+            vec![Effect::Discard(movie("m")), Effect::Show(movies())]
+        );
+    }
+
+    #[test]
+    fn a_change_in_a_detail_over_a_detail_refreshes_both_screens_below() {
+        let (mut s, _) = signed_in();
+        s.update(Msg::OpenItem(movie("m")));
+        s.update(Msg::OpenItem(series("s")));
+        s.update(Msg::ItemChanged(series("s")));
+        assert_eq!(
+            s.update(Msg::Back),
+            vec![
+                Effect::Discard(series("s")),
+                Effect::Show(movie("m")),
+                Effect::Refresh(movie("m"))
+            ]
+        );
+        assert_eq!(
+            s.update(Msg::Back),
+            vec![
+                Effect::Discard(movie("m")),
+                Effect::Show(Screen::Home),
+                Effect::Refresh(Screen::Home)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_change_does_not_refresh_the_detail_that_made_it() {
+        let (mut s, _) = signed_in();
+        s.update(Msg::OpenItem(movie("m")));
+        s.update(Msg::ItemChanged(movie("m")));
+        s.update(Msg::OpenItem(series("s")));
+        assert_eq!(
+            s.update(Msg::Back),
+            vec![Effect::Discard(series("s")), Effect::Show(movie("m"))]
+        );
+    }
+
+    #[test]
+    fn closing_the_settings_refreshes_a_screen_marked_stale() {
+        let (mut s, _) = signed_in();
+        s.update(Msg::OpenItem(movie("m")));
+        s.update(Msg::ItemChanged(movie("m")));
+        s.update(Msg::Back);
+        s.update(Msg::OpenItem(movie("m")));
+        s.update(Msg::ItemChanged(movie("m")));
+        s.update(Msg::OpenSettings);
+        assert_eq!(s.update(Msg::CloseSettings), vec![Effect::Show(movie("m"))]);
+        assert_eq!(
+            s.update(Msg::Back),
+            vec![
+                Effect::Discard(movie("m")),
+                Effect::Show(Screen::Home),
+                Effect::Refresh(Screen::Home)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_stale_root_is_refreshed_when_its_tab_is_picked_again() {
+        let mut s = on_movies_grid();
+        s.update(Msg::OpenItem(movie("m")));
+        s.update(Msg::ItemChanged(movie("m")));
+        assert_eq!(
+            s.update(Msg::OpenTab(Tab::Library(LibraryTab::Movies))),
+            vec![
+                Effect::Discard(movie("m")),
+                Effect::Show(movies()),
+                Effect::Refresh(movies())
+            ]
+        );
+    }
+
+    #[test]
+    fn a_change_from_a_screen_that_left_the_stack_is_ignored() {
+        let mut s = on_movies_grid();
+        s.update(Msg::OpenItem(movie("m")));
+        s.update(Msg::Back);
+        s.update(Msg::ItemChanged(movie("m")));
+        s.update(Msg::OpenItem(movie("n")));
+        assert_eq!(
+            s.update(Msg::Back),
+            vec![Effect::Discard(movie("n")), Effect::Show(movies())]
+        );
     }
 }
