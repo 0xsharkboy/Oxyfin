@@ -10,6 +10,7 @@ struct Entry {
     id: String,
     plural: Option<String>,
     translations: Vec<String>,
+    fuzzy: bool,
 }
 
 fn unquote(line: &str) -> String {
@@ -24,16 +25,21 @@ fn parse(text: &str) -> Vec<Entry> {
     let mut entries: Vec<Entry> = Vec::new();
     let mut current: Option<Entry> = None;
     let mut field = "";
+    let mut fuzzy = false;
     for line in text.lines() {
-        if line.starts_with("msgctxt ") {
+        if line.starts_with("#,") {
+            fuzzy = line.split([',', ' ']).any(|flag| flag == "fuzzy");
+        } else if line.starts_with("msgctxt ") {
             entries.extend(current.take());
             current = Some(Entry {
                 context: unquote(line),
                 id: String::new(),
                 plural: None,
                 translations: Vec::new(),
+                fuzzy,
             });
             field = "context";
+            fuzzy = false;
         } else if let Some(entry) = current.as_mut() {
             if line.starts_with("msgid_plural ") {
                 entry.plural = Some(unquote(line));
@@ -116,5 +122,16 @@ fn french_placeholders_match_the_source() {
                 message.id
             );
         }
+    }
+}
+
+#[test]
+fn french_catalog_has_no_fuzzy_entries() {
+    for entry in read("po/fr/LC_MESSAGES/oxyfin.po") {
+        assert!(
+            !entry.fuzzy,
+            "{:?} is flagged fuzzy, and Slint drops fuzzy entries",
+            entry.id
+        );
     }
 }
