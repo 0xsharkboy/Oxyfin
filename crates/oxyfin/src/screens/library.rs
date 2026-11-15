@@ -11,7 +11,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::app::App;
 use crate::images::load_into;
-use crate::present::{card, core_error_message, image_size};
+use crate::present::{card, core_error_message, detail_target, image_size};
 use crate::state::{GenerationId, LibraryTab, Msg, Screen};
 use crate::{AppWindow, CardData, LibraryTitles, Messages};
 
@@ -200,6 +200,14 @@ impl LibraryController {
         self.change(app, |settings| settings.descending = !settings.descending);
     }
 
+    /// The card of item `id` was clicked.
+    pub(crate) fn open(&self, app: &Rc<App>, id: &str) {
+        let target = target_of(&self.items.borrow(), id);
+        if let Some(screen) = target {
+            open_detail(app, screen);
+        }
+    }
+
     /// The end of the grid is near: asks for the next page when there is one.
     pub(crate) fn near_end(&self, app: &Rc<App>) {
         let loaded = self.items.borrow().len();
@@ -292,6 +300,7 @@ impl LibraryController {
         self.options.borrow_mut().clear();
         self.genre_names.set_vec(Vec::new());
         if let Some(window) = app.window() {
+            window.set_library_viewport_y(0.0);
             window.set_library_more_failed(false);
             window.set_library_total(0);
             window.set_library_loading(false);
@@ -415,6 +424,22 @@ impl LibraryController {
             self.cards.push(data);
         }
         load_posters(app, id, &window, &self.cards, &page.items);
+    }
+}
+
+/// Detail page opened by the item `id` among `items`.
+pub(crate) fn target_of(items: &[ItemSummary], id: &str) -> Option<Screen> {
+    items
+        .iter()
+        .find(|item| item.id.as_str() == id)
+        .and_then(detail_target)
+}
+
+/// Opens `screen` on top of the current one.
+pub(crate) fn open_detail(app: &Rc<App>, screen: Screen) {
+    // Series pages are not built yet, so only movies open.
+    if matches!(screen, Screen::Movie(_)) {
+        app.dispatch(Msg::OpenItem(screen));
     }
 }
 

@@ -1,0 +1,38 @@
+{
+  "Name": "Test Movie (2020)",
+  "ServerId": "87fcca6823684ae692e5c60378bf931d",
+  "Id": "76282b1c408f374beeee50519e9157a4",
+  "ChannelId": null,
+  "Overview": "A generated test movie.",
+  "Genres": [
+    "Drama",
+    "Comedy"
+  ],
+  "RunTimeTicks": 60000000000,
+  "ProductionYear": 2020,
+  "CommunityRating": 8.4,
+  "OfficialRating": "TV-14",
+  "IsFolder": false,
+  "Type": "Movie",
+  "People": [
+    { "Name": "Ada Actor", "Id": "11111111111111111111111111111111", "Role": "Hero", "Type": "Actor" },
+    { "Name": "Ben Bit", "Id": "22222222222222222222222222222222", "Role": "Friend", "Type": "Actor" },
+    { "Name": "Cleo Code", "Id": "33333333333333333333333333333333", "Role": "Rival", "Type": "Actor" },
+    { "Name": "Dan Data", "Id": "44444444444444444444444444444444", "Role": "Mentor", "Type": "Actor" },
+    { "Name": "Eve Edge", "Id": "55555555555555555555555555555555", "Role": "Villain", "Type": "Actor" },
+    { "Name": "Finn Flow", "Id": "66666666666666666666666666666666", "Role": "Extra", "Type": "Actor" }
+  ],
+  "UserData": {
+    "PlayedPercentage": 29.931158335827597,
+    "PlaybackPositionTicks": 30000000,
+    "PlayCount": 1,
+    "IsFavorite": true,
+    "LastPlayedDate": "2026-11-13T00:37:06.8943956Z",
+    "Played": false,
+    "Key": "76282b1c-408f-374b-eeee-50519e9157a4",
+    "ItemId": "76282b1c408f374beeee50519e9157a4"
+  },
+  "ImageTags": {},
+  "BackdropImageTags": [],
+  "MediaType": "Video"
+}

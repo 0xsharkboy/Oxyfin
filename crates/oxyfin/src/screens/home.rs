@@ -9,7 +9,8 @@ use std::rc::Rc;
 
 use crate::app::App;
 use crate::images::load_into;
-use crate::present::{card, core_error_message, image_size};
+use crate::present::{card, core_error_message, detail_target, image_size};
+use crate::screens::library::open_detail;
 use crate::state::{GenerationId, Msg, Screen};
 use crate::{AppWindow, CardData, HomeBanner, HomeRow, HomeRowKind, HomeTitles, Messages};
 
@@ -58,6 +59,7 @@ pub(crate) struct HomeController {
     slots: RefCell<Vec<Slot>>,
     layout: RefCell<Vec<RowKey>>,
     featured: RefCell<Featured>,
+    targets: RefCell<HashMap<String, Screen>>,
 }
 
 impl HomeController {
@@ -71,6 +73,14 @@ impl HomeController {
     /// The home screen came back from the player.
     pub(crate) fn refresh(&self, app: &Rc<App>) {
         self.reload(app);
+    }
+
+    /// The poster or banner of item `id` was opened.
+    pub(crate) fn open(&self, app: &Rc<App>, id: &str) {
+        let target = self.targets.borrow().get(id).cloned();
+        if let Some(screen) = target {
+            open_detail(app, screen);
+        }
     }
 
     /// A screen left the stack: the home screen frees its content.
@@ -87,6 +97,7 @@ impl HomeController {
         self.slots.borrow_mut().clear();
         self.rows.set_vec(Vec::new());
         *self.layout.borrow_mut() = Vec::new();
+        self.targets.borrow_mut().clear();
         *self.featured.borrow_mut() = Featured::default();
         if let Some(window) = app.window() {
             window.set_home_banner(HomeBanner::default());
@@ -268,6 +279,14 @@ impl HomeController {
             }
         };
 
+        if matches!(key, RowKey::Library(_)) {
+            let mut targets = self.targets.borrow_mut();
+            for item in &items {
+                if let Some(screen) = detail_target(item) {
+                    targets.insert(item.id.as_str().to_owned(), screen);
+                }
+            }
+        }
         let kept = self.loaded_images(&key);
         let mut missing = Vec::new();
         let cards: Vec<CardData> = items
@@ -405,6 +424,11 @@ impl HomeController {
             window.set_home_banner(HomeBanner::default());
             return;
         };
+        if let Some(screen) = detail_target(&item) {
+            self.targets
+                .borrow_mut()
+                .insert(item.id.as_str().to_owned(), screen);
+        }
         let previous = window.get_home_banner();
         let mut data = card(&item);
         let kept = previous.has && previous.card.id == data.id && previous.card.has_image;
@@ -456,14 +480,14 @@ impl HomeController {
 }
 
 // Jellyfin fits images inside the box, so ask for a 16:9 box covering the banner.
-fn banner_box(width: f32) -> (f32, f32) {
+pub(crate) fn banner_box(width: f32) -> (f32, f32) {
     (
         width.max(BANNER_HEIGHT * BACKDROP_ASPECT),
         BANNER_HEIGHT.max(width / BACKDROP_ASPECT),
     )
 }
 
-fn banner_artwork(item: &ItemSummary) -> Option<ImageRef> {
+pub(crate) fn banner_artwork(item: &ItemSummary) -> Option<ImageRef> {
     item.backdrop.clone().or_else(|| item.thumb.clone())
 }
 

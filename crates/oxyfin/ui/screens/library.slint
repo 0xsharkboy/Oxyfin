@@ -31,10 +31,13 @@ export component LibraryScreen inherits Rectangle {
     in property <int> genre;
     in property <int> sort-field;
     in property <bool> descending;
+    // Scroll position of the grid; the window keeps it while the page is not shown.
+    in-out property <length> viewport-y <=> grid.viewport-y;
     callback watch-selected(index: int);
     callback genre-selected(index: int);
     callback sort-selected(index: int);
     callback direction-toggled();
+    callback open(id: string);
     callback near-end();
     callback retry();
     callback retry-more();
@@ -130,6 +133,9 @@ export component LibraryScreen inherits Rectangle {
 
             grid := PosterGrid {
                 cards: root.cards;
+                open(card) => {
+                    root.open(card.id);
+                }
                 near-end => {
                     root.near-end();
                 }

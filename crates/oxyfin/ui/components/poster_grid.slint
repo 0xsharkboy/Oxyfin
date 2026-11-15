@@ -30,10 +30,19 @@ export component PosterGrid inherits Rectangle {
         }
     }
 
+    // A bound viewport-y is not clamped by the Flickable, so the grid keeps it inside the content.
+    function clamp-scroll() {
+        if root.height > 0 {
+            flick.content-y = max(min(flick.content-y, 0px), min(0px, root.height - root.grid-height));
+        }
+    }
+
     changed grid-height => {
+        root.clamp-scroll();
         root.check-end();
     }
     changed height => {
+        root.clamp-scroll();
         root.check-end();
     }
 
@@ -56,6 +65,7 @@ export component PosterGrid inherits Rectangle {
         content-height: root.grid-height;
 
         changed content-y => {
+            root.clamp-scroll();
             root.check-end();
         }
 

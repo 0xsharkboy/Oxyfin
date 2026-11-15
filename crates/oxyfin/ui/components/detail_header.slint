@@ -1,0 +1,227 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { BodyText, DisplayText, LabelText } from "text.slint";
+import { Button, ButtonStyle } from "button.slint";
+import { IconButton } from "icon_button.slint";
+
+// Non-interactive genre pill.
+component GenreTag inherits Rectangle {
+    in property <string> label;
+
+    border-radius: Theme.radius-full;
+    background: Theme.bg-elevated;
+    border-width: Theme.border-thin;
+    border-color: Theme.border-default;
+
+    HorizontalLayout {
+        padding-left: Theme.space-md;
+        padding-right: Theme.space-md;
+        padding-top: Theme.space-chip-y;
+        padding-bottom: Theme.space-chip-y;
+
+        LabelText {
+            text: root.label;
+        }
+    }
+}
+
+// Backdrop, poster, title, metadata, summary and actions of a movie or a series.
+// The children are the playback buttons, shown before the watched and favorite toggles.
+export component DetailHeader inherits Rectangle {
+    in property <image> backdrop;
+    in property <image> poster;
+    in property <string> title;
+    in property <string> year;
+    in property <int> minutes;
+    // Community rating such as "8.4"; empty when there is none.
+    in property <string> rating;
+    in property <string> official-rating;
+    // Number of seasons, 0 for a movie.
+    in property <int> season-count;
+    in property <[string]> genres;
+    in property <string> overview;
+    // The leading cast, already joined; empty when there is none.
+    in property <string> cast;
+    in property <bool> watched;
+    in property <bool> favorite;
+    // True while a watched or favorite change is being saved.
+    in property <bool> busy;
+    // Height of the top bar drawn over the header.
+    in property <length> top-inset;
+    callback back();
+    callback toggle-watched();
+    callback toggle-favorite();
+
+    pure function duration(total: int) -> string {
+        total >= 60 ? @tr("{}h {}m", floor(total / 60), mod(total, 60)) : @tr("{}m", total)
+    }
+
+    accessible-role: groupbox;
+    accessible-label: root.title;
+
+    preferred-height: content.preferred-height;
+    background: Theme.hero-placeholder;
+    clip: true;
+
+    Image {
+        width: 100%;
+        height: 100%;
+        source: root.backdrop;
+        image-fit: cover;
+    }
+    Rectangle {
+        background: Theme.hero-scrim-left;
+    }
+    Rectangle {
+        background: Theme.hero-scrim-bottom;
+    }
+
+    content := VerticalLayout {
+        padding-top: root.top-inset + Theme.space-lg;
+        padding-left: Theme.space-3xl;
+        padding-right: Theme.space-3xl;
+        padding-bottom: Theme.space-3xl;
+        spacing: Theme.space-xl;
+
+        HorizontalLayout {
+            alignment: start;
+
+            IconButton {
+                icon: Icons.arrow-left;
+                label: @tr("Back");
+                clicked => {
+                    root.back();
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: Theme.space-3xl;
+            alignment: start;
+
+            Rectangle {
+                width: Theme.poster-width * 1.5;
+                height: Theme.poster-height * 1.5;
+                border-radius: Theme.radius-lg;
+                background: Theme.poster-placeholder;
+                clip: true;
+
+                Image {
+                    width: 100%;
+                    height: 100%;
+                    source: root.poster;
+                    image-fit: cover;
+                }
+            }
+
+            VerticalLayout {
+                alignment: end;
+                spacing: Theme.space-lg;
+
+                DisplayText {
+                    text: root.title;
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: Theme.space-md;
+                    alignment: start;
+
+                    if root.year != "": LabelText {
+                        text: root.year;
+                    }
+                    if root.minutes > 0: LabelText {
+                        text: root.duration(root.minutes);
+                    }
+                    if root.season-count > 0: LabelText {
+                        text: @tr("{n} season" | "{n} seasons" % root.season-count);
+                    }
+                    if root.rating != "": HorizontalLayout {
+                        spacing: Theme.space-xs;
+
+                        VerticalLayout {
+                            alignment: center;
+
+                            Image {
+                                source: Icons.star;
+                                width: 16px;
+                                height: 16px;
+                                colorize: Theme.accent;
+                            }
+                        }
+                        LabelText {
+                            text: root.rating;
+                        }
+                    }
+                    if root.official-rating != "": Rectangle {
+                        border-radius: Theme.radius-md;
+                        border-width: Theme.border-thin;
+                        border-color: Theme.border-default;
+
+                        HorizontalLayout {
+                            padding-left: Theme.space-sm;
+                            padding-right: Theme.space-sm;
+
+                            LabelText {
+                                text: root.official-rating;
+                            }
+                        }
+                    }
+                }
+
+                if root.genres.length > 0: HorizontalLayout {
+                    spacing: Theme.space-sm;
+                    alignment: start;
+
+                    for genre in root.genres: GenreTag {
+                        label: genre;
+                    }
+                }
+
+                if root.overview != "": BodyText {
+                    text: root.overview;
+                    color: Theme.text-secondary;
+                    wrap: word-wrap;
+                    max-width: 640px;
+                }
+                if root.cast != "": BodyText {
+                    text: @tr("Starring {}", root.cast);
+                    color: Theme.text-secondary;
+                    wrap: word-wrap;
+                    max-width: 640px;
+                }
+
+                HorizontalLayout {
+                    padding-top: Theme.space-sm;
+                    spacing: Theme.space-md;
+                    alignment: start;
+
+                    @children
+
+                    Button {
+                        label: root.watched ? @tr("Mark as unwatched") : @tr("Mark as watched");
+                        icon: Icons.check;
+                        style: ButtonStyle.secondary;
+                        enabled: !root.busy;
+                        clicked => {
+                            root.toggle-watched();
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+
+                        IconButton {
+                            icon: root.favorite ? Icons.heart-filled : Icons.heart;
+                            icon-color: root.favorite ? Theme.accent : Theme.text-primary;
+                            label: root.favorite ? @tr("Remove from favorites") : @tr("Add to favorites");
+                            enabled: !root.busy;
+                            clicked => {
+                                root.toggle-favorite();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

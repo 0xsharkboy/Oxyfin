@@ -24,8 +24,11 @@ export component SearchScreen inherits Rectangle {
     in property <bool> loading-more;
     in property <string> error;
     in property <bool> more-failed;
+    // Scroll position of the results; the window keeps it while the page is not shown.
+    in-out property <length> viewport-y <=> grid.viewport-y;
     callback edited(text: string);
     callback accepted(text: string);
+    callback open(id: string);
     callback near-end();
     callback retry();
     callback retry-more();
@@ -72,6 +75,9 @@ export component SearchScreen inherits Rectangle {
 
             grid := PosterGrid {
                 cards: root.cards;
+                open(card) => {
+                    root.open(card.id);
+                }
                 near-end => {
                     root.near-end();
                 }
