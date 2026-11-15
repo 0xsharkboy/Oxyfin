@@ -1,6 +1,7 @@
 //! Series page: details, seasons, episodes and the watched and favorite toggles.
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use oxyfin_api::ItemId;
@@ -10,7 +11,8 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use crate::app::App;
 use crate::images::load_into;
 use crate::present::{
-    SeriesPlay, cast_line, core_error_message, episode_row, image_size, initial_season, series_play,
+    SeriesPlay, cast_line, core_error_message, episode_row, image_size, initial_season,
+    kept_thumbnails, series_play, thumbnail_tags,
 };
 use crate::screens::home::{banner_artwork, banner_box};
 use crate::state::{GenerationId, Msg, Screen};
@@ -38,6 +40,7 @@ pub(crate) struct SeriesController {
     rows_season: RefCell<Option<Option<String>>>,
     reloading: Cell<bool>,
     episodes: Rc<VecModel<EpisodeData>>,
+    thumbnail_tags: RefCell<HashMap<String, String>>,
     images_requested: Cell<bool>,
 }
 
@@ -135,6 +138,7 @@ impl SeriesController {
         self.rows_season.borrow_mut().take();
         self.reloading.set(false);
         self.episodes.set_vec(Vec::new());
+        self.thumbnail_tags.borrow_mut().clear();
         self.images_requested.set(false);
         if let Some(window) = app.window() {
             window.set_series_loaded(false);
@@ -279,8 +283,21 @@ impl SeriesController {
                 return;
             }
         };
-        self.episodes
-            .set_vec(episodes.iter().map(episode_row).collect::<Vec<_>>());
+        let rows: Vec<EpisodeData> = self.episodes.iter().collect();
+        let kept = kept_thumbnails(&rows, &self.thumbnail_tags.borrow(), &episodes);
+        *self.thumbnail_tags.borrow_mut() = thumbnail_tags(&episodes);
+        self.episodes.set_vec(
+            episodes
+                .iter()
+                .map(|episode| {
+                    let mut row = episode_row(episode);
+                    if let Some(image) = kept.get(episode.id.as_str()) {
+                        row.image = image.clone();
+                    }
+                    row
+                })
+                .collect::<Vec<_>>(),
+        );
         window.set_series_episodes_stale(false);
         let Some((_, _, images)) = app.services() else {
             return;
@@ -291,6 +308,9 @@ impl SeriesController {
             window.window().scale_factor(),
         );
         for episode in episodes {
+            if kept.contains_key(episode.id.as_str()) {
+                continue;
+            }
             let Some(thumb) = episode.thumb.clone() else {
                 continue;
             };
