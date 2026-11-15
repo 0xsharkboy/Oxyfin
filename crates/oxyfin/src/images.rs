@@ -2,9 +2,10 @@
 
 use std::sync::Arc;
 
-use oxyfin_core::{ImageCache, ImageRef, ImageSize};
+use crate::app::App;
+use crate::state::{GenerationId, Msg};
+use oxyfin_core::{CoreError, ImageCache, ImageRef, ImageSize};
 use slint::{Rgba8Pixel, SharedPixelBuffer};
-use tokio::runtime::Handle;
 
 /// Decodes JPEG, PNG or WebP bytes into RGBA pixels; `None` for anything else.
 pub fn decode(bytes: &[u8]) -> Option<SharedPixelBuffer<Rgba8Pixel>> {
@@ -17,40 +18,55 @@ pub fn decode(bytes: &[u8]) -> Option<SharedPixelBuffer<Rgba8Pixel>> {
 }
 
 /// Fetches `image` at `size` and decodes it on the runtime, then calls `apply`
-/// with the result on the Slint thread. Nothing is called when either step fails.
+/// with the result on the Slint thread. A fetch rejected with 401 ends the
+/// session of generation `id`; any other failure shows nothing.
 pub fn load_into(
+    app: &App,
+    id: GenerationId,
     images: &Arc<ImageCache>,
-    runtime: &Handle,
     image: ImageRef,
     size: ImageSize,
-    apply: impl FnOnce(slint::Image) + Send + 'static,
+    apply: impl FnOnce(slint::Image) + 'static,
 ) {
     let images = Arc::clone(images);
-    runtime.spawn(async move {
-        let bytes = match images.get(&image, size).await {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                log::debug!(
-                    "cannot fetch image {:?} of {}: {error}",
-                    image.image_type,
-                    image.item_id
-                );
-                return;
+    app.spawn(
+        async move {
+            let bytes = match images.get(&image, size).await {
+                Ok(bytes) => bytes,
+                Err(CoreError::SessionExpired) => return Loaded::Expired,
+                Err(error) => {
+                    log::debug!(
+                        "cannot fetch image {:?} of {}: {error}",
+                        image.image_type,
+                        image.item_id
+                    );
+                    return Loaded::Failed;
+                }
+            };
+            match tokio::task::spawn_blocking(move || decode(&bytes)).await {
+                Ok(Some(pixels)) => Loaded::Pixels(pixels),
+                _ => {
+                    log::debug!(
+                        "cannot decode image {:?} of {}",
+                        image.image_type,
+                        image.item_id
+                    );
+                    Loaded::Failed
+                }
             }
-        };
-        let Ok(Some(pixels)) = tokio::task::spawn_blocking(move || decode(&bytes)).await else {
-            log::debug!(
-                "cannot decode image {:?} of {}",
-                image.image_type,
-                image.item_id
-            );
-            return;
-        };
-        let shown = slint::invoke_from_event_loop(move || apply(slint::Image::from_rgba8(pixels)));
-        if let Err(error) = shown {
-            log::debug!("cannot hand an image to the event loop: {error}");
-        }
-    });
+        },
+        move |app, loaded| match loaded {
+            Loaded::Pixels(pixels) => apply(slint::Image::from_rgba8(pixels)),
+            Loaded::Expired => app.dispatch(Msg::Expired(id)),
+            Loaded::Failed => {}
+        },
+    );
+}
+
+enum Loaded {
+    Pixels(SharedPixelBuffer<Rgba8Pixel>),
+    Expired,
+    Failed,
 }
 
 #[cfg(test)]

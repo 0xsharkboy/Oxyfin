@@ -124,10 +124,6 @@ impl App {
         Arc::clone(&self.manager)
     }
 
-    pub(crate) fn runtime(&self) -> &Handle {
-        &self.runtime
-    }
-
     /// Identifier, catalog and image cache of the current generation.
     pub(crate) fn services(&self) -> Option<(GenerationId, Catalog, Arc<ImageCache>)> {
         self.generation.borrow().as_ref().map(|generation| {
@@ -374,7 +370,8 @@ impl App {
         if window.get_player_next_up().id == id {
             return;
         }
-        let (Some(thumb), Some((_, _, images))) = (episode.thumb.clone(), self.services()) else {
+        let (Some(thumb), Some((generation, _, images))) = (episode.thumb.clone(), self.services())
+        else {
             return;
         };
         let size = crate::present::image_size(
@@ -383,7 +380,7 @@ impl App {
             window.window().scale_factor(),
         );
         let weak = window.as_weak();
-        crate::images::load_into(&images, &self.runtime, thumb, size, move |image| {
+        crate::images::load_into(self, generation, &images, thumb, size, move |image| {
             let Some(window) = weak.upgrade() else { return };
             let mut next = window.get_player_next_up();
             if next.id == id {

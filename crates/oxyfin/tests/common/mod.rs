@@ -8,9 +8,11 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
+use i_slint_backend_testing::ElementHandle;
 use oxyfin::{App, AppWindow};
 use oxyfin_core::{Config, MemoryStore, Paths, SavedSession, TokenVault, account_key};
-use slint::ComponentHandle;
+use slint::platform::{PointerEventButton, WindowEvent};
+use slint::{ComponentHandle, LogicalPosition};
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 use wiremock::matchers::{method, path};
@@ -249,4 +251,49 @@ pub fn save_session(paths: &Paths, vault: &TokenVault, server_url: &str) {
             "5dabe43042264dc4960513e5e30552e3",
         )
         .unwrap_or_else(|err| panic!("cannot save the token: {err}"));
+}
+
+fn center(element: &ElementHandle) -> LogicalPosition {
+    let position = element.absolute_position();
+    let size = element.size();
+    LogicalPosition::new(position.x + size.width / 2., position.y + size.height / 2.)
+}
+
+/// Clicks `element` with real pointer events at its center. The first move can
+/// reveal controls and shift the element, so the click lands where it is after it.
+pub fn click(window: &AppWindow, element: &ElementHandle) {
+    window.window().dispatch_event(WindowEvent::PointerMoved {
+        position: center(element),
+    });
+    let position = center(element);
+    for event in [
+        WindowEvent::PointerPressed {
+            position,
+            button: PointerEventButton::Left,
+        },
+        WindowEvent::PointerReleased {
+            position,
+            button: PointerEventButton::Left,
+        },
+    ] {
+        window.window().dispatch_event(event);
+    }
+}
+
+/// Waits for an element labelled `label` with a non-zero size.
+pub async fn wait_visible(window: &AppWindow, label: &str) -> Result<ElementHandle, String> {
+    let start = std::time::Instant::now();
+    loop {
+        let found = ElementHandle::find_by_accessible_label(window, label).find(|element| {
+            let size = element.size();
+            size.width > 0. && size.height > 0.
+        });
+        if let Some(element) = found {
+            return Ok(element);
+        }
+        if start.elapsed() > DEADLINE {
+            return Err(format!("timed out waiting for {label} to be visible"));
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
 }
