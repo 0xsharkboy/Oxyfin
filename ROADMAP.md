@@ -12,12 +12,12 @@ This file is the single source of truth for planned work. An item is checked onl
 
 - [x] Sign in (password and Quick Connect, session remembered)
 - [x] Home (featured banner, Continue Watching, Next Up, Recently Added)
-- [ ] Libraries (grid, sort, filters)
-- [ ] Search
-- [ ] Movie and series details (seasons, episodes)
+- [x] Libraries (grid, sort, filters)
+- [x] Search
+- [x] Movie and series details (seasons, episodes)
 - [x] Player (direct play, controls, audio and subtitle menu, mpv shortcuts, resume and progress sync, next episode)
 - [x] Settings (account, sign out, version)
-- [ ] English UI with translation support
+- [x] English UI with translation support
 - [ ] Linux packages (Flatpak, Nix)
 
 ## Later
