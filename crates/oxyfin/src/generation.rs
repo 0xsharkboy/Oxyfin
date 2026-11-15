@@ -95,7 +95,7 @@ pub fn route(current: Option<GenerationId>, from: GenerationId, event: PlaybackE
 pub enum Built {
     /// Its generation ended while it was built.
     Release,
-    /// It becomes the player of its generation, without playing: the user left the home screen.
+    /// It becomes the player of its generation, without playing: the user left the screens that play.
     Keep,
     /// It becomes the player of its generation and plays the item clicked.
     Play,
@@ -106,7 +106,7 @@ pub enum Built {
 pub fn built(built_for: GenerationId, current: Option<GenerationId>, screen: Screen) -> Built {
     if current != Some(built_for) {
         Built::Release
-    } else if screen == Screen::Home {
+    } else if matches!(screen, Screen::Home | Screen::Movie(_) | Screen::Series(_)) {
         Built::Play
     } else {
         Built::Keep
@@ -144,8 +144,10 @@ mod tests {
     }
 
     #[test]
-    fn a_player_built_for_the_current_generation_plays_from_home_only() {
+    fn a_player_built_for_the_current_generation_plays_from_home_and_details_only() {
         assert_eq!(built(G1, Some(G1), Screen::Home), Built::Play);
+        assert_eq!(built(G1, Some(G1), Screen::Movie("m".into())), Built::Play);
+        assert_eq!(built(G1, Some(G1), Screen::Series("s".into())), Built::Play);
         assert_eq!(built(G1, Some(G1), Screen::Settings), Built::Keep);
         assert_eq!(built(G1, Some(G1), Screen::Player), Built::Keep);
     }
