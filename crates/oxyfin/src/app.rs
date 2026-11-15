@@ -364,15 +364,16 @@ impl App {
         let on_player = self.state.borrow().screen() == Screen::Player;
         if stopped {
             let expected = self.pending_stops.get();
+            let mut closed = false;
             if expected > 0 {
                 self.pending_stops.set(expected - 1);
             } else if on_player {
                 self.dispatch(Msg::ClosePlayer);
-                return;
+                closed = true;
             }
             // The stop report is queued before this event: Continue Watching catches up.
             let stacked = self.state.borrow().stack().to_vec();
-            for screen in &stacked {
+            for screen in stale_after_stop(&stacked, closed) {
                 self.refresh(screen);
             }
         } else if ended && on_player && !window.get_player_has_next() {
@@ -890,6 +891,16 @@ fn is_persistent(message: Message) -> bool {
     )
 }
 
+/// The stacked screens to reload when a stop is reported. Closing the player
+/// already reloads the screen it reveals, so a stop that closed it skips that one.
+#[cfg(feature = "mpv")]
+fn stale_after_stop(stack: &[Screen], closed_player: bool) -> &[Screen] {
+    match stack.split_last() {
+        Some((_, below)) if closed_player => below,
+        _ => stack,
+    }
+}
+
 /// Whether `screen` can start playback.
 fn can_play_from(screen: &Screen) -> bool {
     matches!(screen, Screen::Home | Screen::Movie(_) | Screen::Series(_))
@@ -909,6 +920,15 @@ fn keeps_notice(message: Message, screen: &Screen) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "mpv")]
+    #[test]
+    fn a_stop_that_closed_the_player_reloads_the_screens_below_the_one_revealed() {
+        let stack = [Screen::Home, Screen::Series("s".into())];
+        assert_eq!(stale_after_stop(&stack, true), [Screen::Home]);
+        assert_eq!(stale_after_stop(&stack, false), stack);
+        assert!(stale_after_stop(&[], true).is_empty());
+    }
 
     #[test]
     fn only_messages_that_need_the_user_persist() {
