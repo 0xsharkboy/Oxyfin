@@ -4,13 +4,11 @@ import { HeadingText } from "text.slint";
 import { NavItem } from "nav_item.slint";
 import { IconButton } from "icon_button.slint";
 
-export enum TopBarPage { home, movies, shows, favorites, none }
+export enum TopBarPage { home, movies, shows, favorites, search, none }
 
-// Top navigation drawn over the home banner. Only the pages built so far are enabled.
+// Top navigation drawn over the page banner.
 export component TopBar inherits Rectangle {
     in property <TopBarPage> current: TopBarPage.home;
-    in property <bool> library-pages-enabled;
-    in property <bool> search-enabled;
     in property <bool> settings-active;
     callback home-clicked();
     callback movies-clicked();
@@ -59,7 +57,6 @@ export component TopBar inherits Rectangle {
         NavItem {
             label: @tr("Movies");
             active: root.current == TopBarPage.movies;
-            enabled: root.library-pages-enabled;
             clicked => {
                 root.movies-clicked();
             }
@@ -67,7 +64,6 @@ export component TopBar inherits Rectangle {
         NavItem {
             label: @tr("Shows");
             active: root.current == TopBarPage.shows;
-            enabled: root.library-pages-enabled;
             clicked => {
                 root.shows-clicked();
             }
@@ -75,7 +71,6 @@ export component TopBar inherits Rectangle {
         NavItem {
             label: @tr("Favorites");
             active: root.current == TopBarPage.favorites;
-            enabled: root.library-pages-enabled;
             clicked => {
                 root.favorites-clicked();
             }
@@ -90,7 +85,7 @@ export component TopBar inherits Rectangle {
             IconButton {
                 icon: Icons.search;
                 label: @tr("Search");
-                enabled: root.search-enabled;
+                active: root.current == TopBarPage.search;
                 clicked => {
                     root.search-clicked();
                 }

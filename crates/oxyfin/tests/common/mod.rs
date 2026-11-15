@@ -261,7 +261,7 @@ fn center(element: &ElementHandle) -> LogicalPosition {
 
 /// Clicks `element` with real pointer events at its center. The first move can
 /// reveal controls and shift the element, so the click lands where it is after it.
-pub fn click(window: &AppWindow, element: &ElementHandle) {
+pub fn click(window: &impl ComponentHandle, element: &ElementHandle) {
     window.window().dispatch_event(WindowEvent::PointerMoved {
         position: center(element),
     });
@@ -281,7 +281,10 @@ pub fn click(window: &AppWindow, element: &ElementHandle) {
 }
 
 /// Waits for an element labelled `label` with a non-zero size.
-pub async fn wait_visible(window: &AppWindow, label: &str) -> Result<ElementHandle, String> {
+pub async fn wait_visible(
+    window: &impl ComponentHandle,
+    label: &str,
+) -> Result<ElementHandle, String> {
     let start = std::time::Instant::now();
     loop {
         let found = ElementHandle::find_by_accessible_label(window, label).find(|element| {
