@@ -274,6 +274,44 @@ async fn late_sign_out_keeps_a_newer_session() {
     }
 }
 
+#[tokio::test]
+async fn late_expire_keeps_a_newer_sign_in() {
+    let mock = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let primary = Arc::new(MemoryStore::default());
+    let fallback = Arc::new(MemoryStore::default());
+    let manager = manager(&mock, &dir, TokenVault::new(primary.clone(), fallback));
+    let first = sign_in_as(&mock, &manager, ACCOUNT_A, "token-a").await;
+    let newer = sign_in_as(&mock, &manager, ACCOUNT_A, "token-b").await;
+
+    manager.expire(&first.session).await.unwrap();
+
+    let restored = manager.restore().await.unwrap().unwrap();
+    assert_eq!(restored.session.token(), "token-b");
+    let account = account_key(&newer.server_url, ACCOUNT_A);
+    assert_eq!(primary.get(&account).unwrap().as_deref(), Some("token-b"));
+}
+
+#[tokio::test]
+async fn expire_forgets_its_own_session() {
+    let mock = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let primary = Arc::new(MemoryStore::default());
+    let fallback = Arc::new(MemoryStore::default());
+    let manager = manager(
+        &mock,
+        &dir,
+        TokenVault::new(primary.clone(), fallback.clone()),
+    );
+    let signed = sign_in_as(&mock, &manager, ACCOUNT_A, "token-a").await;
+
+    manager.expire(&signed.session).await.unwrap();
+
+    assert!(manager.restore().await.unwrap().is_none());
+    assert_eq!(manager.last_server_url(), Some(signed.server_url.clone()));
+    assert_token_gone(&primary, &fallback, &signed);
+}
+
 const ACCOUNT_A: &str = "0123456789abcdef0123456789abcdef";
 const ACCOUNT_B: &str = "ffffffffffffffffffffffffffffffff";
 

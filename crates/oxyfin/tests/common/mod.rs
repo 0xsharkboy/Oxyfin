@@ -229,10 +229,11 @@ pub const USER_ID: &str = "28dd79b9f3564a398568f3d0ca90f9de";
 
 /// Saves a signed-in session for `server_url`, as a previous run would have.
 pub fn save_session(paths: &Paths, vault: &TokenVault, server_url: &str) {
+    let session_url = format!("{}/", server_url.trim_end_matches('/'));
     let mut config =
         Config::load_or_create(paths).unwrap_or_else(|err| panic!("cannot create config: {err}"));
     config.session = Some(SavedSession {
-        server_url: server_url.to_owned(),
+        server_url: session_url.clone(),
         user_id: USER_ID.to_owned(),
         user_name: "oxyfin".to_owned(),
         server_id: None,
@@ -244,7 +245,7 @@ pub fn save_session(paths: &Paths, vault: &TokenVault, server_url: &str) {
         .unwrap_or_else(|err| panic!("cannot save config: {err}"));
     vault
         .save(
-            &account_key(server_url, USER_ID),
+            &account_key(&session_url, USER_ID),
             "5dabe43042264dc4960513e5e30552e3",
         )
         .unwrap_or_else(|err| panic!("cannot save the token: {err}"));

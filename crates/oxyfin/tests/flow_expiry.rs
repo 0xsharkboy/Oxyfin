@@ -49,7 +49,7 @@ fn rejected_session_expires_once() {
     let flow = start_with(move |mock| mount_rejecting(mock, calls), save_session);
     let window = flow.window.as_weak();
     let uri = flow.mock.uri();
-    let account = account_key(&uri, USER_ID);
+    let account = account_key(&format!("{uri}/"), USER_ID);
 
     run(&flow, async move {
         let window = window.upgrade().ok_or("window dropped")?;
