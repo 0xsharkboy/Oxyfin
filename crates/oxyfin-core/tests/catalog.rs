@@ -6,7 +6,7 @@ use common::{TEST_USER_ID, fixture, session};
 use oxyfin_api::ItemId;
 use oxyfin_core::{
     BrowseQuery, BrowseSource, Catalog, ContentKind, CoreError, ItemKind, ItemSummary, LibraryKind,
-    SortField,
+    SortField, WatchFilter,
 };
 use serde_json::{Value, json};
 use wiremock::matchers::{method, path, query_param};
@@ -41,7 +41,7 @@ fn query(source: BrowseSource) -> BrowseQuery {
         sort: SortField::Title,
         descending: false,
         genre: None,
-        played: None,
+        watch: WatchFilter::All,
         start: 0,
         limit: 20,
     }
@@ -179,7 +179,6 @@ async fn browse_shows_sends_filters_and_sort() {
         .and(query_param("sortBy", "DateCreated"))
         .and(query_param("sortOrder", "Descending"))
         .and(query_param("genres", "Drama"))
-        .and(query_param("isPlayed", "false"))
         .and(query_param("startIndex", "40"))
         .and(query_param("limit", "20"))
         .respond_with(ResponseTemplate::new(200).set_body_json(fixture("items_search")))
@@ -192,10 +191,176 @@ async fn browse_shows_sends_filters_and_sort() {
     q.sort = SortField::DateAdded;
     q.descending = true;
     q.genre = Some("Drama".to_owned());
-    q.played = Some(false);
     q.start = 40;
     let page = catalog(&mock).browse(&q).await.unwrap();
     assert!(page.total > 0);
+}
+
+#[tokio::test]
+async fn unplayed_sends_is_played_false() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .and(query_param("isPlayed", "false"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("items_movies")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let mut q = query(BrowseSource::All(ContentKind::Movies));
+    q.watch = WatchFilter::Unplayed;
+    catalog(&mock).browse(&q).await.unwrap();
+}
+
+#[tokio::test]
+async fn played_sends_is_played_true() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .and(query_param("isPlayed", "true"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("items_movies")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let mut q = query(BrowseSource::All(ContentKind::Movies));
+    q.watch = WatchFilter::Played;
+    catalog(&mock).browse(&q).await.unwrap();
+}
+
+#[tokio::test]
+async fn all_sends_no_is_played() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .and(NoParam("isPlayed"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("items_movies")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    catalog(&mock)
+        .browse(&query(BrowseSource::All(ContentKind::Movies)))
+        .await
+        .unwrap();
+}
+
+async fn mount_in_progress_lists(mock: &MockServer) {
+    mount(
+        mock,
+        "GET",
+        "/UserItems/Resume",
+        fixture("user_items_resume"),
+    )
+    .await;
+    mount(mock, "GET", "/Shows/NextUp", fixture("shows_next_up")).await;
+}
+
+fn in_progress(source: BrowseSource) -> BrowseQuery {
+    let mut q = query(source);
+    q.watch = WatchFilter::InProgress;
+    q
+}
+
+#[tokio::test]
+async fn in_progress_lists_resumable_movies_and_started_series() {
+    let mock = MockServer::start().await;
+    mount_in_progress_lists(&mock).await;
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .and(query_param("ids", format!("{MOVIE_ID},{SERIES_ID}")))
+        .and(query_param("includeItemTypes", "Series"))
+        .and(NoParam("isPlayed"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("items_search")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let page = catalog(&mock)
+        .browse(&in_progress(BrowseSource::All(ContentKind::Shows)))
+        .await
+        .unwrap();
+    assert!(page.total > 0);
+}
+
+#[tokio::test]
+async fn in_progress_without_candidates_returns_an_empty_page() {
+    let mock = MockServer::start().await;
+    let empty = json!({"Items": [], "TotalRecordCount": 0, "StartIndex": 0});
+    mount(&mock, "GET", "/UserItems/Resume", empty.clone()).await;
+    mount(&mock, "GET", "/Shows/NextUp", empty).await;
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("items_movies")))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    let mut q = in_progress(BrowseSource::Favorites);
+    q.start = 60;
+    let page = catalog(&mock).browse(&q).await.unwrap();
+    assert!(page.items.is_empty());
+    assert_eq!(page.total, 0);
+    assert_eq!(page.start, 60);
+}
+
+#[tokio::test]
+async fn in_progress_keeps_genre_sort_and_paging() {
+    let mock = MockServer::start().await;
+    mount_in_progress_lists(&mock).await;
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .and(query_param("parentId", "lib2"))
+        .and(query_param("includeItemTypes", "Series"))
+        .and(query_param("genres", "Drama"))
+        .and(query_param("sortBy", "ProductionYear"))
+        .and(query_param("sortOrder", "Descending"))
+        .and(query_param("startIndex", "40"))
+        .and(query_param("limit", "20"))
+        .and(query_param("ids", format!("{MOVIE_ID},{SERIES_ID}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("items_search")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let mut q = in_progress(BrowseSource::Library {
+        id: ItemId::from("lib2"),
+        kind: LibraryKind::Shows,
+    });
+    q.genre = Some("Drama".to_owned());
+    q.sort = SortField::Year;
+    q.descending = true;
+    q.start = 40;
+    catalog(&mock).browse(&q).await.unwrap();
+}
+
+#[tokio::test]
+async fn in_progress_propagates_an_expired_session_from_either_list() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/UserItems/Resume"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&mock)
+        .await;
+    mount(&mock, "GET", "/Shows/NextUp", fixture("shows_next_up")).await;
+    let err = catalog(&mock)
+        .browse(&in_progress(BrowseSource::All(ContentKind::Movies)))
+        .await
+        .unwrap_err();
+    assert_eq!(err, CoreError::SessionExpired);
+
+    let mock = MockServer::start().await;
+    mount(
+        &mock,
+        "GET",
+        "/UserItems/Resume",
+        fixture("user_items_resume"),
+    )
+    .await;
+    Mock::given(method("GET"))
+        .and(path("/Shows/NextUp"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&mock)
+        .await;
+    let err = catalog(&mock)
+        .browse(&in_progress(BrowseSource::All(ContentKind::Movies)))
+        .await
+        .unwrap_err();
+    assert_eq!(err, CoreError::SessionExpired);
 }
 
 #[tokio::test]

@@ -60,7 +60,7 @@ mod quick_connect;
 mod secrets;
 mod session;
 
-pub use catalog::{BrowseQuery, BrowseSource, Catalog, ContentKind, SortField};
+pub use catalog::{BrowseQuery, BrowseSource, Catalog, ContentKind, SortField, WatchFilter};
 pub use config::{Config, SavedSession};
 pub use error::{CoreError, Result};
 pub use images::{CacheBudgets, DEFAULT_DISK_BUDGET, DEFAULT_MEMORY_BUDGET, ImageCache, ImageSize};
