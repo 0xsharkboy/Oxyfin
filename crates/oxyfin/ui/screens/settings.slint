@@ -148,6 +148,9 @@ export component SettingsScreen inherits Rectangle {
             favorites-clicked => {
                 root.open-tab(TopBarPage.favorites);
             }
+            search-clicked => {
+                root.open-tab(TopBarPage.search);
+            }
             settings-clicked => {
                 root.back();
             }

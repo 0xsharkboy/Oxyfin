@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-15 13:12+0000\n"
+"POT-Creation-Date: 2026-11-15 13:21+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -406,6 +406,54 @@ msgstr ""
 #: crates/oxyfin/ui/screens/quick_connect.slint:89
 msgctxt "QuickConnectScreen"
 msgid "Back"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/search.slint:11
+msgctxt "SearchTitles"
+msgid "No results for “{}”"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/search.slint:36
+msgctxt "SearchScreen"
+msgid "Search"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/search.slint:53
+msgctxt "SearchScreen"
+msgid "Search titles"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/search.slint:55
+msgctxt "SearchScreen"
+msgid "Type a title"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/search.slint:65
+msgctxt "SearchScreen"
+msgid "{n} title"
+msgid_plural "{n} titles"
+msgstr[0] ""
+msgstr[1] ""
+
+#: crates/oxyfin/ui/screens/search.slint:84
+msgctxt "SearchScreen"
+msgid "Loading"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/search.slint:102
+msgctxt "SearchScreen"
+msgid "Cannot load more titles"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/search.slint:107
+#: crates/oxyfin/ui/screens/search.slint:107
+msgctxt "SearchScreen"
+msgid "Retry"
+msgstr ""
+
+#: crates/oxyfin/ui/screens/search.slint:122
+msgctxt "SearchScreen"
+msgid "Search movies and shows"
 msgstr ""
 
 #: crates/oxyfin/ui/screens/settings.slint:57

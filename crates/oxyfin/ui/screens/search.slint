@@ -1,0 +1,187 @@
+import { Theme, CardData } from "../theme.slint";
+import { TopBar, TopBarPage } from "../components/top_bar.slint";
+import { PosterGrid } from "../components/poster_grid.slint";
+import { TextField } from "../components/text_field.slint";
+import { Button, ButtonStyle } from "../components/button.slint";
+import { BodyText, HeadingText } from "../components/text.slint";
+
+// Texts of the search page that Rust cannot translate itself.
+export global SearchTitles {
+    public pure function no-results(text: string) -> string {
+        @tr("No results for “{}”", text)
+    }
+}
+
+// Search field on top of the paged poster grid of the matches.
+export component SearchScreen inherits Rectangle {
+    in property <TopBarPage> page: TopBarPage.search;
+    in-out property <string> text;
+    in property <[CardData]> cards;
+    in property <int> total;
+    // The text the results belong to; empty while nothing is searched.
+    in property <string> query;
+    in property <bool> loading;
+    in property <bool> loading-more;
+    in property <string> error;
+    in property <bool> more-failed;
+    callback edited(text: string);
+    callback accepted(text: string);
+    callback near-end();
+    callback retry();
+    callback retry-more();
+    callback open-tab(page: TopBarPage);
+    callback open-settings();
+
+    accessible-role: groupbox;
+    accessible-label: @tr("Search");
+
+    background: Theme.bg-base;
+
+    VerticalLayout {
+        Rectangle {
+            height: top-bar.height;
+        }
+
+        VerticalLayout {
+            padding-left: Theme.space-3xl;
+            padding-right: Theme.space-3xl;
+            padding-top: Theme.space-lg;
+            padding-bottom: Theme.space-xl;
+            spacing: Theme.space-md;
+
+            field := TextField {
+                label: @tr("Search titles");
+                show-label: false;
+                placeholder: @tr("Type a title");
+                text <=> root.text;
+                edited(text) => {
+                    root.edited(text);
+                }
+                accepted => {
+                    root.accepted(root.text);
+                }
+            }
+            if root.query != "" && !root.loading && root.error == "": BodyText {
+                text: @tr("{n} title" | "{n} titles" % root.total);
+                color: Theme.text-muted;
+            }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+
+            grid := PosterGrid {
+                cards: root.cards;
+                near-end => {
+                    root.near-end();
+                }
+            }
+
+            if root.loading || root.loading-more: Rectangle {
+                y: parent.height - self.height;
+                height: Theme.space-3xl;
+                BodyText {
+                    text: @tr("Loading");
+                    color: Theme.text-secondary;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            if root.more-failed: Rectangle {
+                y: parent.height - self.height;
+                height: more-row.preferred-height;
+                background: Theme.bg-base;
+
+                more-row := HorizontalLayout {
+                    alignment: center;
+                    padding: Theme.space-md;
+                    spacing: Theme.space-lg;
+
+                    BodyText {
+                        text: @tr("Cannot load more titles");
+                        color: Theme.text-secondary;
+                        vertical-alignment: center;
+                    }
+                    Button {
+                        label: @tr("Retry");
+                        style: ButtonStyle.secondary;
+                        clicked => {
+                            root.retry-more();
+                        }
+                    }
+                }
+            }
+
+            if root.query == "": VerticalLayout {
+                alignment: start;
+                padding-top: Theme.space-xl;
+                padding-left: Theme.space-3xl;
+
+                HeadingText {
+                    text: @tr("Search movies and shows");
+                    color: Theme.text-secondary;
+                }
+            }
+
+            if root.query != "" && !root.loading && root.error == "" && root.cards.length == 0: VerticalLayout {
+                alignment: start;
+                padding-top: Theme.space-xl;
+                padding-left: Theme.space-3xl;
+
+                HeadingText {
+                    text: SearchTitles.no-results(root.query);
+                    color: Theme.text-secondary;
+                }
+            }
+
+            if root.error != "": VerticalLayout {
+                alignment: start;
+                padding-top: Theme.space-xl;
+                padding-left: Theme.space-3xl;
+                spacing: Theme.space-lg;
+
+                BodyText {
+                    text: root.error;
+                    color: Theme.text-secondary;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    Button {
+                        label: @tr("Retry");
+                        style: ButtonStyle.secondary;
+                        clicked => {
+                            root.retry();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    top-bar := TopBar {
+        y: 0;
+        height: self.preferred-height;
+        current: root.page;
+        home-clicked => {
+            root.open-tab(TopBarPage.home);
+        }
+        movies-clicked => {
+            root.open-tab(TopBarPage.movies);
+        }
+        shows-clicked => {
+            root.open-tab(TopBarPage.shows);
+        }
+        favorites-clicked => {
+            root.open-tab(TopBarPage.favorites);
+        }
+        settings-clicked => {
+            root.open-settings();
+        }
+    }
+
+    init => {
+        field.focus();
+    }
+}

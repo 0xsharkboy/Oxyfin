@@ -23,6 +23,7 @@ use crate::present::device_name;
 use crate::screens::home::HomeController;
 use crate::screens::library::LibraryController;
 use crate::screens::player;
+use crate::screens::search::SearchController;
 use crate::screens::settings;
 use crate::screens::sign_in::SignInController;
 use crate::state::{
@@ -64,6 +65,7 @@ pub struct App {
     pub(crate) sign_in: SignInController,
     pub(crate) home: HomeController,
     pub(crate) library: LibraryController,
+    pub(crate) search: SearchController,
 }
 
 impl App {
@@ -99,6 +101,7 @@ impl App {
             sign_in: SignInController::default(),
             home: HomeController::default(),
             library: LibraryController::default(),
+            search: SearchController::default(),
         });
         app.bind(window);
         app.restore();
@@ -574,6 +577,21 @@ impl App {
         window.on_sign_out(with(|app| app.dispatch(Msg::SignOut)));
         window.on_dismiss_notice(with(|app| app.dismiss_notice()));
         window.on_library_retry(with(|app| app.library.retry(app)));
+        window.on_search_retry(with(|app| app.search.retry(app)));
+        window.on_search_retry_more(with(|app| app.search.retry_more(app)));
+        window.on_search_near_end(with(|app| app.search.near_end(app)));
+        let this = self.this.clone();
+        window.on_search_edited(move |text| {
+            if let Some(app) = this.upgrade() {
+                app.search.edited(&app, &text);
+            }
+        });
+        let this = self.this.clone();
+        window.on_search_accepted(move |text| {
+            if let Some(app) = this.upgrade() {
+                app.search.accepted(&app, &text);
+            }
+        });
         window.on_library_retry_more(with(|app| app.library.retry_more(app)));
         window.on_library_near_end(with(|app| app.library.near_end(app)));
         window.on_library_direction_toggled(with(|app| app.library.toggle_direction(app)));
@@ -720,10 +738,12 @@ impl App {
                 self.sign_in.shown(self, &screen, &previous);
                 self.home.shown(self, &screen);
                 self.library.shown(self, &screen);
+                self.search.shown(self, &screen);
             }
             Effect::Discard(screen) => {
                 self.home.discard(self, &screen);
                 self.library.discard(self, &screen);
+                self.search.discard(self, &screen);
             }
             Effect::Refresh(screen) => self.refresh(&screen),
             Effect::Notify(notice) => self.notify(notice_message(notice)),
@@ -779,7 +799,8 @@ fn tab_of(page: TopBarPage) -> Option<Tab> {
         TopBarPage::Movies => Some(Tab::Library(LibraryTab::Movies)),
         TopBarPage::Shows => Some(Tab::Library(LibraryTab::Shows)),
         TopBarPage::Favorites => Some(Tab::Library(LibraryTab::Favorites)),
-        TopBarPage::Search | TopBarPage::None => None,
+        TopBarPage::Search => Some(Tab::Search),
+        TopBarPage::None => None,
     }
 }
 

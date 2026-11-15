@@ -19,7 +19,7 @@ use crate::{AppWindow, CardData, LibraryTitles, Messages};
 pub const PAGE_SIZE: u32 = 60;
 
 // Logical size of the poster artwork, as drawn by `PosterCard`.
-const POSTER_ARTWORK: (f32, f32) = (160.0, 240.0);
+pub(crate) const POSTER_ARTWORK: (f32, f32) = (160.0, 240.0);
 
 const WATCH_FILTERS: [WatchFilter; 4] = [
     WatchFilter::All,
@@ -78,7 +78,7 @@ fn source_of(tab: LibraryTab) -> BrowseSource {
 }
 
 /// Whether the next page must be requested now.
-fn should_load_more(loaded: usize, total: u32, in_flight: bool, ready: bool) -> bool {
+pub(crate) fn should_load_more(loaded: usize, total: u32, in_flight: bool, ready: bool) -> bool {
     ready && !in_flight && loaded < total as usize
 }
 
@@ -414,41 +414,42 @@ impl LibraryController {
         for data in new_cards {
             self.cards.push(data);
         }
-        self.load_images(app, id, &window, &page.items);
+        load_posters(app, id, &window, &self.cards, &page.items);
     }
+}
 
-    fn load_images(
-        &self,
-        app: &Rc<App>,
-        id: GenerationId,
-        window: &AppWindow,
-        items: &[ItemSummary],
-    ) {
-        let Some((_, _, images)) = app.services() else {
-            return;
+/// Loads the posters of `items` into the matching cards of `cards`.
+pub(crate) fn load_posters(
+    app: &Rc<App>,
+    id: GenerationId,
+    window: &AppWindow,
+    cards: &Rc<VecModel<CardData>>,
+    items: &[ItemSummary],
+) {
+    let Some((_, _, images)) = app.services() else {
+        return;
+    };
+    let size = image_size(
+        POSTER_ARTWORK.0,
+        POSTER_ARTWORK.1,
+        window.window().scale_factor(),
+    );
+    for item in items {
+        let Some(poster) = item.poster.clone() else {
+            continue;
         };
-        let size = image_size(
-            POSTER_ARTWORK.0,
-            POSTER_ARTWORK.1,
-            window.window().scale_factor(),
-        );
-        for item in items {
-            let Some(poster) = item.poster.clone() else {
-                continue;
+        let cards = Rc::clone(cards);
+        let item_id: SharedString = item.id.as_str().into();
+        load_into(app, id, &images, poster, size, move |image| {
+            let Some(index) = cards.iter().position(|card| card.id == item_id) else {
+                return;
             };
-            let cards = Rc::clone(&self.cards);
-            let item_id: SharedString = item.id.as_str().into();
-            load_into(app, id, &images, poster, size, move |image| {
-                let Some(index) = cards.iter().position(|card| card.id == item_id) else {
-                    return;
-                };
-                if let Some(mut data) = cards.row_data(index) {
-                    data.image = image;
-                    data.has_image = true;
-                    cards.set_row_data(index, data);
-                }
-            });
-        }
+            if let Some(mut data) = cards.row_data(index) {
+                data.image = image;
+                data.has_image = true;
+                cards.set_row_data(index, data);
+            }
+        });
     }
 }
 

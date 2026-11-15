@@ -8,6 +8,8 @@ export component TextField {
     in-out property <string> text;
     in property <bool> enabled: true;
     in property <bool> password;
+    // False where the placeholder and the accessible label say enough.
+    in property <bool> show-label: true;
     out property <bool> has-focus: input.has-focus;
     callback edited(text: string);
     callback accepted();
@@ -17,7 +19,7 @@ export component TextField {
     VerticalLayout {
         spacing: Theme.space-sm;
 
-        LabelText {
+        if root.show-label: LabelText {
             text: root.label;
         }
 
