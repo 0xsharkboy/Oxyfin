@@ -5,11 +5,20 @@ mod common;
 use common::{TEST_USER_ID, fixture, session};
 use oxyfin_api::ItemId;
 use oxyfin_core::{
-    BrowseQuery, BrowseSource, Catalog, CoreError, ItemKind, ItemSummary, LibraryKind, SortField,
+    BrowseQuery, BrowseSource, Catalog, ContentKind, CoreError, ItemKind, ItemSummary, LibraryKind,
+    SortField,
 };
 use serde_json::{Value, json};
 use wiremock::matchers::{method, path, query_param};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Match, Mock, MockServer, Request, ResponseTemplate};
+
+struct NoParam(&'static str);
+
+impl Match for NoParam {
+    fn matches(&self, request: &Request) -> bool {
+        !request.url.query_pairs().any(|(key, _)| key == self.0)
+    }
+}
 
 const MOVIE_ID: &str = "76282b1c408f374beeee50519e9157a4";
 const SERIES_ID: &str = "9ea196e7ccc3ae17d2c3f75c3ab34406";
@@ -228,7 +237,7 @@ async fn browse_favorites_sends_is_favorite() {
 }
 
 #[tokio::test]
-async fn genres_returns_names() {
+async fn genres_of_a_library() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/Genres"))
@@ -238,10 +247,84 @@ async fn genres_returns_names() {
         .mount(&mock)
         .await;
     let genres = catalog(&mock)
-        .genres(&ItemId::from("lib2"), LibraryKind::Shows)
+        .genres(&BrowseSource::Library {
+            id: ItemId::from("lib2"),
+            kind: LibraryKind::Shows,
+        })
         .await
         .unwrap();
     assert_eq!(genres, ["Animation", "Comedy", "Drama"]);
+}
+
+#[tokio::test]
+async fn genres_of_all_movies() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/Genres"))
+        .and(query_param("includeItemTypes", "Movie"))
+        .and(NoParam("parentId"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("genres")))
+        .mount(&mock)
+        .await;
+    let genres = catalog(&mock)
+        .genres(&BrowseSource::All(ContentKind::Movies))
+        .await
+        .unwrap();
+    assert_eq!(genres, ["Animation", "Comedy", "Drama"]);
+}
+
+#[tokio::test]
+async fn genres_of_favorites_cover_movies_series_and_videos() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/Genres"))
+        .and(query_param("includeItemTypes", "Movie,Series,Video"))
+        .and(NoParam("parentId"))
+        .and(NoParam("isFavorite"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("genres")))
+        .mount(&mock)
+        .await;
+    let genres = catalog(&mock)
+        .genres(&BrowseSource::Favorites)
+        .await
+        .unwrap();
+    assert_eq!(genres.len(), 3);
+}
+
+#[tokio::test]
+async fn browse_all_movies_has_no_parent() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .and(query_param("recursive", "true"))
+        .and(query_param("includeItemTypes", "Movie"))
+        .and(NoParam("parentId"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("items_movies")))
+        .mount(&mock)
+        .await;
+    let page = catalog(&mock)
+        .browse(&query(BrowseSource::All(ContentKind::Movies)))
+        .await
+        .unwrap();
+    assert_eq!(page.items.len(), 1);
+}
+
+#[tokio::test]
+async fn browse_all_shows() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .and(query_param("recursive", "true"))
+        .and(query_param("includeItemTypes", "Series"))
+        .and(NoParam("parentId"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("items_search")))
+        .mount(&mock)
+        .await;
+    let page = catalog(&mock)
+        .browse(&query(BrowseSource::All(ContentKind::Shows)))
+        .await
+        .unwrap();
+    assert!(page.total > 0);
 }
 
 #[tokio::test]

@@ -8,6 +8,24 @@ use crate::models::{
 };
 use crate::{CoreError, Result};
 
+/// Kind of content the Movies and Shows tabs list across all libraries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ContentKind {
+    /// Movies.
+    Movies,
+    /// Series.
+    Shows,
+}
+
+impl ContentKind {
+    fn item_kind(self) -> BaseItemKind {
+        match self {
+            Self::Movies => BaseItemKind::Movie,
+            Self::Shows => BaseItemKind::Series,
+        }
+    }
+}
+
 /// What a listing browses.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BrowseSource {
@@ -18,6 +36,8 @@ pub enum BrowseSource {
         /// Kind of content the library holds.
         kind: LibraryKind,
     },
+    /// All movies or all series of the server, across libraries.
+    All(ContentKind),
     /// The favorite movies and series of the user.
     Favorites,
 }
@@ -141,7 +161,7 @@ impl Catalog {
             .cloned()
     }
 
-    /// Lists the items of a library, or the favorites.
+    /// Lists the items of a library, of the whole server, or the favorites.
     ///
     /// Movies and series are listed, plus videos for mixed libraries and favorites.
     pub async fn browse(&self, query: &BrowseQuery) -> Result<Page<ItemSummary>> {
@@ -168,6 +188,9 @@ impl Catalog {
                 items.parent_id = Some(id.clone());
                 items.include_item_types = kinds_of(*kind);
             }
+            BrowseSource::All(kind) => {
+                items.include_item_types = vec![kind.item_kind()];
+            }
             BrowseSource::Favorites => {
                 items.include_item_types = vec![
                     BaseItemKind::Movie,
@@ -180,9 +203,28 @@ impl Catalog {
         Ok(page(self.session.items(&items).await?))
     }
 
-    /// Lists the genres of a library.
-    pub async fn genres(&self, library: &ItemId, kind: LibraryKind) -> Result<Vec<String>> {
-        let result = self.session.genres(Some(library), &kinds_of(kind)).await?;
+    /// Lists the genres of a source.
+    ///
+    /// Favorites fall back to the genres of every movie, series and video.
+    pub async fn genres(&self, source: &BrowseSource) -> Result<Vec<String>> {
+        let result = match source {
+            BrowseSource::Library { id, kind } => {
+                self.session.genres(Some(id), &kinds_of(*kind)).await?
+            }
+            BrowseSource::All(kind) => self.session.genres(None, &[kind.item_kind()]).await?,
+            BrowseSource::Favorites => {
+                self.session
+                    .genres(
+                        None,
+                        &[
+                            BaseItemKind::Movie,
+                            BaseItemKind::Series,
+                            BaseItemKind::Video,
+                        ],
+                    )
+                    .await?
+            }
+        };
         Ok(result
             .items
             .into_iter()
