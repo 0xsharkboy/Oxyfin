@@ -30,13 +30,16 @@ async fn mount_home(mock: MockServer, images: Arc<AtomicUsize>) -> MockServer {
         .respond_with(json(r#"{"Items":[],"TotalRecordCount":0,"StartIndex":0}"#))
         .mount(&mock)
         .await;
+    let resume = fixture("user_items_resume");
+    let with_thumb = resume.replacen(
+        "\"ImageTags\": {",
+        "\"ImageTags\": {\"Thumb\": \"0f1e2d3c\",",
+        1,
+    );
+    assert_ne!(with_thumb, resume, "the fixture has no ImageTags to patch");
     Mock::given(method("GET"))
         .and(path("/UserItems/Resume"))
-        .respond_with(json(fixture("user_items_resume").replacen(
-            "\"ImageTags\": {",
-            "\"ImageTags\": {\"Thumb\": \"0f1e2d3c\",",
-            1,
-        )))
+        .respond_with(json(with_thumb))
         .mount(&mock)
         .await;
     Mock::given(method("GET"))
