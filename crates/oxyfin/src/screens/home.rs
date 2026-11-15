@@ -424,7 +424,9 @@ impl HomeController {
             window.set_home_banner(HomeBanner::default());
             return;
         };
-        if let Some(screen) = detail_target(&item) {
+        let target = detail_target(&item);
+        let has_detail = target.is_some();
+        if let Some(screen) = target {
             self.targets
                 .borrow_mut()
                 .insert(item.id.as_str().to_owned(), screen);
@@ -438,6 +440,7 @@ impl HomeController {
         }
         window.set_home_banner(HomeBanner {
             has: true,
+            has_detail,
             title: item.title.as_str().into(),
             year: item.year.unwrap_or(0),
             duration_minutes: item.duration.map_or(0, |duration| {

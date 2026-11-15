@@ -10,6 +10,7 @@ export component Banner inherits Rectangle {
     in property <string> meta;
     in property <string> overview;
     in property <bool> play-enabled: true;
+    in property <bool> has-detail: true;
     callback play();
     callback more-info();
 
@@ -70,7 +71,7 @@ export component Banner inherits Rectangle {
                     root.play();
                 }
             }
-            Button {
+            if root.has-detail: Button {
                 label: @tr("More info");
                 style: ButtonStyle.secondary;
                 clicked => {
