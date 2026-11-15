@@ -172,6 +172,8 @@ where
     let (vault, view) = vault();
     prepare(&paths, &vault, &mock.uri());
     let window = AppWindow::new().unwrap_or_else(|err| panic!("cannot create the window: {err}"));
+    // A bundled translation follows the system locale; the flows read English labels.
+    let _ = slint::select_bundled_translation("en");
     let app = App::new(&window, runtime.handle().clone(), paths, vault)
         .unwrap_or_else(|err| panic!("cannot create the app: {err}"));
     window

@@ -3739,6 +3739,7 @@ dependencies = [
  "raw-window-handle",
  "slint",
  "slint-build",
+ "sys-locale",
  "tempfile",
  "tokio",
  "wiremock",
