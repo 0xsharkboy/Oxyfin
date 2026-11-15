@@ -1,0 +1,267 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { TopBar, TopBarPage } from "../components/top_bar.slint";
+import { DetailHeader } from "../components/detail_header.slint";
+import { Button, ButtonStyle } from "../components/button.slint";
+import { IconButton } from "../components/icon_button.slint";
+import { Chip } from "../components/chip.slint";
+import { CardStatus } from "../components/card.slint";
+import { EpisodeRow } from "../components/episode_row.slint";
+import { BodyText } from "../components/text.slint";
+
+// What the main button of the series page does.
+export enum SeriesPlayKind { play, play-episode, resume-episode }
+
+// What the series page shows about its series; Rust fills it from the core.
+export struct SeriesData {
+    title: string,
+    year: string,
+    rating: string,
+    official-rating: string,
+    season-count: int,
+    genres: [string],
+    overview: string,
+    cast: string,
+    watched: bool,
+    favorite: bool,
+    play-kind: SeriesPlayKind,
+    // Label such as "S02E05" of the episode the main button plays.
+    play-label: string,
+}
+
+// One row of the episode list.
+export struct EpisodeData {
+    id: string,
+    number: string,
+    title: string,
+    overview: string,
+    minutes: int,
+    image: image,
+    watched: bool,
+    progress: float,
+}
+
+// Series page: the detail header, the season pills and the episodes of the chosen season.
+export component SeriesScreen inherits Rectangle {
+    in property <TopBarPage> page: TopBarPage.none;
+    // True once the series is known; before that only the back arrow and the loading state show.
+    in property <bool> loaded;
+    in property <bool> loading;
+    in property <string> error;
+    in property <SeriesData> series;
+    in property <image> poster;
+    in property <image> backdrop;
+    in property <bool> busy;
+    in property <[string]> seasons;
+    // Index of the chosen season, -1 when the series has none.
+    in property <int> season: -1;
+    in property <[EpisodeData]> episodes;
+    in property <bool> episodes-loading;
+    in property <string> episodes-error;
+    callback play();
+    callback play-episode(id: string);
+    callback select-season(index: int);
+    callback toggle-watched();
+    callback toggle-favorite();
+    callback retry();
+    callback retry-episodes();
+    callback back();
+    callback open-tab(page: TopBarPage);
+    callback open-settings();
+
+    accessible-role: groupbox;
+    accessible-label: @tr("Series");
+
+    background: Theme.bg-base;
+    forward-focus: keys;
+
+    // Wraps the content so Escape reaches it from any focused control.
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.back();
+                return accept;
+            }
+            reject
+        }
+
+        flick := Flickable {
+            height: parent.height;
+            content-width: self.width;
+            content-height: max(content.preferred-height, self.height);
+
+            // The mouse back button, on whatever lies behind the content.
+            TouchArea {
+                width: flick.content-width;
+                height: flick.content-height;
+                pointer-event(event) => {
+                    if event.button == PointerEventButton.back && event.kind == PointerEventKind.up {
+                        root.back();
+                    }
+                }
+            }
+
+            content := VerticalLayout {
+                width: parent.width;
+                alignment: start;
+
+                if root.loaded: DetailHeader {
+                    height: self.preferred-height;
+                    backdrop: root.backdrop;
+                    poster: root.poster;
+                    title: root.series.title;
+                    year: root.series.year;
+                    rating: root.series.rating;
+                    official-rating: root.series.official-rating;
+                    season-count: root.series.season-count;
+                    genres: root.series.genres;
+                    overview: root.series.overview;
+                    cast: root.series.cast;
+                    watched: root.series.watched;
+                    favorite: root.series.favorite;
+                    busy: root.busy;
+                    top-inset: top-bar.height;
+                    back => {
+                        root.back();
+                    }
+                    toggle-watched => {
+                        root.toggle-watched();
+                    }
+                    toggle-favorite => {
+                        root.toggle-favorite();
+                    }
+
+                    Button {
+                        label: root.series.play-kind == SeriesPlayKind.resume-episode ? @tr("Resume {}", root.series.play-label) : (root.series.play-kind == SeriesPlayKind.play-episode ? @tr("Play {}", root.series.play-label) : @tr("Play"));
+                        icon: Icons.play;
+                        clicked => {
+                            root.play();
+                        }
+                    }
+                }
+
+                if root.loaded: VerticalLayout {
+                    padding-left: Theme.space-3xl;
+                    padding-right: Theme.space-3xl;
+                    padding-bottom: Theme.space-3xl;
+                    spacing: Theme.space-lg;
+
+                    if root.seasons.length > 0: HorizontalLayout {
+                        padding-top: Theme.space-lg;
+                        spacing: Theme.space-sm;
+                        alignment: start;
+
+                        for name[index] in root.seasons: Chip {
+                            label: name;
+                            selected: index == root.season;
+                            clicked => {
+                                root.select-season(index);
+                            }
+                        }
+                    }
+
+                    for episode in root.episodes: EpisodeRow {
+                        number: episode.number;
+                        title: episode.title;
+                        overview: episode.overview;
+                        minutes: episode.minutes;
+                        image: episode.image;
+                        status: episode.watched ? CardStatus.watched : (episode.progress > 0 ? CardStatus.in-progress : CardStatus.default);
+                        progress: episode.progress;
+                        clicked => {
+                            root.play-episode(episode.id);
+                        }
+                    }
+
+                    if root.episodes-loading: BodyText {
+                        text: @tr("Loading");
+                        color: Theme.text-secondary;
+                    }
+                    if root.episodes-error != "": BodyText {
+                        text: root.episodes-error;
+                        color: Theme.text-secondary;
+                        wrap: word-wrap;
+                    }
+                    if root.episodes-error != "": HorizontalLayout {
+                        alignment: start;
+
+                        Button {
+                            label: @tr("Retry");
+                            style: ButtonStyle.secondary;
+                            clicked => {
+                                root.retry-episodes();
+                            }
+                        }
+                    }
+                }
+
+                if !root.loaded: VerticalLayout {
+                    padding-top: top-bar.height + Theme.space-lg;
+                    padding-left: Theme.space-3xl;
+                    padding-right: Theme.space-3xl;
+                    spacing: Theme.space-xl;
+
+                    HorizontalLayout {
+                        alignment: start;
+
+                        IconButton {
+                            icon: Icons.arrow-left;
+                            label: @tr("Back");
+                            clicked => {
+                                root.back();
+                            }
+                        }
+                    }
+                    if root.loading: BodyText {
+                        text: @tr("Loading");
+                        color: Theme.text-secondary;
+                    }
+                    if root.error != "": BodyText {
+                        text: root.error;
+                        color: Theme.text-secondary;
+                        wrap: word-wrap;
+                    }
+                    if root.error != "": HorizontalLayout {
+                        alignment: start;
+
+                        Button {
+                            label: @tr("Retry");
+                            style: ButtonStyle.secondary;
+                            clicked => {
+                                root.retry();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    top-bar := TopBar {
+        y: 0;
+        height: self.preferred-height;
+        current: root.page;
+        home-clicked => {
+            root.open-tab(TopBarPage.home);
+        }
+        movies-clicked => {
+            root.open-tab(TopBarPage.movies);
+        }
+        shows-clicked => {
+            root.open-tab(TopBarPage.shows);
+        }
+        favorites-clicked => {
+            root.open-tab(TopBarPage.favorites);
+        }
+        search-clicked => {
+            root.open-tab(TopBarPage.search);
+        }
+        settings-clicked => {
+            root.open-settings();
+        }
+    }
+
+    init => {
+        keys.focus();
+    }
+}

@@ -1,0 +1,37 @@
+{ "Items": [
+    {
+      "Name": "Pilot Light",
+      "ServerId": "87fcca6823684ae692e5c60378bf931d",
+      "Id": "a1000000000000000000000000000001",
+      "Overview": "The first night.",
+      "RunTimeTicks": 27000000000,
+      "IndexNumber": 1,
+      "ParentIndexNumber": 1,
+      "IsFolder": false,
+      "Type": "Episode",
+      "UserData": { "PlaybackPositionTicks": 0, "PlayCount": 0, "IsFavorite": false, "Played": true },
+      "SeriesName": "Test Show",
+      "SeriesId": "9ea196e7ccc3ae17d2c3f75c3ab34406",
+      "SeasonId": "0407e3d02b7d70abe4a2d37241b02fea",
+      "ImageTags": {},
+      "MediaType": "Video"
+    }
+,
+    {
+      "Name": "Second Watch",
+      "ServerId": "87fcca6823684ae692e5c60378bf931d",
+      "Id": "a1000000000000000000000000000002",
+      "Overview": "A long overview that goes on and on so that it needs more than two lines of text to be shown in full, and the row must cut it after two lines.",
+      "RunTimeTicks": 24000000000,
+      "IndexNumber": 2,
+      "ParentIndexNumber": 1,
+      "IsFolder": false,
+      "Type": "Episode",
+      "UserData": { "PlaybackPositionTicks": 0, "PlayCount": 0, "IsFavorite": false, "Played": true },
+      "SeriesName": "Test Show",
+      "SeriesId": "9ea196e7ccc3ae17d2c3f75c3ab34406",
+      "SeasonId": "0407e3d02b7d70abe4a2d37241b02fea",
+      "ImageTags": {},
+      "MediaType": "Video"
+    }
+], "TotalRecordCount": 2, "StartIndex": 0 }

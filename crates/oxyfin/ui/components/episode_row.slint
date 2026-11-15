@@ -1,0 +1,142 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { CardStatus } from "card.slint";
+import { ProgressBar } from "progress_bar.slint";
+import { BodyStrongText, BodyText, HeadingText, LabelText } from "text.slint";
+
+// One episode of a season: number, thumbnail with its watched badge or resume bar,
+// title, summary cut after two lines, and duration.
+export component EpisodeRow inherits Rectangle {
+    in property <string> number;
+    in property <string> title;
+    in property <string> overview;
+    // Length in minutes; 0 when unknown.
+    in property <int> minutes;
+    in property <image> image;
+    in property <CardStatus> status: CardStatus.default;
+    in property <float> progress;
+    callback clicked();
+
+    accessible-role: button;
+    accessible-label: title;
+    accessible-description: overview;
+    accessible-action-default => {
+        activate();
+    }
+    forward-focus: focus;
+
+    preferred-height: layout.preferred-height;
+    border-radius: Theme.radius-md;
+    background: touch.has-hover || focus.has-focus ? Theme.bg-hover : transparent;
+
+    function activate() {
+        clicked();
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            focus.focus();
+            root.activate();
+        }
+    }
+
+    focus := FocusScope {
+        // Clicks go to the TouchArea: a focusing FocusScope on top would swallow the first one.
+        focus-on-click: false;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.activate();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    layout := HorizontalLayout {
+        padding-top: Theme.space-md;
+        padding-bottom: Theme.space-md;
+        padding-left: Theme.space-md;
+        padding-right: Theme.space-md;
+        spacing: Theme.space-lg;
+
+        VerticalLayout {
+            width: Theme.space-3xl;
+            alignment: center;
+
+            HeadingText {
+                accessible-role: none;
+                text: root.number;
+                color: Theme.text-muted;
+                horizontal-alignment: center;
+            }
+        }
+
+        thumb := Rectangle {
+            width: Theme.episode-thumb-width;
+            height: Theme.episode-thumb-height;
+            border-radius: Theme.radius-md;
+            background: Theme.landscape-placeholder;
+            clip: true;
+
+            Image {
+                width: 100%;
+                height: 100%;
+                source: root.image;
+                image-fit: cover;
+            }
+
+            if root.status == CardStatus.in-progress: ProgressBar {
+                x: Theme.space-sm;
+                y: parent.height - Theme.space-sm - self.height;
+                width: parent.width - 2 * Theme.space-sm;
+                value: root.progress;
+            }
+
+            if root.status == CardStatus.watched: Rectangle {
+                x: parent.width - Theme.space-md - self.width;
+                y: Theme.space-sm;
+                width: 16px + 2 * Theme.space-xs;
+                height: self.width;
+                border-radius: Theme.radius-full;
+                background: Theme.watched;
+
+                Image {
+                    width: 16px;
+                    height: 16px;
+                    source: Icons.check;
+                    colorize: Theme.text-on-accent;
+                }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.space-xs;
+
+            HorizontalLayout {
+                spacing: Theme.space-lg;
+
+                title-text := BodyStrongText {
+                    accessible-role: none;
+                    text: root.title;
+                    overflow: elide;
+                }
+                if root.minutes > 0: LabelText {
+                    accessible-role: none;
+                    text: @tr("{} min", root.minutes);
+                    color: Theme.text-muted;
+                    horizontal-stretch: 0;
+                }
+            }
+            if root.overview != "": BodyText {
+                accessible-role: none;
+                text: root.overview;
+                color: Theme.text-secondary;
+                wrap: word-wrap;
+                overflow: elide;
+                max-height: 2 * Theme.body-line-height;
+            }
+        }
+    }
+}

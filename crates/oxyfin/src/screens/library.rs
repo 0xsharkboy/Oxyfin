@@ -437,10 +437,7 @@ pub(crate) fn target_of(items: &[ItemSummary], id: &str) -> Option<Screen> {
 
 /// Opens `screen` on top of the current one.
 pub(crate) fn open_detail(app: &Rc<App>, screen: Screen) {
-    // Series pages are not built yet, so only movies open.
-    if matches!(screen, Screen::Movie(_)) {
-        app.dispatch(Msg::OpenItem(screen));
-    }
+    app.dispatch(Msg::OpenItem(screen));
 }
 
 /// Loads the posters of `items` into the matching cards of `cards`.
