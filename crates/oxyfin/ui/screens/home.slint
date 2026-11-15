@@ -11,6 +11,8 @@ export enum HomeRowKind { landscape, poster }
 // Featured item of the home screen; `has` is false until it is known.
 export struct HomeBanner {
     has: bool,
+    // False when the item has no detail page to open.
+    has-detail: bool,
     title: string,
     year: int,
     duration-minutes: int,
@@ -152,6 +154,7 @@ export component HomeScreen inherits Rectangle {
                 height: self.preferred-height;
                 backdrop: root.banner.card.image;
                 title: root.banner.title;
+                has-detail: root.banner.has-detail;
                 meta: root.banner-meta(root.banner.year, root.banner.duration-minutes);
                 play => {
                     root.play(root.banner.card.id);
