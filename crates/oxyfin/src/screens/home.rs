@@ -52,6 +52,7 @@ struct Featured {
 #[derive(Default)]
 pub(crate) struct HomeController {
     load: Cell<u64>,
+    loaded: Cell<bool>,
     shown_generation: Cell<Option<GenerationId>>,
     rows: Rc<VecModel<HomeRow>>,
     slots: RefCell<Vec<Slot>>,
@@ -60,17 +61,28 @@ pub(crate) struct HomeController {
 }
 
 impl HomeController {
-    /// A screen was shown: load the home screen when it is the one.
-    pub(crate) fn shown(&self, app: &Rc<App>, screen: Screen) {
-        self.load.set(self.load.get() + 1);
-        match screen {
-            Screen::Home => self.reload(app),
-            Screen::SignIn | Screen::QuickConnect => self.clear(app),
-            _ => {}
+    /// A screen was shown: the home screen loads the first time it is.
+    pub(crate) fn shown(&self, app: &Rc<App>, screen: &Screen) {
+        if *screen == Screen::Home && !self.loaded.get() {
+            self.reload(app);
+        }
+    }
+
+    /// The home screen came back from the player.
+    pub(crate) fn refresh(&self, app: &Rc<App>) {
+        self.reload(app);
+    }
+
+    /// A screen left the stack: the home screen frees its content.
+    pub(crate) fn discard(&self, app: &Rc<App>, screen: &Screen) {
+        if *screen == Screen::Home {
+            self.clear(app);
         }
     }
 
     fn clear(&self, app: &App) {
+        self.load.set(self.load.get() + 1);
+        self.loaded.set(false);
         self.shown_generation.set(None);
         self.slots.borrow_mut().clear();
         self.rows.set_vec(Vec::new());
@@ -86,10 +98,12 @@ impl HomeController {
         let Some((id, catalog, _)) = app.services() else {
             return;
         };
+        self.load.set(self.load.get() + 1);
         if self.shown_generation.get() != Some(id) {
             self.clear(app);
             self.shown_generation.set(Some(id));
         }
+        self.loaded.set(true);
         if let Some(window) = app.window() {
             window.set_home_rows(ModelRc::from(Rc::clone(&self.rows)));
             window.set_home_settled(false);

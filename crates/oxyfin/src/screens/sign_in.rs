@@ -146,12 +146,12 @@ impl SignInController {
     }
 
     /// Reacts to a screen change.
-    pub(crate) fn shown(&self, app: &Rc<App>, screen: Screen, previous: Screen) {
-        if screen != Screen::QuickConnect {
+    pub(crate) fn shown(&self, app: &Rc<App>, screen: &Screen, previous: &Screen) {
+        if *screen != Screen::QuickConnect {
             self.cancel_quick_connect();
         }
         match screen {
-            Screen::SignIn if previous != Screen::QuickConnect => self.reset(app),
+            Screen::SignIn if *previous != Screen::QuickConnect => self.reset(app),
             Screen::QuickConnect => self.start_quick_connect(app),
             _ => {}
         }

@@ -7,11 +7,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use oxyfin_api::{ItemId, Session};
-use oxyfin_core::PlaybackCommand;
 use oxyfin_core::{
     Catalog, Config, CoreError, ImageCache, Paths, SessionManager, SignedIn, TokenStorage,
     TokenVault,
 };
+use oxyfin_core::{PlayMode, PlaybackCommand};
 use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode};
 use tokio::runtime::Handle;
 use tokio::task::{AbortHandle, JoinHandle};
@@ -47,7 +47,7 @@ pub struct App {
     paths: Paths,
     manager: Arc<SessionManager>,
     state: RefCell<AppState>,
-    shown: Cell<Screen>,
+    shown: RefCell<Screen>,
     generation: RefCell<Option<Generation>>,
     incoming: RefCell<Option<Session>>,
     ending: RefCell<Vec<JoinHandle<()>>>,
@@ -81,7 +81,7 @@ impl App {
             paths,
             manager,
             state: RefCell::new(AppState::new()),
-            shown: Cell::new(Screen::Starting),
+            shown: RefCell::new(Screen::Starting),
             generation: RefCell::new(None),
             incoming: RefCell::new(None),
             ending: RefCell::new(Vec::new()),
@@ -154,14 +154,14 @@ impl App {
         }
     }
 
-    /// Plays `item` on the player screen. Only the home screen starts playback.
-    pub(crate) fn play(self: &Rc<Self>, item: ItemId) {
-        if self.state.borrow().screen() != Screen::Home {
+    /// Plays `item` on the player screen. Only the home screen and the detail pages start playback.
+    pub(crate) fn play(self: &Rc<Self>, item: ItemId, mode: PlayMode) {
+        if !can_play_from(&self.state.borrow().screen()) {
             return;
         }
         #[cfg(not(feature = "mpv"))]
         {
-            log::info!("cannot play {item}: this build has no player");
+            log::info!("cannot play {item} ({mode:?}): this build has no player");
             self.notify(Message::PlaybackUnavailable);
         }
         #[cfg(feature = "mpv")]
@@ -178,29 +178,31 @@ impl App {
                 (generation.id, handle)
             };
             match handle {
-                Some(handle) => self.start_playback(&handle, item),
+                Some(handle) => self.start_playback(&handle, item, mode),
                 None if self.creating_player.get() == Some(id) => {}
-                None => self.create_player(id, item),
+                None => self.create_player(id, item, mode),
             }
         }
     }
 
     /// Opens the player screen and plays `item` on `handle`.
     #[cfg(feature = "mpv")]
-    fn start_playback(self: &Rc<Self>, handle: &oxyfin_core::PlaybackHandle, item: ItemId) {
+    fn start_playback(
+        self: &Rc<Self>,
+        handle: &oxyfin_core::PlaybackHandle,
+        item: ItemId,
+        mode: PlayMode,
+    ) {
         if let Some(window) = self.window() {
             player::reset(&window);
         }
-        handle.send(PlaybackCommand::Play {
-            item,
-            mode: oxyfin_core::PlayMode::Auto,
-        });
+        handle.send(PlaybackCommand::Play { item, mode });
         self.dispatch(Msg::OpenPlayer);
     }
 
     /// Builds the player of generation `id` off the Slint thread, then plays `item` with it.
     #[cfg(feature = "mpv")]
-    fn create_player(&self, id: GenerationId, item: ItemId) {
+    fn create_player(&self, id: GenerationId, item: ItemId, mode: PlayMode) {
         use oxyfin_core::player_events;
         use oxyfin_player::{Player, PlayerOptions};
 
@@ -219,7 +221,7 @@ impl App {
                     .map_err(|error| error.to_string())
                     .and_then(|built| built)
             },
-            move |app, built| app.player_built(id, item, built),
+            move |app, built| app.player_built(id, item, mode, built),
         );
     }
 
@@ -229,6 +231,7 @@ impl App {
         self: &Rc<Self>,
         id: GenerationId,
         item: ItemId,
+        mode: PlayMode,
         built: Result<(Arc<oxyfin_player::Player>, oxyfin_core::PlayerEvents), String>,
     ) {
         use crate::generation::{Built, Playback};
@@ -280,7 +283,7 @@ impl App {
             }
         };
         if decision == Built::Play {
-            self.start_playback(&handle, item);
+            self.start_playback(&handle, item, mode);
         }
     }
 
@@ -354,9 +357,8 @@ impl App {
                 return;
             }
             // The stop report is queued before this event: Continue Watching catches up.
-            if self.shown.get() == Screen::Home {
-                self.home.shown(self, Screen::Home);
-            }
+            let shown = self.shown.borrow().clone();
+            self.refresh(&shown);
         } else if ended && on_player && !window.get_player_has_next() {
             self.send_playback(PlaybackCommand::Stop);
             self.dispatch(Msg::ClosePlayer);
@@ -451,8 +453,15 @@ impl App {
         }
     }
 
+    /// Reloads `screen` when it is one that loads its own content.
+    fn refresh(self: &Rc<Self>, screen: &Screen) {
+        if *screen == Screen::Home {
+            self.home.refresh(self);
+        }
+    }
+
     /// Hides the notice unless it still applies to `screen`.
-    fn notice_on(&self, window: &AppWindow, screen: Screen) {
+    fn notice_on(&self, window: &AppWindow, screen: &Screen) {
         let notice = window.get_notice();
         if notice.visible && !keeps_notice(notice.message, screen) {
             self.notice_timer.stop();
@@ -571,7 +580,7 @@ impl App {
         let this = self.this.clone();
         window.on_play(move |id| {
             if let Some(app) = this.upgrade() {
-                app.play(ItemId::from(id.as_str()));
+                app.play(ItemId::from(id.as_str()), PlayMode::Auto);
             }
         });
         window.on_close_player(with(|app| app.dispatch(Msg::ClosePlayer)));
@@ -657,20 +666,22 @@ impl App {
                 });
             }
             Effect::Show(screen) => {
-                let previous = self.shown.replace(screen);
+                let previous = self.shown.replace(screen.clone());
                 if let Some(window) = self.window() {
-                    self.notice_on(&window, screen);
+                    self.notice_on(&window, &screen);
                     if screen != Screen::Player {
                         player::leave(&window);
                     }
                     if screen == Screen::Settings {
                         settings::show(&window, self.state.borrow().session());
                     }
-                    window.set_screen(slint_screen(screen));
+                    window.set_screen(slint_screen(&screen));
                 }
-                self.sign_in.shown(self, screen, previous);
-                self.home.shown(self, screen);
+                self.sign_in.shown(self, &screen, &previous);
+                self.home.shown(self, &screen);
             }
+            Effect::Discard(screen) => self.home.discard(self, &screen),
+            Effect::Refresh(screen) => self.refresh(&screen),
             Effect::Notify(notice) => self.notify(notice_message(notice)),
             Effect::Quit => {
                 self.quitting.set(true);
@@ -692,12 +703,16 @@ fn session_info(signed: &SignedIn) -> SessionInfo {
     }
 }
 
-fn slint_screen(screen: Screen) -> crate::Screen {
+fn slint_screen(screen: &Screen) -> crate::Screen {
     match screen {
         Screen::Starting => crate::Screen::Starting,
         Screen::SignIn => crate::Screen::SignIn,
         Screen::QuickConnect => crate::Screen::QuickConnect,
         Screen::Home => crate::Screen::Home,
+        Screen::Library(_) => crate::Screen::Library,
+        Screen::Search => crate::Screen::Search,
+        Screen::Movie(_) => crate::Screen::Movie,
+        Screen::Series(_) => crate::Screen::Series,
         Screen::Player => crate::Screen::Player,
         Screen::Settings => crate::Screen::Settings,
     }
@@ -725,12 +740,15 @@ fn is_persistent(message: Message) -> bool {
     )
 }
 
+/// Whether `screen` can start playback.
+fn can_play_from(screen: &Screen) -> bool {
+    matches!(screen, Screen::Home | Screen::Movie(_) | Screen::Series(_))
+}
+
 /// Whether a notice showing `message` stays when `screen` is shown.
-fn keeps_notice(message: Message, screen: Screen) -> bool {
+fn keeps_notice(message: Message, screen: &Screen) -> bool {
     match message {
-        Message::FileTokenWarning => {
-            matches!(screen, Screen::Home | Screen::Player | Screen::Settings)
-        }
+        Message::FileTokenWarning => screen.is_signed_in(),
         Message::SessionExpired | Message::StorageError => {
             matches!(screen, Screen::SignIn | Screen::QuickConnect)
         }
@@ -754,10 +772,10 @@ mod tests {
 
     #[test]
     fn notices_stay_only_where_they_still_apply() {
-        assert!(keeps_notice(Message::FileTokenWarning, Screen::Settings));
-        assert!(!keeps_notice(Message::FileTokenWarning, Screen::SignIn));
-        assert!(keeps_notice(Message::SessionExpired, Screen::QuickConnect));
-        assert!(!keeps_notice(Message::SessionExpired, Screen::Home));
-        assert!(!keeps_notice(Message::CommandFailed, Screen::Player));
+        assert!(keeps_notice(Message::FileTokenWarning, &Screen::Settings));
+        assert!(!keeps_notice(Message::FileTokenWarning, &Screen::SignIn));
+        assert!(keeps_notice(Message::SessionExpired, &Screen::QuickConnect));
+        assert!(!keeps_notice(Message::SessionExpired, &Screen::Home));
+        assert!(!keeps_notice(Message::CommandFailed, &Screen::Player));
     }
 }

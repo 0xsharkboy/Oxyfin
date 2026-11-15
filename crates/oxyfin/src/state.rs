@@ -4,8 +4,40 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GenerationId(pub u64);
 
-/// Screen currently shown.
+/// A library page of the top bar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LibraryTab {
+    /// Movies.
+    Movies,
+    /// Series.
+    Shows,
+    /// Favorites.
+    Favorites,
+}
+
+/// A top-level destination of the top bar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tab {
+    /// Home screen.
+    Home,
+    /// A library page.
+    Library(LibraryTab),
+    /// Search.
+    Search,
+}
+
+impl Tab {
+    fn screen(self) -> Screen {
+        match self {
+            Tab::Home => Screen::Home,
+            Tab::Library(tab) => Screen::Library(tab),
+            Tab::Search => Screen::Search,
+        }
+    }
+}
+
+/// Screen currently shown.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Screen {
     /// Restoring the saved session.
     Starting,
@@ -15,10 +47,43 @@ pub enum Screen {
     QuickConnect,
     /// Home screen.
     Home,
+    /// A library page.
+    Library(LibraryTab),
+    /// Search.
+    Search,
+    /// Detail page of a movie or video, by item identifier.
+    Movie(String),
+    /// Detail page of a series, by item identifier.
+    Series(String),
     /// Video player.
     Player,
     /// Settings.
     Settings,
+}
+
+impl Screen {
+    /// Whether the screen belongs to a signed-in session.
+    pub fn is_signed_in(&self) -> bool {
+        !matches!(
+            self,
+            Screen::Starting | Screen::SignIn | Screen::QuickConnect
+        )
+    }
+
+    fn has_controller(&self) -> bool {
+        matches!(
+            self,
+            Screen::Home
+                | Screen::Library(_)
+                | Screen::Search
+                | Screen::Movie(_)
+                | Screen::Series(_)
+        )
+    }
+
+    fn is_detail(&self) -> bool {
+        matches!(self, Screen::Movie(_) | Screen::Series(_))
+    }
 }
 
 /// What the interface needs to know about the signed-in session.
@@ -49,6 +114,12 @@ pub enum Msg {
     OpenQuickConnect,
     /// The user left Quick Connect.
     CloseQuickConnect,
+    /// The user picked a tab of the top bar.
+    OpenTab(Tab),
+    /// The user opened a detail page: only `Screen::Movie` or `Screen::Series`.
+    OpenItem(Screen),
+    /// The user went back to the previous screen.
+    Back,
     /// Playback was requested.
     OpenPlayer,
     /// The player was closed.
@@ -105,6 +176,10 @@ pub enum Effect {
     },
     /// Switch to a screen.
     Show(Screen),
+    /// A screen left the stack: release its controller.
+    Discard(Screen),
+    /// A screen came back from the player: reload it.
+    Refresh(Screen),
     /// Show a message.
     Notify(Notice),
     /// Exit the application.
@@ -114,7 +189,7 @@ pub enum Effect {
 /// The application state.
 #[derive(Debug)]
 pub struct AppState {
-    screen: Screen,
+    stack: Vec<Screen>,
     generation: Option<GenerationId>,
     next_id: u64,
     session: Option<SessionInfo>,
@@ -131,7 +206,7 @@ impl AppState {
     /// Creates the state of an application that is starting.
     pub fn new() -> Self {
         Self {
-            screen: Screen::Starting,
+            stack: vec![Screen::Starting],
             generation: None,
             next_id: 1,
             session: None,
@@ -139,9 +214,14 @@ impl AppState {
         }
     }
 
-    /// Current screen.
+    /// Current screen: the top of the stack.
     pub fn screen(&self) -> Screen {
-        self.screen
+        self.top().clone()
+    }
+
+    /// The screens of the session, from the root to the current one.
+    pub fn stack(&self) -> &[Screen] {
+        &self.stack
     }
 
     /// The live generation, if any.
@@ -165,76 +245,103 @@ impl AppState {
                 _ => Vec::new(),
             };
         }
+        let on_starting = *self.top() == Screen::Starting;
+        let on_connected = self.top().is_signed_in();
+        let on_player = *self.top() == Screen::Player;
         match msg {
-            Msg::Restored(info) if self.screen == Screen::Starting => match info {
+            Msg::Restored(info) if on_starting => match info {
                 Some(info) => {
                     let id = self.start_generation();
                     let mut effects = vec![
                         Effect::StartGeneration(id),
                         Effect::ValidateSession(id),
-                        self.show(Screen::Home),
+                        self.root(Screen::Home),
                     ];
                     self.push_token_warning(&info, &mut effects);
                     self.session = Some(info);
                     effects
                 }
-                None => vec![self.show(Screen::SignIn)],
+                None => vec![self.root(Screen::SignIn)],
             },
-            Msg::StartupFailed if self.screen == Screen::Starting => {
+            Msg::StartupFailed if on_starting => {
                 vec![
-                    self.show(Screen::SignIn),
+                    self.root(Screen::SignIn),
                     Effect::Notify(Notice::StorageError),
                 ]
             }
-            Msg::SignedIn(info) if matches!(self.screen, Screen::SignIn | Screen::QuickConnect) => {
+            Msg::SignedIn(info) if matches!(self.top(), Screen::SignIn | Screen::QuickConnect) => {
                 let id = self.start_generation();
-                let mut effects = vec![Effect::StartGeneration(id), self.show(Screen::Home)];
+                let mut effects = vec![Effect::StartGeneration(id), self.root(Screen::Home)];
                 self.push_token_warning(&info, &mut effects);
                 self.session = Some(info);
                 effects
             }
-            Msg::OpenQuickConnect if self.screen == Screen::SignIn => {
-                vec![self.show(Screen::QuickConnect)]
+            Msg::OpenQuickConnect if *self.top() == Screen::SignIn => {
+                vec![self.root(Screen::QuickConnect)]
             }
-            Msg::CloseQuickConnect if self.screen == Screen::QuickConnect => {
-                vec![self.show(Screen::SignIn)]
+            Msg::CloseQuickConnect if *self.top() == Screen::QuickConnect => {
+                vec![self.root(Screen::SignIn)]
             }
-            Msg::OpenPlayer if self.screen == Screen::Home => vec![self.show(Screen::Player)],
-            Msg::ClosePlayer if self.screen == Screen::Player => vec![self.show(Screen::Home)],
-            Msg::OpenSettings if self.screen == Screen::Home => {
-                vec![self.show(Screen::Settings)]
+            Msg::OpenTab(tab) if on_connected && !on_player => {
+                let target = tab.screen();
+                if self.stack == [target.clone()] {
+                    return Vec::new();
+                }
+                if self.stack[0] == target {
+                    let mut effects = self.pop_to_root();
+                    effects.push(Effect::Show(target));
+                    return effects;
+                }
+                let mut effects = self.discard_all();
+                effects.push(self.root(target));
+                effects
             }
-            Msg::CloseSettings if self.screen == Screen::Settings => {
-                vec![self.show(Screen::Home)]
+            Msg::OpenItem(screen) if on_connected && !on_player && screen.is_detail() => {
+                vec![self.push(screen)]
             }
-            Msg::SignOut if self.screen == Screen::Settings => match self.end_generation() {
-                Some(id) => vec![
-                    Effect::EndGeneration {
+            Msg::Back if on_connected && !on_player && self.stack.len() > 1 => self.pop(),
+            Msg::OpenPlayer if on_connected && !on_player => vec![self.push(Screen::Player)],
+            Msg::ClosePlayer if on_player => {
+                self.stack.pop();
+                let top = self.top().clone();
+                vec![Effect::Show(top.clone()), Effect::Refresh(top)]
+            }
+            Msg::OpenSettings if on_connected && !on_player && *self.top() != Screen::Settings => {
+                vec![self.push(Screen::Settings)]
+            }
+            Msg::CloseSettings if *self.top() == Screen::Settings => self.pop(),
+            Msg::SignOut if *self.top() == Screen::Settings => match self.end_generation() {
+                Some(id) => {
+                    let mut effects = vec![Effect::EndGeneration {
                         id,
                         end: SessionEnd::SignOut,
-                    },
-                    self.show(Screen::SignIn),
-                ],
+                    }];
+                    effects.extend(self.discard_all());
+                    effects.push(self.root(Screen::SignIn));
+                    effects
+                }
                 None => Vec::new(),
             },
             Msg::Expired(id) if self.generation == Some(id) => {
                 self.end_generation();
-                vec![
-                    Effect::EndGeneration {
-                        id,
-                        end: SessionEnd::Expire,
-                    },
-                    self.show(Screen::SignIn),
-                    Effect::Notify(Notice::SessionExpired),
-                ]
+                let mut effects = vec![Effect::EndGeneration {
+                    id,
+                    end: SessionEnd::Expire,
+                }];
+                effects.extend(self.discard_all());
+                effects.push(self.root(Screen::SignIn));
+                effects.push(Effect::Notify(Notice::SessionExpired));
+                effects
             }
             Msg::CloseRequested => match self.end_generation() {
                 Some(id) => {
                     self.closing = Some(id);
-                    vec![Effect::EndGeneration {
+                    let mut effects = vec![Effect::EndGeneration {
                         id,
                         end: SessionEnd::Close,
-                    }]
+                    }];
+                    effects.extend(self.discard_all());
+                    effects
                 }
                 None => vec![Effect::Quit],
             },
@@ -242,9 +349,54 @@ impl AppState {
         }
     }
 
-    fn show(&mut self, screen: Screen) -> Effect {
-        self.screen = screen;
+    fn top(&self) -> &Screen {
+        self.stack.last().unwrap_or(&Screen::Starting)
+    }
+
+    /// Replaces the whole stack by `screen`.
+    fn root(&mut self, screen: Screen) -> Effect {
+        self.stack = vec![screen.clone()];
         Effect::Show(screen)
+    }
+
+    fn push(&mut self, screen: Screen) -> Effect {
+        self.stack.push(screen.clone());
+        Effect::Show(screen)
+    }
+
+    /// Pops the top screen and shows the one below.
+    fn pop(&mut self) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        if let Some(popped) = self.stack.pop()
+            && popped.has_controller()
+        {
+            effects.push(Effect::Discard(popped));
+        }
+        effects.push(Effect::Show(self.top().clone()));
+        effects
+    }
+
+    /// Pops every screen above the root, discarding their controllers.
+    fn pop_to_root(&mut self) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        while self.stack.len() > 1 {
+            if let Some(popped) = self.stack.pop()
+                && popped.has_controller()
+            {
+                effects.push(Effect::Discard(popped));
+            }
+        }
+        effects
+    }
+
+    /// Empties the stack, discarding the controllers from the top down.
+    fn discard_all(&mut self) -> Vec<Effect> {
+        self.stack
+            .drain(..)
+            .rev()
+            .filter(Screen::has_controller)
+            .map(Effect::Discard)
+            .collect()
     }
 
     fn start_generation(&mut self) -> GenerationId {
@@ -354,6 +506,7 @@ mod tests {
             s.update(Msg::Expired(g1)),
             vec![
                 end(g1, SessionEnd::Expire),
+                Effect::Discard(Screen::Home),
                 Effect::Show(Screen::SignIn),
                 Effect::Notify(Notice::SessionExpired)
             ]
@@ -386,7 +539,11 @@ mod tests {
         s.update(Msg::OpenSettings);
         assert_eq!(
             s.update(Msg::SignOut),
-            vec![end(g1, SessionEnd::SignOut), Effect::Show(Screen::SignIn)]
+            vec![
+                end(g1, SessionEnd::SignOut),
+                Effect::Discard(Screen::Home),
+                Effect::Show(Screen::SignIn)
+            ]
         );
         assert_eq!(s.generation(), None);
         s.update(Msg::SignedIn(info(false)));
@@ -399,7 +556,7 @@ mod tests {
         let (mut s, g1) = signed_in();
         assert_eq!(
             s.update(Msg::CloseRequested),
-            vec![end(g1, SessionEnd::Close)]
+            vec![end(g1, SessionEnd::Close), Effect::Discard(Screen::Home)]
         );
         assert!(s.update(Msg::OpenPlayer).is_empty());
         assert_eq!(s.update(Msg::GenerationEnded(g1)), vec![Effect::Quit]);
@@ -423,7 +580,10 @@ mod tests {
     fn player_returns_to_home() {
         let (mut s, _) = signed_in();
         s.update(Msg::OpenPlayer);
-        assert_eq!(s.update(Msg::ClosePlayer), vec![Effect::Show(Screen::Home)]);
+        assert_eq!(
+            s.update(Msg::ClosePlayer),
+            vec![Effect::Show(Screen::Home), Effect::Refresh(Screen::Home)]
+        );
     }
 
     #[test]
@@ -451,6 +611,188 @@ mod tests {
             s.update(Msg::CloseQuickConnect),
             vec![Effect::Show(Screen::SignIn)]
         );
+    }
+
+    fn movie(id: &str) -> Screen {
+        Screen::Movie(id.into())
+    }
+
+    fn series(id: &str) -> Screen {
+        Screen::Series(id.into())
+    }
+
+    fn movies() -> Screen {
+        Screen::Library(LibraryTab::Movies)
+    }
+
+    fn on_movies_grid() -> AppState {
+        let (mut s, _) = signed_in();
+        s.update(Msg::OpenTab(Tab::Library(LibraryTab::Movies)));
+        s
+    }
+
+    #[test]
+    fn tab_replaces_the_stack() {
+        let (mut s, _) = signed_in();
+        assert_eq!(
+            s.update(Msg::OpenTab(Tab::Library(LibraryTab::Movies))),
+            vec![Effect::Discard(Screen::Home), Effect::Show(movies())]
+        );
+        assert_eq!(s.stack(), [movies()]);
+        assert_eq!(
+            s.update(Msg::OpenTab(Tab::Search)),
+            vec![Effect::Discard(movies()), Effect::Show(Screen::Search)]
+        );
+        assert_eq!(s.stack(), [Screen::Search]);
+    }
+
+    #[test]
+    fn same_tab_does_nothing() {
+        let (mut s, _) = signed_in();
+        assert!(s.update(Msg::OpenTab(Tab::Home)).is_empty());
+        assert_eq!(s.stack(), [Screen::Home]);
+    }
+
+    #[test]
+    fn item_then_back_returns_to_the_grid() {
+        let mut s = on_movies_grid();
+        assert_eq!(
+            s.update(Msg::OpenItem(movie("m"))),
+            vec![Effect::Show(movie("m"))]
+        );
+        assert_eq!(s.stack(), [movies(), movie("m")]);
+        assert_eq!(
+            s.update(Msg::Back),
+            vec![Effect::Discard(movie("m")), Effect::Show(movies())]
+        );
+        assert_eq!(s.stack(), [movies()]);
+    }
+
+    #[test]
+    fn player_from_a_detail_returns_and_refreshes() {
+        let (mut s, _) = signed_in();
+        s.update(Msg::OpenItem(series("s")));
+        assert_eq!(
+            s.update(Msg::OpenPlayer),
+            vec![Effect::Show(Screen::Player)]
+        );
+        assert_eq!(
+            s.update(Msg::ClosePlayer),
+            vec![Effect::Show(series("s")), Effect::Refresh(series("s"))]
+        );
+        assert_eq!(s.stack(), [Screen::Home, series("s")]);
+    }
+
+    #[test]
+    fn back_on_a_tab_does_nothing() {
+        let mut s = on_movies_grid();
+        assert!(s.update(Msg::Back).is_empty());
+        assert_eq!(s.stack(), [movies()]);
+    }
+
+    #[test]
+    fn settings_from_a_detail_back_to_it() {
+        let (mut s, _) = signed_in();
+        s.update(Msg::OpenItem(movie("m")));
+        assert_eq!(
+            s.update(Msg::OpenSettings),
+            vec![Effect::Show(Screen::Settings)]
+        );
+        assert_eq!(s.update(Msg::CloseSettings), vec![Effect::Show(movie("m"))]);
+        s.update(Msg::OpenSettings);
+        assert_eq!(s.update(Msg::Back), vec![Effect::Show(movie("m"))]);
+        assert_eq!(s.stack(), [Screen::Home, movie("m")]);
+    }
+
+    #[test]
+    fn back_to_home_emits_no_refresh() {
+        let (mut s, _) = signed_in();
+        s.update(Msg::OpenItem(movie("m")));
+        assert_eq!(
+            s.update(Msg::Back),
+            vec![Effect::Discard(movie("m")), Effect::Show(Screen::Home)]
+        );
+    }
+
+    #[test]
+    fn player_from_home_refreshes_home() {
+        let (mut s, _) = signed_in();
+        s.update(Msg::OpenPlayer);
+        assert_eq!(
+            s.update(Msg::ClosePlayer),
+            vec![Effect::Show(Screen::Home), Effect::Refresh(Screen::Home)]
+        );
+    }
+
+    #[test]
+    fn expiry_with_three_screens_discards_them_all() {
+        let (mut s, g1) = signed_in();
+        s.update(Msg::OpenItem(movie("m")));
+        s.update(Msg::OpenItem(series("s")));
+        assert_eq!(
+            s.update(Msg::Expired(g1)),
+            vec![
+                end(g1, SessionEnd::Expire),
+                Effect::Discard(series("s")),
+                Effect::Discard(movie("m")),
+                Effect::Discard(Screen::Home),
+                Effect::Show(Screen::SignIn),
+                Effect::Notify(Notice::SessionExpired)
+            ]
+        );
+        assert_eq!(s.stack(), [Screen::SignIn]);
+    }
+
+    #[test]
+    fn tab_during_a_detail_discards_it() {
+        let mut s = on_movies_grid();
+        s.update(Msg::OpenItem(movie("m")));
+        assert_eq!(
+            s.update(Msg::OpenTab(Tab::Library(LibraryTab::Shows))),
+            vec![
+                Effect::Discard(movie("m")),
+                Effect::Discard(movies()),
+                Effect::Show(Screen::Library(LibraryTab::Shows))
+            ]
+        );
+        assert_eq!(s.stack(), [Screen::Library(LibraryTab::Shows)]);
+    }
+
+    #[test]
+    fn the_origin_tab_during_a_detail_returns_to_it() {
+        let mut s = on_movies_grid();
+        s.update(Msg::OpenItem(movie("m")));
+        assert_eq!(
+            s.update(Msg::OpenTab(Tab::Library(LibraryTab::Movies))),
+            vec![Effect::Discard(movie("m")), Effect::Show(movies())]
+        );
+    }
+
+    #[test]
+    fn item_ignored_when_signed_out() {
+        let mut s = AppState::new();
+        s.update(Msg::Restored(None));
+        assert!(s.update(Msg::OpenItem(movie("m"))).is_empty());
+        assert!(s.update(Msg::OpenTab(Tab::Search)).is_empty());
+        assert_eq!(s.stack(), [Screen::SignIn]);
+    }
+
+    #[test]
+    fn only_details_can_be_opened_as_items() {
+        let (mut s, _) = signed_in();
+        assert!(s.update(Msg::OpenItem(Screen::Settings)).is_empty());
+        assert!(s.update(Msg::OpenItem(Screen::Home)).is_empty());
+    }
+
+    #[test]
+    fn nothing_opens_over_the_player() {
+        let (mut s, _) = signed_in();
+        s.update(Msg::OpenPlayer);
+        assert!(s.update(Msg::OpenSettings).is_empty());
+        assert!(s.update(Msg::OpenItem(movie("m"))).is_empty());
+        assert!(s.update(Msg::OpenTab(Tab::Search)).is_empty());
+        assert!(s.update(Msg::Back).is_empty());
+        assert_eq!(s.stack(), [Screen::Home, Screen::Player]);
     }
 
     #[test]
