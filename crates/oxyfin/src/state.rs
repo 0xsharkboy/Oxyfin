@@ -296,11 +296,18 @@ impl AppState {
                 effects.push(self.root(target));
                 effects
             }
-            Msg::OpenItem(screen) if on_connected && !on_player && screen.is_detail() => {
+            Msg::OpenItem(screen)
+                if on_connected
+                    && !on_player
+                    && *self.top() != Screen::Settings
+                    && screen.is_detail() =>
+            {
                 vec![self.push(screen)]
             }
             Msg::Back if on_connected && !on_player && self.stack.len() > 1 => self.pop(),
-            Msg::OpenPlayer if on_connected && !on_player => vec![self.push(Screen::Player)],
+            Msg::OpenPlayer if on_connected && !on_player && *self.top() != Screen::Settings => {
+                vec![self.push(Screen::Player)]
+            }
             Msg::ClosePlayer if on_player => {
                 self.stack.pop();
                 let top = self.top().clone();
@@ -782,6 +789,15 @@ mod tests {
         let (mut s, _) = signed_in();
         assert!(s.update(Msg::OpenItem(Screen::Settings)).is_empty());
         assert!(s.update(Msg::OpenItem(Screen::Home)).is_empty());
+    }
+
+    #[test]
+    fn nothing_opens_over_the_settings() {
+        let (mut s, _) = signed_in();
+        s.update(Msg::OpenSettings);
+        assert!(s.update(Msg::OpenItem(movie("m"))).is_empty());
+        assert!(s.update(Msg::OpenPlayer).is_empty());
+        assert_eq!(s.stack(), [Screen::Home, Screen::Settings]);
     }
 
     #[test]
