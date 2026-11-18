@@ -125,6 +125,20 @@ With a variable missing, the tests fail and name it instead of passing silently.
 
 `live_write` marks items played, toggles favorites, reports playback progress and signs out. It refuses to run unless `OXYFIN_TEST_DISPOSABLE=1`, which only the script sets. Never set it by hand and never point `live_write` at a personal server: it would alter your watch history and resume positions.
 
+### Headless app
+
+`scripts/headless-app.sh` runs Oxyfin without a window, with Slint's embedded MCP server, so the interface can be driven and captured from the shell (mainly by coding agents checking the design against the reference). It builds into `target/headless` with `slint/mcp` and the software renderer, then runs the app with throwaway config, data and cache directories and tokens kept in memory, so nothing is left behind. It prints `OXYFIN_MCP_URL=...` once the server answers and stops the app when it is stopped.
+
+```sh
+scripts/headless-app.sh --size 900x700 --scale 2 --lang fr &   # options: --size, --scale, --lang, --port, --no-build
+scripts/mcp-call.sh take_screenshot '{"windowHandle":{"index":"1","generation":"1"}}' /tmp/shot.png
+scripts/mcp-call.sh set_element_value "{\"elementHandle\":$(scripts/mcp-call.sh --find 'Server address' TextInput),\"value\":\"http://127.0.0.1:18096\"}"
+scripts/mcp-call.sh click_element "{\"elementHandle\":$(scripts/mcp-call.sh --find 'Sign in' Button),\"action\":\"SingleClick\",\"button\":\"Left\"}"
+scripts/mcp-call.sh dispatch_key_event '{"windowHandle":{"index":"1","generation":"1"},"text":"\u001b"}'   # Escape (eventType defaults to PressAndRelease)
+```
+
+`scripts/mcp-call.sh TOOL [JSON_ARGS] [OUT.png]` calls any tool of the server (`list_windows`, `get_element_tree`, `click_element`, `scroll_element`, ...) and writes the image of an answer to `OUT.png`; `--find LABEL [ROLE]` prints the handle of the first element with that accessible label. Limits: the build has no mpv, so video does not show; the software renderer draws text slightly differently from the app's femtovg renderer; the first build takes several minutes. The app needs a server typed in, like a user would: the disposable server above, or your own.
+
 ## Dependencies
 
 - Prefer the standard library and the dependencies already in use.
