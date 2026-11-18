@@ -8,7 +8,8 @@ use oxyfin::launch;
 use oxyfin::locale::select_language;
 use oxyfin::{App, AppWindow};
 use oxyfin_core::{MemoryStore, Paths, TokenVault};
-use slint::{BackendSelector, ComponentHandle, LogicalSize};
+use slint::platform::WindowEvent;
+use slint::{BackendSelector, ComponentHandle, LogicalSize, PhysicalSize};
 
 /// How long the exit waits for the sessions still shutting down.
 const EXIT_GRACE: Duration = Duration::from_secs(3);
@@ -49,12 +50,31 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         TokenVault::system(&paths)
     };
     let window = AppWindow::new()?;
+    let scale = std::env::var(launch::SCALE_FACTOR_VAR)
+        .ok()
+        .and_then(|value| {
+            let scale = launch::scale_factor(&value);
+            if scale.is_none() {
+                log::warn!("ignoring {}={value:?}", launch::SCALE_FACTOR_VAR);
+            }
+            scale
+        });
+    if let Some(scale_factor) = scale {
+        window
+            .window()
+            .dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor });
+    }
     if let Ok(value) = std::env::var(launch::WINDOW_SIZE_VAR) {
-        match launch::window_size(&value) {
-            Some((width, height)) => window
+        match (launch::window_size(&value), scale) {
+            // The headless backend keeps its physical size when the scale changes.
+            (Some((width, height)), Some(scale)) => window.window().set_size(PhysicalSize::new(
+                (width as f32 * scale).round() as u32,
+                (height as f32 * scale).round() as u32,
+            )),
+            (Some((width, height)), None) => window
                 .window()
                 .set_size(LogicalSize::new(width as f32, height as f32)),
-            None => log::warn!("ignoring {}={value:?}", launch::WINDOW_SIZE_VAR),
+            (None, _) => log::warn!("ignoring {}={value:?}", launch::WINDOW_SIZE_VAR),
         }
     }
     select_language();
