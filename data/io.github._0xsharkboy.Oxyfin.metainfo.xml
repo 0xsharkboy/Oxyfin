@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github._0xsharkboy.Oxyfin</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+
+  <name>Oxyfin</name>
+  <summary>Native client for Jellyfin media servers</summary>
+  <developer id="io.github._0xsharkboy">
+    <name>0xsharkboy</name>
+  </developer>
+
+  <description>
+    <p>
+      Oxyfin is a native desktop client for Jellyfin. It signs in to your server, browses
+      your movie and show libraries, searches them and plays your media with mpv, without
+      any web view.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Sign in with a password or Quick Connect</li>
+      <li>Home screen with Continue Watching, Next Up and recently added media</li>
+      <li>Movie and show libraries, search, movie and series pages</li>
+      <li>Playback through libmpv, with resume and progress sync</li>
+      <li>English and French interface</li>
+    </ul>
+    <p>Oxyfin is in early development: expect missing features and bugs.</p>
+  </description>
+
+  <launchable type="desktop-id">io.github._0xsharkboy.Oxyfin.desktop</launchable>
+
+  <url type="homepage">https://github.com/0xsharkboy/Oxyfin</url>
+  <url type="bugtracker">https://github.com/0xsharkboy/Oxyfin/issues</url>
+  <url type="vcs-browser">https://github.com/0xsharkboy/Oxyfin</url>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Video</category>
+    <category>Player</category>
+  </categories>
+
+  <keywords>
+    <keyword>Jellyfin</keyword>
+    <keyword>Media</keyword>
+    <keyword>Movies</keyword>
+    <keyword>Shows</keyword>
+    <keyword>Streaming</keyword>
+  </keywords>
+
+  <provides>
+    <binary>oxyfin</binary>
+  </provides>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.1.0" date="2026-11-19">
+      <description>
+        <p>First release: sign in, browse and search the libraries, and play media.</p>
+      </description>
+    </release>
+  </releases>
+</component>

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Oxyfin
+GenericName=Jellyfin Client
+Comment=Native client for Jellyfin media servers
+Exec=oxyfin
+Icon=io.github._0xsharkboy.Oxyfin
+Terminal=false
+Categories=AudioVideo;Video;Player;
+Keywords=Jellyfin;Media;Movies;Shows;TV;Streaming;
+StartupNotify=true
+StartupWMClass=io.github._0xsharkboy.Oxyfin

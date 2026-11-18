@@ -139,6 +139,15 @@ scripts/mcp-call.sh dispatch_key_event '{"windowHandle":{"index":"1","generation
 
 `scripts/mcp-call.sh TOOL [JSON_ARGS] [OUT.png]` calls any tool of the server (`list_windows`, `get_element_tree`, `click_element`, `scroll_element`, ...) and writes the image of an answer to `OUT.png`; `--find LABEL [ROLE]` prints the handle of the first element with that accessible label. Limits: the build has no mpv, so video does not show; the software renderer draws text slightly differently from the app's femtovg renderer; the first build takes several minutes. The app needs a server typed in, like a user would: the disposable server above, or your own.
 
+## Desktop files
+
+`data/` holds the Linux desktop entry, the scalable icon and the AppStream metainfo. Each file is named after the application ID (`oxyfin::APP_ID`, which the window also advertises to the compositor), and a test checks that they agree. After editing them, validate them:
+
+```sh
+nix shell nixpkgs#desktop-file-utils -c desktop-file-validate data/*.desktop
+nix shell nixpkgs#appstream -c appstreamcli validate --no-net data/*.metainfo.xml
+```
+
 ## Dependencies
 
 - Prefer the standard library and the dependencies already in use.
