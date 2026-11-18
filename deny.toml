@@ -17,6 +17,7 @@ ignore = [
     { id = "RUSTSEC-2026-0370", reason = "zvariant was merged into zbus, pulled in by slint, no upgrade available" },
     { id = "RUSTSEC-2026-0371", reason = "zbus_names was merged into zbus, pulled in by slint, no upgrade available" },
     { id = "RUSTSEC-2026-0372", reason = "zvariant_derive was merged into zbus, pulled in by slint, no upgrade available" },
+    { id = "RUSTSEC-2026-0543", reason = "chrono is unmaintained, pulled in by slint, no upgrade available" },
 ]
 
 [licenses]
