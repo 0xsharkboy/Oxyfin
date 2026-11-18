@@ -8,6 +8,7 @@ mod generated {
 pub mod app;
 pub mod generation;
 pub mod images;
+pub mod launch;
 pub mod locale;
 pub mod present;
 pub mod screens;

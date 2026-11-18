@@ -1,12 +1,14 @@
 //! Oxyfin, a native Jellyfin desktop client.
 
 use std::process::ExitCode;
+use std::sync::Arc;
 use std::time::Duration;
 
+use oxyfin::launch;
 use oxyfin::locale::select_language;
 use oxyfin::{App, AppWindow};
-use oxyfin_core::{Paths, TokenVault};
-use slint::{BackendSelector, ComponentHandle};
+use oxyfin_core::{MemoryStore, Paths, TokenVault};
+use slint::{BackendSelector, ComponentHandle, LogicalSize};
 
 /// How long the exit waits for the sessions still shutting down.
 const EXIT_GRACE: Duration = Duration::from_secs(3);
@@ -23,19 +25,38 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    BackendSelector::new()
-        .backend_name("winit".into())
-        .renderer_name("femtovg".into())
-        .require_opengl()
-        .select()?;
+    // An explicit SLINT_BACKEND (headless agent runs) picks its own backend and renderer.
+    if std::env::var("SLINT_BACKEND").map_or(true, |value| value.trim().is_empty()) {
+        BackendSelector::new()
+            .backend_name("winit".into())
+            .renderer_name("femtovg".into())
+            .require_opengl()
+            .select()?;
+    }
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
 
     let paths = Paths::from_system()?;
-    let vault = TokenVault::system(&paths);
+    let vault = if launch::enabled(std::env::var(launch::MEMORY_TOKENS_VAR).ok().as_deref()) {
+        log::info!("tokens are kept in memory only");
+        TokenVault::new(
+            Arc::new(MemoryStore::default()),
+            Arc::new(MemoryStore::default()),
+        )
+    } else {
+        TokenVault::system(&paths)
+    };
     let window = AppWindow::new()?;
+    if let Ok(value) = std::env::var(launch::WINDOW_SIZE_VAR) {
+        match launch::window_size(&value) {
+            Some((width, height)) => window
+                .window()
+                .set_size(LogicalSize::new(width as f32, height as f32)),
+            None => log::warn!("ignoring {}={value:?}", launch::WINDOW_SIZE_VAR),
+        }
+    }
     select_language();
     let app = App::new(&window, runtime.handle().clone(), paths, vault)?;
     #[cfg(feature = "mpv")]
