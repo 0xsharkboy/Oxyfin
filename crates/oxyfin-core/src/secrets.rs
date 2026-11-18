@@ -138,7 +138,7 @@ impl SecretStore for FileStore {
     }
 }
 
-/// Keeps tokens in memory, for tests.
+/// Keeps tokens in memory, for tests and headless runs.
 #[derive(Default)]
 pub struct MemoryStore {
     tokens: Mutex<HashMap<String, String>>,
