@@ -16,5 +16,9 @@ pub mod state;
 #[cfg(feature = "mpv")]
 pub mod video;
 
+/// Application ID: the Wayland app ID and X11 class of the window, and the name of the
+/// desktop entry, icon and AppStream metainfo under `data/`.
+pub const APP_ID: &str = "io.github._0xsharkboy.Oxyfin";
+
 pub use app::App;
 pub use generated::*;
