@@ -31,6 +31,7 @@ component SettingSection inherits Rectangle {
     border-color: Theme.border-default;
 
     VerticalLayout {
+        alignment: start;
         padding: Theme.space-xl;
         spacing: Theme.space-md;
 
@@ -92,6 +93,7 @@ export component SettingsScreen inherits Rectangle {
 
                 VerticalLayout {
                     width: min(640px, root.width - 2 * Theme.space-3xl);
+                    alignment: start;
                     padding-top: Theme.space-xl;
                     padding-bottom: Theme.space-3xl;
                     spacing: Theme.space-xl;
