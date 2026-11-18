@@ -16,6 +16,8 @@ nix develop
 
 The dev shell provides the Rust toolchain, libmpv and every system library the app needs, and activates the git hooks automatically.
 
+`nix build` builds the package the flake ships (`packages.default`, run with `nix run`): the release binary in `result/bin/oxyfin` and the files of `data/` under `result/share/`. The package does not run the tests, which CI runs with cargo.
+
 ### Without Nix
 
 Install:
