@@ -50,6 +50,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         TokenVault::system(&paths)
     };
     let window = AppWindow::new()?;
+    // Needs the platform set up by AppWindow::new(); it applies when the window is first shown.
+    slint::set_xdg_app_id(oxyfin::APP_ID)?;
     let scale = std::env::var(launch::SCALE_FACTOR_VAR)
         .ok()
         .and_then(|value| {
