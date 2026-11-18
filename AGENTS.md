@@ -29,6 +29,8 @@ cargo run -p oxyfin
 
 Run fmt, clippy and tests before every commit. Do not commit if any of them fails.
 
+To look at the interface yourself, run `scripts/headless-app.sh` in the background and drive it with `scripts/mcp-call.sh` (see "Headless app" in CONTRIBUTING.md): screenshots, element tree, clicks, typing. Use it to check layouts, overflow, translations and HiDPI against the reference design. Keep screenshots in your scratch space, and never commit them, server addresses other than localhost, or credentials.
+
 ## Rules
 
 1. **English only**, in every file, identifier, comment, commit message and branch name, regardless of the language the user writes in.
