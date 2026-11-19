@@ -28,7 +28,7 @@ This file is the single source of truth for planned work. An item is checked onl
 - [x] Trickplay thumbnails
 - [x] Skip intro (media segments)
 - [x] Subtitle settings
-- [ ] Transcoding and quality selection
+- [x] Transcoding and quality selection
 - [ ] Multiple servers and users
 - [ ] Windows and macOS packages
 - [ ] Gamepad and remote navigation, TV mode
