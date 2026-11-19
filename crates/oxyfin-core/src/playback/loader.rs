@@ -14,7 +14,7 @@ use super::segments::{SkippableSegment, skippable};
 use super::types::{PlayMode, PlaybackTitle};
 use crate::catalog::Catalog;
 use crate::error::CoreError;
-use crate::models::{Episode, ItemSummary, UserState};
+use crate::models::{Episode, ItemSummary, UserState, artwork};
 use crate::trickplay::Trickplay;
 
 /// An item ready to be loaded into the player.
@@ -134,11 +134,13 @@ async fn fetch(
             title: summary.title,
             series_name: summary.series_name,
             episode_label: summary.episode_label,
+            artwork: artwork(&dto),
         },
         None => PlaybackTitle {
             title: dto.name.clone().unwrap_or_default(),
             series_name: None,
             episode_label: None,
+            artwork: artwork(&dto),
         },
     };
     let saved = UserState::from_dto(dto.user_data.as_ref()).position;
@@ -207,6 +209,7 @@ mod tests {
                     title: "Item".into(),
                     series_name: None,
                     episode_label: None,
+                    artwork: None,
                 },
             },
         }

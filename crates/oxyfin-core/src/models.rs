@@ -110,6 +110,15 @@ fn episode_thumb(dto: &BaseItemDto) -> Option<ImageRef> {
         .or_else(|| backdrop(dto))
 }
 
+/// Image standing for an item on its own, as in a media control: its primary image, else
+/// its series poster, its thumbnail or a backdrop. Only images with a tag are picked.
+pub(crate) fn artwork(dto: &BaseItemDto) -> Option<ImageRef> {
+    own_image(dto, ImageType::Primary)
+        .or_else(|| series_poster(dto))
+        .or_else(|| own_image(dto, ImageType::Thumb))
+        .or_else(|| backdrop(dto))
+}
+
 fn duration(dto: &BaseItemDto) -> Option<Duration> {
     dto.run_time_ticks.map(|ticks| ticks.to_duration())
 }
@@ -495,6 +504,34 @@ mod tests {
         assert_eq!(poster.item_id, dto.series_id.clone().unwrap());
         assert_eq!(poster.tag, "seriestag");
         assert_eq!(summary.thumb.unwrap().tag, "thumbtag");
+    }
+
+    #[test]
+    fn episode_artwork_falls_back_to_the_series_poster() {
+        let mut dto = item(include_str!("../tests/fixtures/item_episode.json"));
+        dto.image_tags.clear();
+        dto.backdrop_image_tags.clear();
+        dto.series_primary_image_tag = None;
+        dto.parent_backdrop_item_id = None;
+        dto.parent_backdrop_image_tags.clear();
+        assert_eq!(artwork(&dto), None);
+
+        dto.parent_backdrop_item_id = dto.series_id.clone();
+        dto.parent_backdrop_image_tags = vec!["backdroptag".to_owned()];
+        assert_eq!(artwork(&dto).unwrap().image_type, ImageType::Backdrop);
+
+        dto.series_primary_image_tag = Some("seriestag".to_owned());
+        let art = artwork(&dto).unwrap();
+        assert_eq!(art.item_id, dto.series_id.clone().unwrap());
+        assert_eq!(
+            (art.image_type, art.tag.as_str()),
+            (ImageType::Primary, "seriestag")
+        );
+
+        dto.image_tags
+            .insert(ImageType::Primary, "episodetag".to_owned());
+        let art = artwork(&dto).unwrap();
+        assert_eq!((art.item_id, art.tag.as_str()), (dto.id, "episodetag"));
     }
 
     #[test]
