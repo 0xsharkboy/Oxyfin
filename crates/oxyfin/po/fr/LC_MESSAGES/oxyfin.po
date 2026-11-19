@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-19 03:47+0000\n"
+"POT-Creation-Date: 2026-11-19 03:49+0000\n"
 "PO-Revision-Date: 2026-11-15 12:00+0000\n"
 "Last-Translator: Oxyfin contributors\n"
 "Language-Team: French\n"
@@ -598,137 +598,142 @@ msgctxt "SeriesScreen"
 msgid "Back"
 msgstr "Retour"
 
-#: crates/oxyfin/ui/screens/settings.slint:89
+#: crates/oxyfin/ui/screens/settings.slint:92
 msgctxt "SubtitlePreview"
 msgid "The quick brown fox jumps over the lazy dog"
 msgstr "Portez ce vieux whisky au juge blond qui fume"
 
-#: crates/oxyfin/ui/screens/settings.slint:137
+#: crates/oxyfin/ui/screens/settings.slint:140
 msgctxt "SettingsScreen"
 msgid "Settings"
 msgstr "Paramètres"
 
-#: crates/oxyfin/ui/screens/settings.slint:185
+#: crates/oxyfin/ui/screens/settings.slint:188
 msgctxt "SettingsScreen"
 msgid "Account"
 msgstr "Compte"
 
-#: crates/oxyfin/ui/screens/settings.slint:188
+#: crates/oxyfin/ui/screens/settings.slint:191
 msgctxt "SettingsScreen"
 msgid "Server"
 msgstr "Serveur"
 
-#: crates/oxyfin/ui/screens/settings.slint:189
+#: crates/oxyfin/ui/screens/settings.slint:192
 msgctxt "SettingsScreen"
 msgid "{} ({})"
 msgstr "{} ({})"
 
-#: crates/oxyfin/ui/screens/settings.slint:192
+#: crates/oxyfin/ui/screens/settings.slint:195
 msgctxt "SettingsScreen"
 msgid "Signed in as"
 msgstr "Connecté en tant que"
 
-#: crates/oxyfin/ui/screens/settings.slint:196
+#: crates/oxyfin/ui/screens/settings.slint:199
 msgctxt "SettingsScreen"
 msgid "Sign-in token"
 msgstr "Jeton de connexion"
 
-#: crates/oxyfin/ui/screens/settings.slint:197
+#: crates/oxyfin/ui/screens/settings.slint:200
 msgctxt "SettingsScreen"
 msgid "Stored in a private file"
 msgstr "Stocké dans un fichier privé"
 
-#: crates/oxyfin/ui/screens/settings.slint:197
+#: crates/oxyfin/ui/screens/settings.slint:201
+msgctxt "SettingsScreen"
+msgid "Kept in memory for this session"
+msgstr "Conservé en mémoire pour cette session"
+
+#: crates/oxyfin/ui/screens/settings.slint:202
 msgctxt "SettingsScreen"
 msgid "Stored in the system keyring"
 msgstr "Stocké dans le trousseau du système"
 
-#: crates/oxyfin/ui/screens/settings.slint:204
+#: crates/oxyfin/ui/screens/settings.slint:209
 msgctxt "SettingsScreen"
 msgid "Sign out"
 msgstr "Se déconnecter"
 
-#: crates/oxyfin/ui/screens/settings.slint:214
+#: crates/oxyfin/ui/screens/settings.slint:219
 msgctxt "SettingsScreen"
 msgid "Subtitles"
 msgstr "Sous-titres"
 
-#: crates/oxyfin/ui/screens/settings.slint:220
+#: crates/oxyfin/ui/screens/settings.slint:225
 msgctxt "SettingsScreen"
 msgid "Size"
 msgstr "Taille"
 
-#: crates/oxyfin/ui/screens/settings.slint:221
+#: crates/oxyfin/ui/screens/settings.slint:226
 msgctxt "SettingsScreen"
 msgid "Small"
 msgstr "Petite"
 
-#: crates/oxyfin/ui/screens/settings.slint:221
+#: crates/oxyfin/ui/screens/settings.slint:226
 msgctxt "SettingsScreen"
 msgid "Normal"
 msgstr "Normale"
 
-#: crates/oxyfin/ui/screens/settings.slint:221
+#: crates/oxyfin/ui/screens/settings.slint:226
 msgctxt "SettingsScreen"
 msgid "Large"
 msgstr "Grande"
 
-#: crates/oxyfin/ui/screens/settings.slint:221
+#: crates/oxyfin/ui/screens/settings.slint:226
 msgctxt "SettingsScreen"
 msgid "Extra large"
 msgstr "Très grande"
 
-#: crates/oxyfin/ui/screens/settings.slint:233
+#: crates/oxyfin/ui/screens/settings.slint:238
 msgctxt "SettingsScreen"
 msgid "Color"
 msgstr "Couleur"
 
-#: crates/oxyfin/ui/screens/settings.slint:234
+#: crates/oxyfin/ui/screens/settings.slint:239
 msgctxt "SettingsScreen"
 msgid "White"
 msgstr "Blanc"
 
-#: crates/oxyfin/ui/screens/settings.slint:234
+#: crates/oxyfin/ui/screens/settings.slint:239
 msgctxt "SettingsScreen"
 msgid "Yellow"
 msgstr "Jaune"
 
-#: crates/oxyfin/ui/screens/settings.slint:246
+#: crates/oxyfin/ui/screens/settings.slint:251
 msgctxt "SettingsScreen"
 msgid "Background"
 msgstr "Fond"
 
-#: crates/oxyfin/ui/screens/settings.slint:247
+#: crates/oxyfin/ui/screens/settings.slint:252
 msgctxt "SettingsScreen"
 msgid "Outline"
 msgstr "Contour"
 
-#: crates/oxyfin/ui/screens/settings.slint:247
+#: crates/oxyfin/ui/screens/settings.slint:252
 msgctxt "SettingsScreen"
 msgid "Box"
 msgstr "Encadré"
 
-#: crates/oxyfin/ui/screens/settings.slint:259
+#: crates/oxyfin/ui/screens/settings.slint:264
 msgctxt "SettingsScreen"
 msgid "Position"
 msgstr "Position"
 
-#: crates/oxyfin/ui/screens/settings.slint:260
+#: crates/oxyfin/ui/screens/settings.slint:265
 msgctxt "SettingsScreen"
 msgid "Bottom"
 msgstr "En bas"
 
-#: crates/oxyfin/ui/screens/settings.slint:260
+#: crates/oxyfin/ui/screens/settings.slint:265
 msgctxt "SettingsScreen"
 msgid "Raised"
 msgstr "Surélevée"
 
-#: crates/oxyfin/ui/screens/settings.slint:274
+#: crates/oxyfin/ui/screens/settings.slint:279
 msgctxt "SettingsScreen"
 msgid "About"
 msgstr "À propos"
 
-#: crates/oxyfin/ui/screens/settings.slint:277
+#: crates/oxyfin/ui/screens/settings.slint:282
 msgctxt "SettingsScreen"
 msgid "Version"
 msgstr "Version"

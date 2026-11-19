@@ -1,5 +1,7 @@
 //! Pure application state machine: messages in, effects out.
 
+use oxyfin_core::TokenStorage;
+
 /// Identifier of a session generation. Identifiers are never reused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GenerationId(pub u64);
@@ -100,8 +102,8 @@ pub struct SessionInfo {
     pub server_url: String,
     /// Display name of the server, when it published one.
     pub server_name: Option<String>,
-    /// Whether the token is stored in a file rather than the keyring.
-    pub token_in_file: bool,
+    /// Where the token is stored.
+    pub token_storage: TokenStorage,
     /// Whether the file-token warning must be shown.
     pub show_file_token_warning: bool,
 }
@@ -465,7 +467,11 @@ mod tests {
             user_name: "alice".into(),
             server_url: "https://jf.example".into(),
             server_name: None,
-            token_in_file: warn,
+            token_storage: if warn {
+                TokenStorage::File
+            } else {
+                TokenStorage::Keyring
+            },
             show_file_token_warning: warn,
         }
     }

@@ -1,13 +1,12 @@
 //! Oxyfin, a native Jellyfin desktop client.
 
 use std::process::ExitCode;
-use std::sync::Arc;
 use std::time::Duration;
 
 use oxyfin::launch;
 use oxyfin::locale::select_language;
 use oxyfin::{App, AppWindow};
-use oxyfin_core::{MemoryStore, Paths, TokenVault};
+use oxyfin_core::{Paths, TokenVault};
 use slint::platform::WindowEvent;
 use slint::{BackendSelector, ComponentHandle, LogicalSize, PhysicalSize};
 
@@ -42,10 +41,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let paths = Paths::from_system()?;
     let vault = if launch::enabled(std::env::var(launch::MEMORY_TOKENS_VAR).ok().as_deref()) {
         log::info!("tokens are kept in memory only");
-        TokenVault::new(
-            Arc::new(MemoryStore::default()),
-            Arc::new(MemoryStore::default()),
-        )
+        TokenVault::memory()
     } else {
         TokenVault::system(&paths)
     };
