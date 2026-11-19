@@ -76,7 +76,7 @@ pub use playback::{
     PlayMode, PlaybackCommand, PlaybackController, PlaybackError, PlaybackEvent, PlaybackHandle,
     PlaybackTimings, PlaybackTitle, PlayerEventSink, PlayerEvents, QUALITIES, Quality, SEEK_STEP,
     SHUTDOWN_TIMEOUT, SPEEDS, SegmentKind, SkippableSegment, SubtitleOption, UNLOAD_GRACE,
-    chapter_at, next_chapter, player_events, previous_chapter,
+    chapter_at, next_chapter, player_events, previous_chapter, start_at,
 };
 pub use quick_connect::{QUICK_CONNECT_POLL_INTERVAL, QuickConnect};
 pub use secrets::{

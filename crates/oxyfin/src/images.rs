@@ -65,6 +65,34 @@ pub fn load_into(
     );
 }
 
+/// The `width` by `height` pixels of `pixels` at `x`, `y`, as an image;
+/// `None` when they fall outside it.
+pub fn crop(
+    pixels: &SharedPixelBuffer<Rgba8Pixel>,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+) -> Option<slint::Image> {
+    let stride = usize::try_from(pixels.width()).ok()?;
+    let fits = x.checked_add(width)? <= pixels.width() && y.checked_add(height)? <= pixels.height();
+    if !fits || width == 0 || height == 0 {
+        return None;
+    }
+    let (x, y, width) = (
+        usize::try_from(x).ok()?,
+        usize::try_from(y).ok()?,
+        usize::try_from(width).ok()?,
+    );
+    let source = pixels.as_slice();
+    let mut tile = SharedPixelBuffer::<Rgba8Pixel>::new(u32::try_from(width).ok()?, height);
+    for (row, target) in tile.make_mut_slice().chunks_exact_mut(width).enumerate() {
+        let start = (y + row) * stride + x;
+        target.copy_from_slice(source.get(start..start + width)?);
+    }
+    Some(slint::Image::from_rgba8(tile))
+}
+
 /// Fetches a trickplay sheet and decodes it on the runtime, then calls
 /// `apply` with the result on the Slint thread, `None` on a failure. A fetch
 /// rejected with 401 ends the session of generation `id` instead.
@@ -163,6 +191,19 @@ mod tests {
     use super::*;
     use image::{ImageFormat, Rgba, RgbaImage};
     use std::io::Cursor;
+
+    #[test]
+    fn crop_copies_the_tile_and_rejects_one_outside() {
+        let mut sheet = SharedPixelBuffer::<Rgba8Pixel>::new(4, 3);
+        for (index, pixel) in sheet.make_mut_slice().iter_mut().enumerate() {
+            *pixel = Rgba8Pixel::new(index as u8, 0, 0, 255);
+        }
+        let tile = crop(&sheet, 1, 1, 2, 2).unwrap().to_rgba8().unwrap();
+        let reds: Vec<u8> = tile.as_slice().iter().map(|pixel| pixel.r).collect();
+        assert_eq!(reds, [5, 6, 9, 10]);
+        assert!(crop(&sheet, 3, 0, 2, 1).is_none());
+        assert!(crop(&sheet, 0, 2, 1, 2).is_none());
+    }
 
     fn png(width: u32, height: u32) -> Vec<u8> {
         let image = RgbaImage::from_pixel(width, height, Rgba([10, 20, 30, 255]));

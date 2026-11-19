@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use oxyfin_core::{
     Chapter, PlaybackCommand, PlaybackError, PlaybackEvent, QUALITIES, Quality, SEEK_STEP, SPEEDS,
-    SegmentKind, SkippableSegment, Trickplay, TrickplaySheet, chapter_at, next_chapter,
-    previous_chapter,
+    SegmentKind, SkippableSegment, Trickplay, TrickplaySheet, TrickplayTile, next_chapter,
+    previous_chapter, start_at,
 };
 use oxyfin_player::SeekTarget;
 use slint::platform::WindowEvent;
@@ -16,7 +16,9 @@ use crate::present::{
     audio_rows, chapter_marks, chapter_rows, clock, next_up_title, playback_error_message,
     playback_title, subtitle_rows,
 };
-use crate::{AppWindow, Message, NextUp, QualityRow, SeekPreview, SkipKind, TrickplayGrid};
+use crate::{
+    AppWindow, ChapterRow, Message, NextUp, QualityRow, SeekPreview, SkipKind, TrickplayGrid,
+};
 
 /// Volume change of one step of the volume keys, in percent.
 pub const VOLUME_STEP: f64 = 5.0;
@@ -252,6 +254,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             window.set_player_seek_pending(false);
             window.set_player_duration(duration.map_or(0.0, |duration| duration.as_secs_f32()));
             window.set_player_total(clock(duration.unwrap_or_default()));
+            show_marks(window);
         }
         PlaybackEvent::Position(position) => {
             window.set_player_reported_position(position.as_secs_f32());
@@ -339,13 +342,10 @@ fn preview(window: &AppWindow, seconds: f32, request: &dyn Fn(TrickplaySheet)) {
     let time = Duration::from_secs_f32(seconds.max(0.0));
     let mut preview = window.get_player_preview();
     preview.time = clock(time);
-    let chapters: Vec<_> = window_chapters(window)
-        .into_iter()
-        .map(|(_, chapter)| chapter)
-        .collect();
-    let current = chapter_at(&chapters, time);
+    let current = with_starts(window, |starts| start_at(starts, time));
     preview.chapter = current
-        .map(|index| chapters[index].name.as_str().into())
+        .and_then(|index| window.get_player_chapters().row_data(index))
+        .map(|row| row.title)
         .unwrap_or_default();
     preview.chapter_number =
         current.map_or(0, |index| i32::try_from(index + 1).unwrap_or(i32::MAX));
@@ -446,16 +446,92 @@ fn show_segment(window: &AppWindow, segment: Option<SkippableSegment>) {
     window.set_player_skip_end(segment.map_or(0.0, |segment| segment.end.as_secs_f32()));
 }
 
+/// The chapter rows of the window, with the chapter starts kept beside them
+/// so that following the position needs no copy of the rows.
+struct ChapterModel {
+    rows: VecModel<ChapterRow>,
+    starts: Vec<Duration>,
+}
+
+impl Model for ChapterModel {
+    type Data = ChapterRow;
+
+    fn row_count(&self) -> usize {
+        self.rows.row_count()
+    }
+
+    fn row_data(&self, row: usize) -> Option<ChapterRow> {
+        self.rows.row_data(row)
+    }
+
+    fn set_row_data(&self, row: usize, data: ChapterRow) {
+        self.rows.set_row_data(row, data);
+    }
+
+    fn model_tracker(&self) -> &dyn slint::ModelTracker {
+        self.rows.model_tracker()
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+/// Calls `f` with the chapter starts of the window, empty without chapters.
+fn with_starts<T>(window: &AppWindow, f: impl FnOnce(&[Duration]) -> T) -> T {
+    let model = window.get_player_chapters();
+    let starts = model
+        .as_any()
+        .downcast_ref::<ChapterModel>()
+        .map_or(&[][..], |chapters| chapters.starts.as_slice());
+    f(starts)
+}
+
 /// Shows the chapters of the playing item: the menu rows, the seek bar cuts
 /// and the chapter playing.
 fn show_chapters(window: &AppWindow, chapters: &[Chapter]) {
+    let rows = chapter_rows(chapters);
+    // Starts as the menu seeks to them, so that a jump lands in its chapter.
+    let starts = rows
+        .iter()
+        .map(|row| Duration::from_secs_f32(row.start.max(0.0)))
+        .collect();
+    window.set_player_chapters(ModelRc::new(ChapterModel {
+        rows: VecModel::from(rows),
+        starts,
+    }));
+    show_marks(window);
+    show_current_chapter(window);
+}
+
+/// Cuts the seek bar at the chapter starts, for the current duration.
+fn show_marks(window: &AppWindow) {
     let duration = window.get_player_duration();
     let duration = (duration > 0.0).then(|| Duration::from_secs_f32(duration));
-    window.set_player_chapters(ModelRc::new(VecModel::from(chapter_rows(chapters))));
-    window.set_player_chapter_marks(ModelRc::new(VecModel::from(chapter_marks(
-        chapters, duration,
-    ))));
-    show_current_chapter(window);
+    let marks = with_starts(window, |starts| chapter_marks(starts, duration));
+    window.set_player_chapter_marks(ModelRc::new(VecModel::from(marks)));
+}
+
+/// Trickplay thumbnails standing for the chapters the server has no image
+/// of: the tile at each such chapter start, with the chapter index. Empty
+/// when the item has no trickplay.
+pub fn chapter_tiles(window: &AppWindow, chapters: &[Chapter]) -> Vec<(usize, TrickplayTile)> {
+    fallback_tiles(trickplay(&window.get_player_trickplay()).as_ref(), chapters)
+}
+
+fn fallback_tiles(
+    trickplay: Option<&Trickplay>,
+    chapters: &[Chapter],
+) -> Vec<(usize, TrickplayTile)> {
+    let Some(trickplay) = trickplay else {
+        return Vec::new();
+    };
+    chapters
+        .iter()
+        .enumerate()
+        .filter(|(_, chapter)| chapter.image.is_none())
+        .map(|(index, chapter)| (index, trickplay.tile_at(chapter.start)))
+        .collect()
 }
 
 fn clear_chapters(window: &AppWindow) {
@@ -464,32 +540,13 @@ fn clear_chapters(window: &AppWindow) {
     window.set_player_current_chapter(-1);
 }
 
-/// The chapters of the window, with their starts as the menu seeks to them.
-fn window_chapters(window: &AppWindow) -> Vec<(f32, Chapter)> {
-    window
-        .get_player_chapters()
-        .iter()
-        .map(|row| {
-            let chapter = Chapter {
-                start: Duration::from_secs_f32(row.start.max(0.0)),
-                name: row.title.to_string(),
-                image: None,
-            };
-            (row.start, chapter)
-        })
-        .collect()
-}
-
 fn shown_position(window: &AppWindow) -> Duration {
     Duration::from_secs_f32(window.get_player_position().max(0.0))
 }
 
 fn show_current_chapter(window: &AppWindow) {
-    let chapters: Vec<_> = window_chapters(window)
-        .into_iter()
-        .map(|(_, chapter)| chapter)
-        .collect();
-    let current = chapter_at(&chapters, shown_position(window) + CHAPTER_SLACK)
+    let position = shown_position(window) + CHAPTER_SLACK;
+    let current = with_starts(window, |starts| start_at(starts, position))
         .and_then(|index| i32::try_from(index).ok())
         .unwrap_or(-1);
     window.set_player_current_chapter(current);
@@ -498,17 +555,18 @@ fn show_current_chapter(window: &AppWindow) {
 /// Start, in seconds, of the chapter the chapter keys go to from the shown
 /// position: the next one, or back like mpv for a negative `direction`.
 fn chapter_step(window: &AppWindow, direction: i32) -> Option<f32> {
-    let (starts, chapters): (Vec<f32>, Vec<Chapter>) = window_chapters(window).into_iter().unzip();
-    let position = shown_position(window) + CHAPTER_SLACK;
-    let target = if direction < 0 {
-        previous_chapter(&chapters, position)
-    } else {
-        next_chapter(&chapters, position)
-    }?;
-    let index = chapters
-        .iter()
-        .position(|chapter| chapter.start == target)?;
-    starts.get(index).copied()
+    let position = shown_position(window);
+    let index = with_starts(window, |starts| {
+        if direction < 0 {
+            previous_chapter(starts, position)
+        } else {
+            next_chapter(starts, position + CHAPTER_SLACK)
+        }
+    })?;
+    window
+        .get_player_chapters()
+        .row_data(index)
+        .map(|row| row.start)
 }
 
 fn skip_kind(kind: SegmentKind) -> SkipKind {
@@ -638,6 +696,47 @@ mod tests {
         };
         assert_eq!(super::trickplay(&grid(&trickplay)), Some(trickplay));
         assert_eq!(super::trickplay(&TrickplayGrid::default()), None);
+    }
+
+    #[test]
+    fn chapters_without_an_image_fall_back_on_their_trickplay_tile() {
+        let trickplay = Trickplay {
+            item: "a".into(),
+            media_source: "a".into(),
+            resolution: 320,
+            width: 320,
+            height: 180,
+            columns: 10,
+            rows: 10,
+            count: 500,
+            interval: Duration::from_secs(10),
+        };
+        let chapter = |seconds, image| Chapter {
+            start: Duration::from_secs(seconds),
+            name: String::new(),
+            image,
+        };
+        let tagged = oxyfin_core::ImageRef {
+            item_id: "a".into(),
+            image_type: oxyfin_api::ImageType::Chapter,
+            tag: "t".into(),
+            index: Some(1),
+        };
+        let chapters = [
+            chapter(0, None),
+            chapter(60, Some(tagged)),
+            chapter(1010, None),
+        ];
+        let tiles = fallback_tiles(Some(&trickplay), &chapters);
+        assert_eq!(
+            tiles,
+            [
+                (0, trickplay.tile_at(Duration::ZERO)),
+                (2, trickplay.tile_at(Duration::from_secs(1010))),
+            ]
+        );
+        assert_eq!(tiles[1].1.sheet.index, 1);
+        assert!(fallback_tiles(None, &chapters).is_empty());
     }
 
     #[test]

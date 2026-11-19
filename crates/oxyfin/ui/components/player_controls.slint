@@ -13,6 +13,8 @@ export component Scrubber inherits Rectangle {
     in property <bool> knob;
     // Fractions of the slider, from 0 to 1, where a chapter starts: the bar is cut there.
     in property <[float]> marks;
+    // Draws a tick where the pointer hovers.
+    in property <bool> hover-marker;
     in property <bool> enabled: true;
     in-out property <bool> dragging;
     // The pointer is over the slider, or drags it.
@@ -74,6 +76,15 @@ export component Scrubber inherits Rectangle {
         height: parent.height;
         border-radius: self.width / 2;
         background: Theme.accent;
+    }
+
+    if root.hover-marker && root.hovering: marker := Rectangle {
+        x: root.hover-x - self.width / 2;
+        y: (parent.height - self.height) / 2;
+        width: Theme.seek-marker-width;
+        height: Theme.seek-marker-height;
+        border-radius: self.width / 2;
+        background: Theme.text-primary;
     }
 
     touch := TouchArea {
@@ -164,6 +175,7 @@ export component PlayerControls inherits Rectangle {
             step: 10;
             knob: true;
             marks: root.chapter-marks;
+            hover-marker: true;
             enabled: root.duration > 0;
             dragging <=> root.scrubbing;
             committed(value) => {

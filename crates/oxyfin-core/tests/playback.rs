@@ -14,7 +14,7 @@ use oxyfin_core::{
     PlaybackError, PlaybackEvent, PlaybackHandle, PlaybackTimings, PlayerEventSink, QUALITIES,
     Quality, SHUTDOWN_TIMEOUT, SegmentKind, SkippableSegment, SubtitleBackground, SubtitleSize,
     SubtitleStyle, Trickplay, UNLOAD_GRACE, chapter_at, next_chapter, player_events,
-    previous_chapter,
+    previous_chapter, start_at,
 };
 use oxyfin_player::{PlayerEvent, SeekTarget, Track, TrackId, TrackKind, UnloadReason};
 use serde_json::{Value, json};
@@ -2981,14 +2981,23 @@ fn chapter_at_picks_last_started() {
 
 #[test]
 fn chapter_steps_follow_mpv() {
-    let chapters = [chapter(0), chapter(60), chapter(120)];
-    let at = |seconds| Duration::from_secs(seconds);
-    assert_eq!(next_chapter(&chapters, at(70)), Some(at(120)));
-    assert_eq!(next_chapter(&chapters, at(0)), Some(at(60)));
-    assert_eq!(next_chapter(&chapters, at(130)), None);
-    assert_eq!(previous_chapter(&chapters, at(70)), Some(at(60)));
-    assert_eq!(previous_chapter(&chapters, at(61)), Some(at(0)));
-    assert_eq!(previous_chapter(&chapters, at(1)), Some(at(0)));
+    let at = Duration::from_secs;
+    let starts = [at(0), at(60), at(120)];
+    assert_eq!(start_at(&starts, at(90)), Some(1));
+    assert_eq!(start_at(&starts, at(60)), Some(1));
+    assert_eq!(start_at(&[], at(90)), None);
+    assert_eq!(next_chapter(&starts, at(70)), Some(2));
+    assert_eq!(next_chapter(&starts, at(0)), Some(1));
+    assert_eq!(next_chapter(&starts, at(130)), None);
+    assert_eq!(previous_chapter(&starts, at(70)), Some(1));
+    assert_eq!(previous_chapter(&starts, at(61)), Some(0));
+    assert_eq!(
+        previous_chapter(&starts, Duration::from_millis(62_900)),
+        Some(0),
+        "within the grace up to its end"
+    );
+    assert_eq!(previous_chapter(&starts, at(63)), Some(1));
+    assert_eq!(previous_chapter(&starts, at(1)), Some(0));
     assert_eq!(previous_chapter(&[], at(70)), None);
 }
 

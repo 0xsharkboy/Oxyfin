@@ -58,25 +58,31 @@ pub fn chapter_at(chapters: &[Chapter], position: Duration) -> Option<usize> {
         .rposition(|chapter| chapter.start <= position)
 }
 
-/// Start of the chapter after the one at `position`, if any.
-pub fn next_chapter(chapters: &[Chapter], position: Duration) -> Option<Duration> {
-    chapters
-        .iter()
-        .find(|chapter| chapter.start > position)
-        .map(|chapter| chapter.start)
+/// Index of the chapter playing at `position`, given the chapter starts in
+/// order: like [`chapter_at`] without the rest of each chapter.
+pub fn start_at(starts: &[Duration], position: Duration) -> Option<usize> {
+    starts.iter().rposition(|start| *start <= position)
 }
 
-/// Start of the chapter a jump back from `position` goes to, like mpv: the
+/// Index of the chapter after the one at `position`, given the chapter
+/// starts in order.
+pub fn next_chapter(starts: &[Duration], position: Duration) -> Option<usize> {
+    starts.iter().position(|start| *start > position)
+}
+
+/// Index of the chapter a jump back from `position` goes to, like mpv: the
 /// current chapter, or the previous one within [`CHAPTER_RESTART_GRACE`] of
 /// the current start.
-pub fn previous_chapter(chapters: &[Chapter], position: Duration) -> Option<Duration> {
-    let current = chapter_at(chapters, position)?;
-    let target = if position < chapters[current].start + CHAPTER_RESTART_GRACE {
+pub fn previous_chapter(starts: &[Duration], position: Duration) -> Option<usize> {
+    let current = start_at(starts, position)?;
+    let restarted = starts
+        .get(current)
+        .is_some_and(|start| position < *start + CHAPTER_RESTART_GRACE);
+    Some(if restarted {
         current.saturating_sub(1)
     } else {
         current
-    };
-    Some(chapters[target].start)
+    })
 }
 
 #[cfg(test)]

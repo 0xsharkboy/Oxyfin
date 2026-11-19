@@ -543,8 +543,6 @@ impl App {
     /// its row while the window still shows those chapters.
     #[cfg(feature = "mpv")]
     fn load_chapter_images(&self, window: &AppWindow, chapters: &[oxyfin_core::Chapter]) {
-        use slint::Model;
-
         let Some((generation, _, images)) = self.services() else {
             return;
         };
@@ -560,15 +558,30 @@ impl App {
             };
             let (weak, rows) = (window.as_weak(), rows.clone());
             crate::images::load_into(self, generation, &images, image, size, move |image| {
-                let Some(window) = weak.upgrade() else { return };
-                if window.get_player_chapters() != rows {
-                    return;
-                }
-                if let Some(mut row) = rows.row_data(index) {
-                    row.image = image;
-                    row.has_image = true;
-                    rows.set_row_data(index, row);
-                }
+                show_chapter_image(&weak, &rows, index, image);
+            });
+        }
+
+        let mut sheets: Vec<(oxyfin_core::TrickplaySheet, Vec<_>)> = Vec::new();
+        for (index, tile) in player::chapter_tiles(window, chapters) {
+            match sheets.iter_mut().find(|(sheet, _)| *sheet == tile.sheet) {
+                Some((_, tiles)) => tiles.push((index, tile)),
+                None => sheets.push((tile.sheet.clone(), vec![(index, tile)])),
+            }
+        }
+        for (sheet, tiles) in sheets {
+            let weak = window.as_weak();
+            let decoded = self.sheets.borrow_mut().get(&sheet);
+            if let Some(image) = decoded {
+                show_chapter_tiles(&weak, &rows, &image, &tiles);
+                continue;
+            }
+            let rows = rows.clone();
+            let loaded = sheet.clone();
+            crate::images::load_sheet(self, generation, &images, sheet, move |app, image| {
+                let Some(image) = image else { return };
+                app.sheets.borrow_mut().finish(&loaded, Some(image.clone()));
+                show_chapter_tiles(&weak, &rows, &image, &tiles);
             });
         }
     }
@@ -1069,6 +1082,46 @@ impl App {
                     log::warn!("cannot quit the event loop: {error}");
                 }
             }
+        }
+    }
+}
+
+/// Shows `image` as the thumbnail of chapter `index`, if the window still
+/// shows the chapters of `rows`.
+#[cfg(feature = "mpv")]
+fn show_chapter_image(
+    weak: &slint::Weak<AppWindow>,
+    rows: &slint::ModelRc<crate::ChapterRow>,
+    index: usize,
+    image: slint::Image,
+) {
+    use slint::Model;
+
+    let Some(window) = weak.upgrade() else { return };
+    if window.get_player_chapters() != *rows {
+        return;
+    }
+    if let Some(mut row) = rows.row_data(index) {
+        row.image = image;
+        row.has_image = true;
+        rows.set_row_data(index, row);
+    }
+}
+
+/// Shows the `tiles` of the decoded trickplay `sheet` as chapter thumbnails.
+#[cfg(feature = "mpv")]
+fn show_chapter_tiles(
+    weak: &slint::Weak<AppWindow>,
+    rows: &slint::ModelRc<crate::ChapterRow>,
+    sheet: &slint::Image,
+    tiles: &[(usize, oxyfin_core::TrickplayTile)],
+) {
+    let Some(pixels) = sheet.to_rgba8() else {
+        return;
+    };
+    for (index, tile) in tiles {
+        if let Some(image) = crate::images::crop(&pixels, tile.x, tile.y, tile.width, tile.height) {
+            show_chapter_image(weak, rows, *index, image);
         }
     }
 }

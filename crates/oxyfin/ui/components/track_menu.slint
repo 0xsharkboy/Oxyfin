@@ -7,6 +7,11 @@ export component MenuPanel inherits Rectangle {
     in property <length> limit: 400px;
     // The panel grows up to this width to fit its widest option; wider ones are elided.
     in property <length> widest: Theme.menu-width;
+    // Vertical offset of the options, negative once scrolled down.
+    in-out property <length> scroll-y;
+    // Height the options are shown in.
+    out property <length> visible-height: self.height - 2 * Theme.space-sm;
+    out property <length> content-height: content.preferred-height;
 
     width: max(Theme.menu-width, min(content.preferred-width, root.widest));
     height: min(content.preferred-height + 2 * Theme.space-sm, root.limit);
@@ -25,7 +30,8 @@ export component MenuPanel inherits Rectangle {
         x: 0;
         y: Theme.space-sm;
         width: parent.width;
-        height: parent.height - 2 * Theme.space-sm;
+        height: root.visible-height;
+        content-y <=> root.scroll-y;
         content-width: self.width;
         content-height: content.preferred-height;
 
