@@ -3,10 +3,10 @@
 mod common;
 
 use common::session;
-use oxyfin_api::{ImageType, ItemId};
+use oxyfin_api::{ImageType, ItemId, MediaSourceId};
 use oxyfin_core::{
     CacheBudgets, DEFAULT_DISK_BUDGET, DEFAULT_MEMORY_BUDGET, ImageCache, ImageRef, ImageSize,
-    Paths,
+    Paths, TrickplaySheet,
 };
 use tempfile::TempDir;
 use wiremock::matchers::{method, path, query_param};
@@ -388,4 +388,85 @@ fn trim_cancelled_before_it_runs_does_not_block_later_ones() {
         wait_removed(&stale).await;
     });
     drop(mock);
+}
+
+fn sheet(index: u32, layout: (u32, u32, u32)) -> TrickplaySheet {
+    TrickplaySheet {
+        item: ItemId::from("aaa"),
+        media_source: MediaSourceId::from("src"),
+        resolution: 320,
+        index,
+        layout,
+    }
+}
+
+async fn serve_sheet(mock: &MockServer, index: u32, body: &[u8]) {
+    Mock::given(method("GET"))
+        .and(path(format!("/Videos/aaa/Trickplay/320/{index}.jpg")))
+        .and(query_param("mediaSourceId", "src"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(body.to_vec()))
+        .mount(mock)
+        .await;
+}
+
+#[tokio::test]
+async fn trickplay_sheets_are_cached_in_memory_and_on_disk() {
+    let mock = MockServer::start().await;
+    serve_sheet(&mock, 0, b"sheet0").await;
+    serve_sheet(&mock, 1, b"sheet1").await;
+    let dir = TempDir::new().unwrap();
+    let first = cache(&mock, &dir, 1024);
+    let layout = (10_000, 10, 10);
+    assert_eq!(
+        &*first.trickplay_sheet(&sheet(0, layout)).await.unwrap(),
+        b"sheet0"
+    );
+    assert_eq!(
+        &*first.trickplay_sheet(&sheet(0, layout)).await.unwrap(),
+        b"sheet0"
+    );
+    assert_eq!(
+        &*first.trickplay_sheet(&sheet(1, layout)).await.unwrap(),
+        b"sheet1"
+    );
+    assert_eq!(requests(&mock).await, 2);
+
+    let second = cache(&mock, &dir, 1024);
+    assert_eq!(
+        &*second.trickplay_sheet(&sheet(1, layout)).await.unwrap(),
+        b"sheet1"
+    );
+    assert_eq!(requests(&mock).await, 2);
+}
+
+#[tokio::test]
+async fn a_trickplay_set_generated_again_is_fetched_again() {
+    let mock = MockServer::start().await;
+    serve_sheet(&mock, 0, b"sheet0").await;
+    let dir = TempDir::new().unwrap();
+    let cache = cache(&mock, &dir, 1024);
+    cache
+        .trickplay_sheet(&sheet(0, (10_000, 10, 10)))
+        .await
+        .unwrap();
+    cache
+        .trickplay_sheet(&sheet(0, (5_000, 10, 10)))
+        .await
+        .unwrap();
+    assert_eq!(requests(&mock).await, 2);
+}
+
+#[tokio::test]
+async fn a_missing_trickplay_sheet_is_an_error_and_not_cached() {
+    let mock = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let cache = cache(&mock, &dir, 1024);
+    assert!(
+        cache
+            .trickplay_sheet(&sheet(7, (10_000, 10, 10)))
+            .await
+            .is_err()
+    );
+    let images = Paths::under(dir.path()).cache_dir.join("images");
+    assert!(!images.exists() || files_in(&dir).is_empty());
 }

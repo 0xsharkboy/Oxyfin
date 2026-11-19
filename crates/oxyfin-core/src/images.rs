@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime};
 
 use oxyfin_api::{ImageRequest, Session};
 
-use crate::{ImageRef, Paths, Result};
+use crate::{ImageRef, Paths, Result, TrickplaySheet};
 
 /// Bounding box requested for an image, in pixels.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -283,8 +283,38 @@ impl ImageCache {
 
     /// Returns the bytes of `image` scaled to fit `size`, from memory, disk or the server.
     pub async fn get(&self, image: &ImageRef, size: ImageSize) -> Result<Arc<[u8]>> {
+        self.cached(file_name(image, size), async {
+            let mut request = ImageRequest::new(image.item_id.clone(), image.image_type.clone());
+            request.tag = Some(image.tag.clone());
+            request.max_width = Some(size.max_width);
+            request.max_height = Some(size.max_height);
+            self.session.fetch_image(&request).await
+        })
+        .await
+    }
+
+    /// Returns the JPEG bytes of a trickplay tile sheet, from memory, disk or
+    /// the server, within the same budgets as the other images.
+    pub async fn trickplay_sheet(&self, sheet: &TrickplaySheet) -> Result<Arc<[u8]>> {
+        self.cached(sheet_file_name(sheet), async {
+            self.session
+                .trickplay_sheet(
+                    &sheet.item,
+                    &sheet.media_source,
+                    sheet.resolution,
+                    sheet.index,
+                )
+                .await
+        })
+        .await
+    }
+
+    async fn cached(
+        &self,
+        name: String,
+        fetch: impl Future<Output = oxyfin_api::Result<Vec<u8>>>,
+    ) -> Result<Arc<[u8]>> {
         self.trimmer.ensure_ran();
-        let name = file_name(image, size);
         if let Some(bytes) = self.lock().get(&name) {
             return Ok(bytes);
         }
@@ -293,12 +323,7 @@ impl ImageCache {
             // An empty file is a write cut short, by a power loss for instance.
             Ok(bytes) if !bytes.is_empty() => bytes.into(),
             _ => {
-                let mut request =
-                    ImageRequest::new(image.item_id.clone(), image.image_type.clone());
-                request.tag = Some(image.tag.clone());
-                request.max_width = Some(size.max_width);
-                request.max_height = Some(size.max_height);
-                let bytes: Arc<[u8]> = self.session.fetch_image(&request).await?.into();
+                let bytes: Arc<[u8]> = fetch.await?.into();
                 self.write_disk(&name, &bytes).await;
                 bytes
             }
@@ -342,6 +367,17 @@ fn file_name(image: &ImageRef, size: ImageSize) -> String {
         sanitize(&image.tag),
         size.max_width,
         size.max_height
+    )
+}
+
+fn sheet_file_name(sheet: &TrickplaySheet) -> String {
+    let (interval, columns, rows) = sheet.layout;
+    format!(
+        "{}-Trickplay-{}-{}-{interval}ms-{columns}x{rows}-{}",
+        sanitize(sheet.item.as_str()),
+        sanitize(sheet.media_source.as_str()),
+        sheet.resolution,
+        sheet.index
     )
 }
 

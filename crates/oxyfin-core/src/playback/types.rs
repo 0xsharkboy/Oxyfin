@@ -10,6 +10,7 @@ use super::{AudioOption, SkippableSegment, SubtitleOption};
 use crate::SubtitleStyle;
 use crate::error::CoreError;
 use crate::models::Episode;
+use crate::trickplay::Trickplay;
 
 /// Interval between two progress reports while playing.
 pub const PROGRESS_INTERVAL: Duration = Duration::from_secs(10);
@@ -146,6 +147,15 @@ pub enum PlaybackEvent {
         /// episode, or when the episode list could not be fetched.
         has_next: bool,
     },
+    /// The loaded item has seek bar thumbnails: sent just before
+    /// [`PlaybackEvent::Ready`], and only then. The next
+    /// [`PlaybackEvent::Loading`] drops them.
+    ///
+    /// The tile of a time is [`Trickplay::tile_at`], and its sheet comes from
+    /// [`ImageCache::trickplay_sheet`].
+    ///
+    /// [`ImageCache::trickplay_sheet`]: crate::ImageCache::trickplay_sheet
+    Trickplay(Trickplay),
     /// The position changed.
     Position(Duration),
     /// The position entered a part the user can skip, or left it (`None`).

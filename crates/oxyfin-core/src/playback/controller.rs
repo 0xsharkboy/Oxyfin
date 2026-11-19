@@ -532,6 +532,7 @@ impl PlaybackController {
             prepared.start.unwrap_or_default(),
             prepared.siblings,
         );
+        current.trickplay = prepared.trickplay;
         current.segments = prepared.segments;
         self.current = Some(current);
         self.loading = false;
@@ -697,6 +698,10 @@ impl PlaybackController {
         let duration = duration.or_else(|| current.source.run_time_ticks.map(Ticks::to_duration));
         current.duration = duration;
         let has_next = current.siblings.next.is_some();
+        let trickplay = current.trickplay.clone();
+        if let Some(trickplay) = trickplay {
+            self.emit(PlaybackEvent::Trickplay(trickplay));
+        }
         self.emit(PlaybackEvent::Ready {
             duration,
             audio,
