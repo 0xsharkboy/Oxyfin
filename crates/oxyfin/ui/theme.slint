@@ -107,6 +107,9 @@ export struct TrackRow {
 }
 
 // The next episode toast of the player.
+// Part of the playing item the player offers to skip, mirroring the core `SegmentKind`.
+export enum SkipKind { none, intro, recap, preview, credits }
+
 export struct NextUp {
     visible: bool,
     id: string,

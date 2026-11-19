@@ -2,7 +2,7 @@ import "fonts/Inter-Regular.ttf";
 import "fonts/Inter-Medium.ttf";
 import "fonts/Inter-SemiBold.ttf";
 import "fonts/Inter-Bold.ttf";
-import { Theme, CardData, Message, Messages, NextUp, TrackRow } from "theme.slint";
+import { Theme, CardData, Message, Messages, NextUp, SkipKind, TrackRow } from "theme.slint";
 import { StartingScreen } from "screens/starting.slint";
 import { SignInScreen, ServerState, ServerStatus } from "screens/sign_in.slint";
 import { QuickConnectScreen } from "screens/quick_connect.slint";
@@ -16,7 +16,7 @@ import { SeriesScreen, SeriesData, SeriesPlayKind, EpisodeData } from "screens/s
 import { TopBarPage } from "components/top_bar.slint";
 import { NoticeBanner, NoticeData } from "components/notice_banner.slint";
 
-export { CardData, Message, Messages, NextUp, TrackRow } from "theme.slint";
+export { CardData, Message, Messages, NextUp, SkipKind, TrackRow } from "theme.slint";
 export { ServerState, ServerStatus }
 export { HomeBanner, HomeRow, HomeRowKind, HomeTitles }
 export { NoticeData }
@@ -152,6 +152,9 @@ export component AppWindow inherits Window {
     in property <[TrackRow]> player-audio;
     in property <[TrackRow]> player-subtitles;
     in property <NextUp> player-next-up;
+    in property <SkipKind> player-skip-kind;
+    // Where skipping the offered segment seeks to, in seconds.
+    in property <float> player-skip-end;
     // Set while a seek is on its way; the position is frozen until the player confirms it.
     in property <bool> player-seek-pending;
     in-out property <bool> player-scrubbing;
@@ -432,6 +435,8 @@ export component AppWindow inherits Window {
         audio: root.player-audio;
         subtitles: root.player-subtitles;
         next-up: root.player-next-up;
+        skip-kind: root.player-skip-kind;
+        skip-end: root.player-skip-end;
         fullscreen: root.full-screen;
         scrubbing <=> root.player-scrubbing;
         back => {

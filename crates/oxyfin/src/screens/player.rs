@@ -3,7 +3,9 @@
 use std::rc::Rc;
 use std::time::Duration;
 
-use oxyfin_core::{PlaybackCommand, PlaybackError, PlaybackEvent, SEEK_STEP, SPEEDS};
+use oxyfin_core::{
+    PlaybackCommand, PlaybackError, PlaybackEvent, SEEK_STEP, SPEEDS, SegmentKind, SkippableSegment,
+};
 use oxyfin_player::SeekTarget;
 use slint::platform::WindowEvent;
 use slint::{ComponentHandle, LogicalPosition, ModelRc, SharedString, VecModel};
@@ -11,7 +13,7 @@ use slint::{ComponentHandle, LogicalPosition, ModelRc, SharedString, VecModel};
 use crate::present::{
     audio_rows, clock, next_up_title, playback_error_message, playback_title, subtitle_rows,
 };
-use crate::{AppWindow, Message, NextUp};
+use crate::{AppWindow, Message, NextUp, SkipKind};
 
 /// Volume change of one step of the volume keys, in percent.
 pub const VOLUME_STEP: f64 = 5.0;
@@ -125,6 +127,7 @@ pub fn reset(window: &AppWindow) {
     window.set_player_subtitles(ModelRc::default());
     window.set_player_next_up(NextUp::default());
     window.set_player_scrubbing(false);
+    show_segment(window, None);
     show_progress(window, Duration::ZERO, None);
 }
 
@@ -146,6 +149,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             window.set_player_loading(true);
             window.set_player_has_error(false);
             window.set_player_next_up(NextUp::default());
+            show_segment(window, None);
             show_progress(window, Duration::ZERO, None);
         }
         PlaybackEvent::Ready {
@@ -191,10 +195,13 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             next.remaining = i32::try_from(remaining).unwrap_or(i32::MAX);
             window.set_player_next_up(next);
         }
-        PlaybackEvent::NextUpCancelled | PlaybackEvent::Stopped => {
+        PlaybackEvent::NextUpCancelled => window.set_player_next_up(NextUp::default()),
+        PlaybackEvent::Stopped => {
             window.set_player_next_up(NextUp::default());
+            show_segment(window, None);
         }
-        PlaybackEvent::Ended | PlaybackEvent::SessionExpired | PlaybackEvent::Segment(_) => {}
+        PlaybackEvent::Segment(segment) => show_segment(window, segment),
+        PlaybackEvent::Ended | PlaybackEvent::SessionExpired => {}
         PlaybackEvent::Error(error @ PlaybackError::Command { .. }) => {
             log::warn!("playback command failed: {error}");
             window.set_player_seek_pending(false);
@@ -204,6 +211,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             log::warn!("playback failed: {error}");
             window.set_player_loading(false);
             window.set_player_seek_pending(false);
+            show_segment(window, None);
             window.set_player_error(playback_error_message(&error));
             window.set_player_has_error(true);
         }
@@ -217,6 +225,21 @@ fn show_progress(window: &AppWindow, position: Duration, duration: Option<Durati
     window.set_player_elapsed(clock(position));
     window.set_player_duration(duration.map_or(0.0, |duration| duration.as_secs_f32()));
     window.set_player_total(clock(duration.unwrap_or_default()));
+}
+
+/// Offers to skip `segment`, or hides the offer.
+fn show_segment(window: &AppWindow, segment: Option<SkippableSegment>) {
+    window.set_player_skip_kind(segment.map_or(SkipKind::None, |segment| skip_kind(segment.kind)));
+    window.set_player_skip_end(segment.map_or(0.0, |segment| segment.end.as_secs_f32()));
+}
+
+fn skip_kind(kind: SegmentKind) -> SkipKind {
+    match kind {
+        SegmentKind::Intro => SkipKind::Intro,
+        SegmentKind::Recap => SkipKind::Recap,
+        SegmentKind::Preview => SkipKind::Preview,
+        SegmentKind::Credits => SkipKind::Credits,
+    }
 }
 
 fn show_tracks(
