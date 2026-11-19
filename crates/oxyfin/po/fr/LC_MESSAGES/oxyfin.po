@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-19 03:49+0000\n"
+"POT-Creation-Date: 2026-11-19 04:09+0000\n"
 "PO-Revision-Date: 2026-11-15 12:00+0000\n"
 "Last-Translator: Oxyfin contributors\n"
 "Language-Team: French\n"
@@ -184,7 +184,7 @@ msgctxt "PlayerControls"
 msgid "Fullscreen"
 msgstr "Plein écran"
 
-#: crates/oxyfin/ui/components/poster_grid.slint:53
+#: crates/oxyfin/ui/components/poster_grid.slint:55
 msgctxt "PosterGrid"
 msgid "Titles"
 msgstr "Titres"
