@@ -27,8 +27,8 @@ This file is the single source of truth for planned work. An item is checked onl
 - [x] Skip intro (media segments)
 - [x] Subtitle settings
 - [x] Transcoding and quality selection
-- [ ] Keep the screen awake during playback
-- [ ] Subtitle and audio delay
+- [x] Keep the screen awake during playback (Linux)
+- [x] Subtitle and audio delay
 - [ ] Chapters (seek bar markers and menu)
 - [ ] Remember audio and subtitle choices per series
 - [ ] Next episode options (countdown, autoplay, automatic segment skipping)
@@ -39,7 +39,7 @@ This file is the single source of truth for planned work. An item is checked onl
 - [ ] Collections (box sets)
 - [ ] Server discovery on the local network
 - [ ] Authorize another device (Quick Connect code entry)
-- [ ] Fullscreen launch option
+- [x] Fullscreen launch option
 - [ ] Discord Rich Presence (opt-in, never sends the server address)
 - [ ] AUR package
 
