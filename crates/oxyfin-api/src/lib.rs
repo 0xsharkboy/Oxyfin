@@ -41,8 +41,8 @@ pub use error::{Error, Result};
 pub use ids::{ItemId, MediaSourceId, PlaySessionId, UserId};
 pub use images::ImageRequest;
 pub use models::{
-    BaseItemDto, BaseItemKind, BaseItemPerson, ImageType, ItemFields, ItemSortBy, ItemsQuery,
-    MediaSegmentDto, MediaSegmentType, MediaSourceInfo, MediaStream, MediaStreamType,
+    BaseItemDto, BaseItemKind, BaseItemPerson, ChapterInfo, ImageType, ItemFields, ItemSortBy,
+    ItemsQuery, MediaSegmentDto, MediaSegmentType, MediaSourceInfo, MediaStream, MediaStreamType,
     PlaybackInfoResponse, PublicSystemInfo, QueryResult, SortOrder, SubtitleDeliveryMethod,
     TrickplayInfoDto, UserDto, UserItemDataDto,
 };

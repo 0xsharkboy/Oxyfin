@@ -10,6 +10,8 @@ pub struct ImageRequest {
     pub item_id: ItemId,
     /// Kind of image.
     pub image_type: ImageType,
+    /// Index among the images of that kind, such as the chapter number.
+    pub index: Option<u32>,
     /// Image tag, for cache busting.
     pub tag: Option<String>,
     /// Maximum width in pixels.
@@ -26,6 +28,7 @@ impl ImageRequest {
         Self {
             item_id,
             image_type,
+            index: None,
             tag: None,
             max_width: None,
             max_height: None,
@@ -34,7 +37,11 @@ impl ImageRequest {
     }
 
     fn route(&self) -> String {
-        format!("Items/{}/Images/{}", self.item_id, self.image_type.as_str())
+        let route = format!("Items/{}/Images/{}", self.item_id, self.image_type.as_str());
+        match self.index {
+            Some(index) => format!("{route}/{index}"),
+            None => route,
+        }
     }
 
     fn params(&self) -> Vec<(&'static str, String)> {
@@ -63,7 +70,7 @@ impl Session {
             .url(&request.route(), &request.params())
     }
 
-    /// Downloads an image (`GET Items/{id}/Images/{type}`).
+    /// Downloads an image (`GET Items/{id}/Images/{type}[/{index}]`).
     pub async fn fetch_image(&self, request: &ImageRequest) -> Result<Vec<u8>> {
         self.server()
             .http()

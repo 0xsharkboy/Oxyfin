@@ -120,6 +120,29 @@ pub struct BaseItemDto {
     /// [`BaseItemDto::trickplay_for`].
     #[serde(deserialize_with = "nullable_trickplay")]
     pub trickplay: HashMap<String, BTreeMap<u32, TrickplayInfoDto>>,
+    /// Chapters, ordered by start. Empty when the item has none.
+    #[serde(deserialize_with = "nullable_list")]
+    pub chapters: Vec<ChapterInfo>,
+    /// Folder holding the item.
+    pub parent_id: Option<ItemId>,
+}
+
+/// A chapter of an item.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase", default)]
+pub struct ChapterInfo {
+    /// Start, in ticks of 100 ns.
+    pub start_position_ticks: i64,
+    /// Name, when the media has one.
+    pub name: Option<String>,
+    /// Tag of the chapter image, when the server extracted one.
+    pub image_tag: Option<String>,
+}
+
+fn nullable_list<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+    deserializer: D,
+) -> Result<Vec<T>, D::Error> {
+    Ok(Option::<Vec<T>>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 impl BaseItemDto {
@@ -212,6 +235,8 @@ impl Default for BaseItemDto {
             series_primary_image_tag: None,
             people: Vec::new(),
             trickplay: HashMap::new(),
+            chapters: Vec::new(),
+            parent_id: None,
         }
     }
 }

@@ -80,6 +80,8 @@ string_enum!(
         Logo,
         /// A banner.
         Banner,
+        /// The image of a chapter, addressed by its index.
+        Chapter,
     }
 );
 
@@ -195,6 +197,8 @@ query_enum!(
         ChildCount,
         /// Media streams.
         MediaStreams,
+        /// Chapters.
+        Chapters,
     }
 );
 
