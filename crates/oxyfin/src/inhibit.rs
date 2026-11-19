@@ -54,6 +54,22 @@ pub enum Update {
     Event(PlaybackEvent),
 }
 
+/// Whether `event` can change the inhibition, so the app forwards only those,
+/// and not the position reported every second.
+pub fn concerns(event: &PlaybackEvent) -> bool {
+    matches!(
+        event,
+        PlaybackEvent::Loading { .. }
+            | PlaybackEvent::Ready { .. }
+            | PlaybackEvent::Paused(_)
+            | PlaybackEvent::Ended
+            | PlaybackEvent::Seeked
+            | PlaybackEvent::Stopped
+            | PlaybackEvent::SessionExpired
+            | PlaybackEvent::Error(_)
+    )
+}
+
 /// What the inhibition depends on, updated from [`Update`]s.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Playing {
@@ -212,14 +228,15 @@ async fn connect(bus: &Bus) -> Option<Connection> {
 }
 
 async fn inhibit(connection: &Connection) -> Option<Held> {
-    let portal = match timed(portal_inhibit(connection)).await {
+    let portal = match ask(connection, portal_inhibit(connection.clone()), Held::Portal).await {
         Ok(handle) => {
             log::debug!("screen kept awake through the portal ({handle})");
             return Some(Held::Portal(handle));
         }
         Err(error) => error,
     };
-    match timed(screen_saver_inhibit(connection)).await {
+    let screen_saver = screen_saver_inhibit(connection.clone());
+    match ask(connection, screen_saver, Held::ScreenSaver).await {
         Ok(cookie) => {
             log::debug!("screen kept awake through the screen saver ({cookie})");
             Some(Held::ScreenSaver(cookie))
@@ -231,13 +248,37 @@ async fn inhibit(connection: &Connection) -> Option<Held> {
     }
 }
 
+/// Waits at most [`CALL_TIMEOUT`] for an inhibition; one granted later is
+/// released as soon as it comes, so it never keeps the screen awake.
+async fn ask<T: Send + 'static>(
+    connection: &Connection,
+    call: impl Future<Output = zbus::Result<T>> + Send + 'static,
+    held: fn(T) -> Held,
+) -> zbus::Result<T> {
+    let mut call = tokio::spawn(call);
+    match tokio::time::timeout(CALL_TIMEOUT, &mut call).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) => Err(zbus::Error::Failure(error.to_string())),
+        Err(_) => {
+            let connection = connection.clone();
+            tokio::spawn(async move {
+                if let Ok(Ok(granted)) = call.await {
+                    log::warn!("an inhibition came after its timeout; releasing it");
+                    uninhibit(&connection, held(granted)).await;
+                }
+            });
+            Err(zbus::Error::Failure("no answer in time".to_owned()))
+        }
+    }
+}
+
 async fn timed<T>(call: impl Future<Output = zbus::Result<T>>) -> zbus::Result<T> {
     tokio::time::timeout(CALL_TIMEOUT, call)
         .await
         .unwrap_or_else(|_| Err(zbus::Error::Failure("no answer in time".to_owned())))
 }
 
-async fn portal_inhibit(connection: &Connection) -> zbus::Result<OwnedObjectPath> {
+async fn portal_inhibit(connection: Connection) -> zbus::Result<OwnedObjectPath> {
     let options = HashMap::from([("reason", Value::from(REASON))]);
     let reply = connection
         .call_method(
@@ -251,7 +292,7 @@ async fn portal_inhibit(connection: &Connection) -> zbus::Result<OwnedObjectPath
     reply.body().deserialize()
 }
 
-async fn screen_saver_inhibit(connection: &Connection) -> zbus::Result<u32> {
+async fn screen_saver_inhibit(connection: Connection) -> zbus::Result<u32> {
     let reply = connection
         .call_method(
             Some(SCREEN_SAVER),
@@ -351,6 +392,33 @@ mod tests {
             event(PlaybackEvent::Paused(false)),
         ]));
         assert!(!after(&[active.clone(), ready(), Update::Active(false)]));
+    }
+
+    #[test]
+    fn only_the_events_that_change_the_inhibition_are_forwarded() {
+        for update in [ready(), loading()] {
+            let Update::Event(event) = update else {
+                unreachable!()
+            };
+            assert!(concerns(&event), "{event:?}");
+        }
+        for event in [
+            PlaybackEvent::Paused(true),
+            PlaybackEvent::Ended,
+            PlaybackEvent::Seeked,
+            PlaybackEvent::Stopped,
+            PlaybackEvent::SessionExpired,
+            PlaybackEvent::Error(PlaybackError::Network),
+        ] {
+            assert!(concerns(&event), "{event:?}");
+        }
+        for event in [
+            PlaybackEvent::Position(Duration::from_secs(1)),
+            PlaybackEvent::Volume(50.0),
+            PlaybackEvent::SubtitleDelay(100),
+        ] {
+            assert!(!concerns(&event), "{event:?}");
+        }
     }
 
     #[test]
