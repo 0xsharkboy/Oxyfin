@@ -18,7 +18,7 @@ This file is the single source of truth for planned work. An item is checked onl
 - [x] Player (direct play, controls, audio and subtitle menu, mpv shortcuts, resume and progress sync, next episode)
 - [x] Settings (account, sign out, version)
 - [x] English UI with translation support
-- [ ] Linux packages (Flatpak, Nix)
+- [x] Linux packages (Flatpak, Nix)
 
 ## Later
 
