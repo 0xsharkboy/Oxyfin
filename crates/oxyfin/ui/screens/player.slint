@@ -1,5 +1,5 @@
 import { Spinner } from "std-widgets.slint";
-import { Theme, Message, Messages, TrackRow, NextUp, QualityRow, SeekPreview, SkipKind } from "../theme.slint";
+import { Theme, Message, Messages, TrackRow, NextUp, QualityRow, SeekPreview, SkipKind, ChapterRow } from "../theme.slint";
 import { SeekPreviewPopup } from "../components/seek_preview.slint";
 import { Icons } from "../icons.slint";
 import { Button, ButtonStyle } from "../components/button.slint";
@@ -8,9 +8,10 @@ import { BodyStrongText, BodyText, HeadingText, LabelText } from "../components/
 import { PlayerControls } from "../components/player_controls.slint";
 import { TrackMenu } from "../components/track_menu.slint";
 import { SpeedMenu } from "../components/speed_menu.slint";
+import { ChapterMenu } from "../components/chapter_menu.slint";
 import { NextEpisodeToast } from "../components/next_episode_toast.slint";
 
-export enum PlayerMenu { none, tracks, speed }
+export enum PlayerMenu { none, tracks, speed, chapters }
 
 enum DelayKind { none, audio, subtitle }
 
@@ -41,6 +42,11 @@ export component PlayerScreen inherits Rectangle {
     // Delays in milliseconds.
     in property <int> audio-delay;
     in property <int> subtitle-delay;
+    in property <[ChapterRow]> chapters;
+    // Index in `chapters` of the chapter playing, -1 for none.
+    in property <int> current-chapter: -1;
+    // Where each chapter but the first starts, as fractions of the duration.
+    in property <[float]> chapter-marks;
     in property <NextUp> next-up;
     in property <SkipKind> skip-kind;
     in property <float> skip-end;
@@ -72,6 +78,8 @@ export component PlayerScreen inherits Rectangle {
     callback command-set-audio-delay(ms: int);
     callback command-step-subtitle-delay(direction: int);
     callback command-set-subtitle-delay(ms: int);
+    // Jump to the next chapter, or back like mpv for a negative direction.
+    callback command-step-chapter(direction: int);
     // The pointer hovers or drags the seek bar at `seconds`: the preview should show that time.
     callback preview-requested(seconds: float);
 
@@ -120,6 +128,13 @@ export component PlayerScreen inherits Rectangle {
     // Slint drops the focus of an element that disappears, which would silence the shortcuts:
     // the player buttons never take focus on click, and the shortcuts take it back when a
     // control reached with Tab hides.
+    property <bool> has-chapters: root.chapters.length > 0;
+    changed has-chapters => {
+        if !self.has-chapters && root.menu == PlayerMenu.chapters {
+            root.menu = PlayerMenu.none;
+        }
+    }
+
     property <bool> toast-visible: root.next-up.visible;
     changed toast-visible => {
         if !self.toast-visible {
@@ -230,6 +245,10 @@ export component PlayerScreen inherits Rectangle {
                     root.command-previous();
                 } else if event.text == "s" || event.text == "S" {
                     root.skip-segment();
+                } else if event.text == Key.PageUp {
+                    root.command-step-chapter(-1);
+                } else if event.text == Key.PageDown {
+                    root.command-step-chapter(1);
                 } else if event.text == "z" {
                     root.step-delay(DelayKind.subtitle, -1);
                 } else if event.text == "Z" || event.text == "x" {
@@ -328,6 +347,9 @@ export component PlayerScreen inherits Rectangle {
                 volume: root.volume;
                 muted: root.muted;
                 tracks-open: root.menu == PlayerMenu.tracks;
+                has-chapters: root.has-chapters;
+                chapters-open: root.menu == PlayerMenu.chapters;
+                chapter-marks: root.chapter-marks;
                 speed-open: root.menu == PlayerMenu.speed;
                 fullscreen: root.fullscreen;
                 scrubbing <=> root.scrubbing;
@@ -357,6 +379,9 @@ export component PlayerScreen inherits Rectangle {
                 }
                 toggle-tracks => {
                     root.toggle-menu(PlayerMenu.tracks);
+                }
+                toggle-chapters => {
+                    root.toggle-menu(PlayerMenu.chapters);
                 }
                 toggle-speed => {
                     root.toggle-menu(PlayerMenu.speed);
@@ -394,6 +419,18 @@ export component PlayerScreen inherits Rectangle {
                 }
                 reset-subtitle-delay => {
                     root.command-set-subtitle-delay(0);
+                }
+            }
+
+            if root.menu == PlayerMenu.chapters: ChapterMenu {
+                x: parent.width - self.width - Theme.space-2xl;
+                y: root.menu-bottom - self.height;
+                limit: root.menu-max-height;
+                chapters: root.chapters;
+                current: root.current-chapter;
+                chosen(start) => {
+                    root.command-seek(start);
+                    root.menu = PlayerMenu.none;
                 }
             }
 

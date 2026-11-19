@@ -8,7 +8,7 @@ use oxyfin_player::{Track, TrackId, TrackKind};
 use super::loader::Resume;
 use super::segments::{SkippableSegment, active};
 use super::tracks::{Delivery, TrackMap};
-use super::{AudioOption, SubtitleOption};
+use super::{AudioOption, Chapter, SubtitleOption};
 use crate::models::Episode;
 use crate::trickplay::Trickplay;
 
@@ -50,6 +50,8 @@ pub(super) struct Current {
     pub(super) siblings: Siblings,
     /// Seek bar thumbnails of the source, when the server has some.
     pub(super) trickplay: Option<Trickplay>,
+    /// Chapters of the item.
+    pub(super) chapters: Vec<Chapter>,
     /// Parts of the item the user can skip, ordered by start.
     pub(super) segments: Vec<SkippableSegment>,
     /// The segment offered at the last position, as last emitted.
@@ -91,6 +93,7 @@ impl Current {
             ended: false,
             siblings,
             trickplay: None,
+            chapters: Vec::new(),
             segments: Vec::new(),
             segment: None,
             expected_audio: None,

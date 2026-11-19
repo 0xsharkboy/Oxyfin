@@ -10,6 +10,7 @@ use oxyfin_player::MediaSource;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::task::JoinHandle;
 
+use super::chapters::{Chapter, chapters};
 use super::current::Siblings;
 use super::queue::neighbours;
 use super::segments::{SkippableSegment, skippable};
@@ -57,6 +58,8 @@ pub(super) struct Prepared {
     pub(super) trickplay: Option<Trickplay>,
     /// Segments that arrived while the item waited to load.
     pub(super) segments: Vec<SkippableSegment>,
+    /// Chapters of the item.
+    pub(super) chapters: Vec<Chapter>,
 }
 
 /// Why an item cannot be loaded.
@@ -234,6 +237,7 @@ async fn fetch(
         siblings,
         trickplay,
         segments: Vec::new(),
+        chapters: chapters(&dto),
     })
 }
 

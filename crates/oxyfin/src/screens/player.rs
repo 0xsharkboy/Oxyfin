@@ -4,15 +4,17 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use oxyfin_core::{
-    PlaybackCommand, PlaybackError, PlaybackEvent, QUALITIES, Quality, SEEK_STEP, SPEEDS,
-    SegmentKind, SkippableSegment, Trickplay, TrickplaySheet,
+    Chapter, PlaybackCommand, PlaybackError, PlaybackEvent, QUALITIES, Quality, SEEK_STEP, SPEEDS,
+    SegmentKind, SkippableSegment, Trickplay, TrickplaySheet, chapter_at, next_chapter,
+    previous_chapter,
 };
 use oxyfin_player::SeekTarget;
 use slint::platform::WindowEvent;
-use slint::{ComponentHandle, LogicalPosition, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, LogicalPosition, Model, ModelRc, SharedString, VecModel};
 
 use crate::present::{
-    audio_rows, clock, next_up_title, playback_error_message, playback_title, subtitle_rows,
+    audio_rows, chapter_marks, chapter_rows, clock, next_up_title, playback_error_message,
+    playback_title, subtitle_rows,
 };
 use crate::{AppWindow, Message, NextUp, QualityRow, SeekPreview, SkipKind, TrickplayGrid};
 
@@ -21,6 +23,10 @@ pub const VOLUME_STEP: f64 = 5.0;
 
 /// Change of one step of the delay keys and buttons, in milliseconds.
 pub const DELAY_STEP_MS: i64 = 100;
+
+/// Lead given to the position before a chapter jump, so that a seek landing
+/// a little before a chapter start counts as inside that chapter.
+const CHAPTER_SLACK: Duration = Duration::from_millis(250);
 
 /// Wires the player controls of `window` to `send`.
 ///
@@ -74,6 +80,7 @@ pub fn bind(window: &AppWindow, send: Rc<dyn Fn(PlaybackCommand)>) {
             window.set_player_position(seconds);
             window.set_player_elapsed(clock(Duration::from_secs_f32(seconds)));
             window.set_player_seek_pending(true);
+            show_current_chapter(&window);
         }
         to(PlaybackCommand::Seek(SeekTarget::Absolute(
             Duration::from_secs_f32(seconds),
@@ -129,6 +136,13 @@ pub fn bind(window: &AppWindow, send: Rc<dyn Fn(PlaybackCommand)>) {
             direction,
         )));
     });
+    let weak = window.as_weak();
+    window.on_player_command_step_chapter(move |direction| {
+        let Some(window) = weak.upgrade() else { return };
+        if let Some(start) = chapter_step(&window, direction) {
+            window.invoke_player_command_seek(start);
+        }
+    });
     let (to, weak) = (send, window.as_weak());
     window.on_player_command_step_volume(move |direction| {
         let Some(window) = weak.upgrade() else { return };
@@ -175,6 +189,7 @@ pub fn reset(window: &AppWindow) {
     window.set_player_subtitle_delay(0);
     window.set_player_next_up(NextUp::default());
     window.set_player_scrubbing(false);
+    clear_chapters(window);
     clear_preview(window);
     show_segment(window, None);
     show_progress(window, Duration::ZERO, None);
@@ -227,6 +242,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             window.set_player_loading(true);
             window.set_player_has_error(false);
             window.set_player_next_up(NextUp::default());
+            clear_chapters(window);
             show_segment(window, None);
             show_progress(window, Duration::ZERO, None);
         }
@@ -249,6 +265,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             if !window.get_player_scrubbing() && !window.get_player_seek_pending() {
                 window.set_player_position(position.as_secs_f32());
                 window.set_player_elapsed(clock(position));
+                show_current_chapter(window);
             }
         }
         PlaybackEvent::Paused(paused) => window.set_player_paused(paused),
@@ -264,6 +281,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
                 let position = window.get_player_reported_position();
                 window.set_player_position(position);
                 window.set_player_elapsed(clock(Duration::from_secs_f32(position.max(0.0))));
+                show_current_chapter(window);
             }
         }
         PlaybackEvent::TracksChanged { audio, subtitles } => {
@@ -290,6 +308,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
         }
         PlaybackEvent::Segment(segment) => show_segment(window, segment),
         PlaybackEvent::Trickplay(trickplay) => window.set_player_trickplay(grid(&trickplay)),
+        PlaybackEvent::Chapters(chapters) => show_chapters(window, &chapters),
         PlaybackEvent::Ended | PlaybackEvent::SessionExpired => {}
         PlaybackEvent::Error(error @ PlaybackError::Command { .. }) => {
             log::warn!("playback command failed: {error}");
@@ -327,6 +346,16 @@ fn preview(window: &AppWindow, seconds: f32, request: &dyn Fn(TrickplaySheet)) {
     let time = Duration::from_secs_f32(seconds.max(0.0));
     let mut preview = window.get_player_preview();
     preview.time = clock(time);
+    let chapters: Vec<_> = window_chapters(window)
+        .into_iter()
+        .map(|(_, chapter)| chapter)
+        .collect();
+    let current = chapter_at(&chapters, time);
+    preview.chapter = current
+        .map(|index| chapters[index].name.as_str().into())
+        .unwrap_or_default();
+    preview.chapter_number =
+        current.map_or(0, |index| i32::try_from(index + 1).unwrap_or(i32::MAX));
     let Some(trickplay) = trickplay(&window.get_player_trickplay()) else {
         window.set_player_preview(preview);
         return;
@@ -422,6 +451,71 @@ fn show_progress(window: &AppWindow, position: Duration, duration: Option<Durati
 fn show_segment(window: &AppWindow, segment: Option<SkippableSegment>) {
     window.set_player_skip_kind(segment.map_or(SkipKind::None, |segment| skip_kind(segment.kind)));
     window.set_player_skip_end(segment.map_or(0.0, |segment| segment.end.as_secs_f32()));
+}
+
+/// Shows the chapters of the playing item: the menu rows, the seek bar cuts
+/// and the chapter playing.
+fn show_chapters(window: &AppWindow, chapters: &[Chapter]) {
+    let duration = window.get_player_duration();
+    let duration = (duration > 0.0).then(|| Duration::from_secs_f32(duration));
+    window.set_player_chapters(ModelRc::new(VecModel::from(chapter_rows(chapters))));
+    window.set_player_chapter_marks(ModelRc::new(VecModel::from(chapter_marks(
+        chapters, duration,
+    ))));
+    show_current_chapter(window);
+}
+
+fn clear_chapters(window: &AppWindow) {
+    window.set_player_chapters(ModelRc::default());
+    window.set_player_chapter_marks(ModelRc::default());
+    window.set_player_current_chapter(-1);
+}
+
+/// The chapters of the window, with their starts as the menu seeks to them.
+fn window_chapters(window: &AppWindow) -> Vec<(f32, Chapter)> {
+    window
+        .get_player_chapters()
+        .iter()
+        .map(|row| {
+            let chapter = Chapter {
+                start: Duration::from_secs_f32(row.start.max(0.0)),
+                name: row.title.to_string(),
+                image: None,
+            };
+            (row.start, chapter)
+        })
+        .collect()
+}
+
+fn shown_position(window: &AppWindow) -> Duration {
+    Duration::from_secs_f32(window.get_player_position().max(0.0))
+}
+
+fn show_current_chapter(window: &AppWindow) {
+    let chapters: Vec<_> = window_chapters(window)
+        .into_iter()
+        .map(|(_, chapter)| chapter)
+        .collect();
+    let current = chapter_at(&chapters, shown_position(window) + CHAPTER_SLACK)
+        .and_then(|index| i32::try_from(index).ok())
+        .unwrap_or(-1);
+    window.set_player_current_chapter(current);
+}
+
+/// Start, in seconds, of the chapter the chapter keys go to from the shown
+/// position: the next one, or back like mpv for a negative `direction`.
+fn chapter_step(window: &AppWindow, direction: i32) -> Option<f32> {
+    let (starts, chapters): (Vec<f32>, Vec<Chapter>) = window_chapters(window).into_iter().unzip();
+    let position = shown_position(window) + CHAPTER_SLACK;
+    let target = if direction < 0 {
+        previous_chapter(&chapters, position)
+    } else {
+        next_chapter(&chapters, position)
+    }?;
+    let index = chapters
+        .iter()
+        .position(|chapter| chapter.start == target)?;
+    starts.get(index).copied()
 }
 
 fn skip_kind(kind: SegmentKind) -> SkipKind {

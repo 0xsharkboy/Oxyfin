@@ -1,0 +1,101 @@
+import { Theme, ChapterRow, Messages } from "../theme.slint";
+import { MenuPanel, MenuHeader } from "track_menu.slint";
+import { BodyText, CaptionText } from "text.slint";
+
+// One chapter of the menu: its thumbnail, name and start. The current one is highlighted.
+component ChapterOption inherits Rectangle {
+    in property <ChapterRow> chapter;
+    in property <int> number;
+    in property <bool> current;
+    callback chosen();
+
+    property <string> title: Messages.chapter-title(root.chapter.title, root.number);
+
+    accessible-role: list-item;
+    accessible-label: root.title + " " + root.chapter.start-label;
+    accessible-item-selectable: true;
+    accessible-item-selected: root.current;
+    accessible-action-default => {
+        root.chosen();
+    }
+
+    height: layout.preferred-height;
+    background: root.current || touch.has-hover ? Theme.bg-hover : transparent;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.chosen();
+        }
+    }
+
+    layout := HorizontalLayout {
+        padding-left: Theme.space-md;
+        padding-right: Theme.space-lg;
+        padding-top: Theme.space-chip-y;
+        padding-bottom: Theme.space-chip-y;
+        spacing: Theme.space-md;
+
+        Rectangle {
+            width: Theme.chapter-thumb-width;
+            height: Theme.chapter-thumb-height;
+            border-radius: Theme.radius-xs;
+            background: Theme.landscape-placeholder;
+            clip: true;
+
+            if root.chapter.has-image: Image {
+                width: parent.width;
+                height: parent.height;
+                source: root.chapter.image;
+                image-fit: cover;
+            }
+
+            if root.current: Rectangle {
+                border-radius: Theme.radius-xs;
+                border-width: Theme.border-focus;
+                border-color: Theme.accent;
+            }
+        }
+
+        BodyText {
+            accessible-role: none;
+            text: root.title;
+            font-weight: root.current ? Theme.body-strong-weight : Theme.body-weight;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+
+        CaptionText {
+            accessible-role: none;
+            text: root.chapter.start-label;
+            color: root.current ? Theme.accent : Theme.text-secondary;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// Chapters menu of the player: a click seeks to the start of the chapter.
+export component ChapterMenu inherits MenuPanel {
+    in property <[ChapterRow]> chapters;
+    // Index of the chapter playing, -1 for none.
+    in property <int> current;
+    callback chosen(start: float);
+
+    accessible-role: list;
+    accessible-label: @tr("Chapters");
+    width: Theme.chapter-menu-width;
+
+    MenuHeader {
+        text: @tr("CHAPTERS");
+    }
+
+    for row[index] in root.chapters: ChapterOption {
+        chapter: row;
+        number: index + 1;
+        current: index == root.current;
+        chosen => {
+            root.chosen(row.start);
+        }
+    }
+}

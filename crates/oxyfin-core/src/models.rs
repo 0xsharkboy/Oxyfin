@@ -25,6 +25,8 @@ pub struct ImageRef {
     pub image_type: ImageType,
     /// Cache tag of the image.
     pub tag: String,
+    /// Index among the images of that kind, for a chapter image; `None` otherwise.
+    pub index: Option<u32>,
 }
 
 /// State of an item for the signed-in user.
@@ -69,6 +71,7 @@ fn image(item_id: &ItemId, image_type: ImageType, tag: Option<&String>) -> Optio
         item_id: item_id.clone(),
         image_type,
         tag: tag.clone(),
+        index: None,
     })
 }
 

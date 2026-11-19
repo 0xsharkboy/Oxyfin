@@ -57,8 +57,16 @@ export global Theme {
     // Player menus: their usual width, and the widest the track menu grows to fit its rows.
     out property <length> menu-width: 280px;
     out property <length> menu-max-width: 420px;
+    // Chapters menu and its thumbnails.
+    out property <length> chapter-menu-width: 360px;
+    out property <length> chapter-thumb-width: 64px;
+    out property <length> chapter-thumb-height: 36px;
+    // Cut in the seek bar at each chapter start.
+    out property <length> chapter-gap-width: 3px;
+    out property <length> chapter-gap-height: 8px;
 
     out property <length> radius-indicator: 2px;
+    out property <length> radius-xs: 4px;
     out property <length> radius-sm: 6px;
     out property <length> radius-md: 8px;
     out property <length> radius-lg: 12px;
@@ -117,6 +125,15 @@ export struct TrackRow {
     selected: bool,
 }
 
+// A chapter of the player menu. `title` is empty when the media names none; `start` is in seconds.
+export struct ChapterRow {
+    title: string,
+    start-label: string,
+    start: float,
+    image: image,
+    has-image: bool,
+}
+
 // A streaming quality of the player menu: `height` and `kbps` are 0 for the original quality.
 export struct QualityRow {
     height: int,
@@ -142,8 +159,11 @@ export struct TrickplayGrid {
 
 // What the seek bar preview shows: the hovered time and, once its sheet is loaded, the
 // thumbnail of that time as a rectangle of `image` in pixels. `sheet` names the sheet wanted.
+// `chapter-number` counts from 1 and is 0 when the time has no chapter; `chapter` is its name.
 export struct SeekPreview {
     time: string,
+    chapter: string,
+    chapter-number: int,
     sheet: string,
     has-image: bool,
     image: image,
@@ -188,6 +208,14 @@ export global Messages {
             return @tr("Server found (Jellyfin {})", version);
         }
         @tr("Server found: {} (Jellyfin {})", name, version)
+    }
+
+    // The name of chapter `number`, counted from 1, or a numbered one when the media names none.
+    public pure function chapter-title(title: string, number: int) -> string {
+        if title.is-empty {
+            return @tr("Chapter {}", number);
+        }
+        title
     }
 
     // An audio or subtitle delay given in milliseconds, in seconds to the tenth, such as "+0.3 s".

@@ -8,12 +8,13 @@ use std::time::Duration;
 use common::{
     Call, FakePlayer, TEST_TOKEN, bodies, events_until, fixture, session, wait_event, wait_requests,
 };
-use oxyfin_api::{ItemId, MediaSourceId};
+use oxyfin_api::{ImageType, ItemId, MediaSourceId};
 use oxyfin_core::{
-    PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackController, PlaybackError, PlaybackEvent,
-    PlaybackHandle, PlaybackTimings, PlayerEventSink, QUALITIES, Quality, SHUTDOWN_TIMEOUT,
-    SegmentKind, SkippableSegment, SubtitleBackground, SubtitleSize, SubtitleStyle, Trickplay,
-    UNLOAD_GRACE, player_events,
+    Chapter, ImageRef, PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackController,
+    PlaybackError, PlaybackEvent, PlaybackHandle, PlaybackTimings, PlayerEventSink, QUALITIES,
+    Quality, SHUTDOWN_TIMEOUT, SegmentKind, SkippableSegment, SubtitleBackground, SubtitleSize,
+    SubtitleStyle, Trickplay, UNLOAD_GRACE, chapter_at, next_chapter, player_events,
+    previous_chapter,
 };
 use oxyfin_player::{PlayerEvent, SeekTarget, Track, TrackId, TrackKind, UnloadReason};
 use serde_json::{Value, json};
@@ -2954,4 +2955,110 @@ async fn a_quality_change_keeps_the_delays() {
     h.loaded_with(transcode_tracks()).await;
     let calls = h.player.calls();
     assert!(!calls.contains(&Call::SetSubtitleDelay(0)), "{calls:?}");
+}
+
+fn chapter(seconds: u64) -> Chapter {
+    Chapter {
+        start: Duration::from_secs(seconds),
+        name: format!("At {seconds}"),
+        image: None,
+    }
+}
+
+#[test]
+fn chapter_at_picks_last_started() {
+    let chapters = [chapter(0), chapter(60), chapter(120)];
+    assert_eq!(chapter_at(&chapters, Duration::from_secs(90)), Some(1));
+    assert_eq!(chapter_at(&chapters, Duration::ZERO), Some(0));
+    assert_eq!(chapter_at(&chapters, Duration::from_secs(60)), Some(1));
+    assert_eq!(chapter_at(&chapters, Duration::from_secs(500)), Some(2));
+    assert_eq!(chapter_at(&[], Duration::from_secs(90)), None);
+    assert_eq!(
+        chapter_at(&[chapter(10), chapter(20)], Duration::from_secs(5)),
+        None
+    );
+}
+
+#[test]
+fn chapter_steps_follow_mpv() {
+    let chapters = [chapter(0), chapter(60), chapter(120)];
+    let at = |seconds| Duration::from_secs(seconds);
+    assert_eq!(next_chapter(&chapters, at(70)), Some(at(120)));
+    assert_eq!(next_chapter(&chapters, at(0)), Some(at(60)));
+    assert_eq!(next_chapter(&chapters, at(130)), None);
+    assert_eq!(previous_chapter(&chapters, at(70)), Some(at(60)));
+    assert_eq!(previous_chapter(&chapters, at(61)), Some(at(0)));
+    assert_eq!(previous_chapter(&chapters, at(1)), Some(at(0)));
+    assert_eq!(previous_chapter(&[], at(70)), None);
+}
+
+async fn mount_item_with_chapters(mock: &MockServer, chapters: Value) {
+    let mut item = fixture("item_movie");
+    item["Chapters"] = chapters;
+    Mock::given(method("GET"))
+        .and(path(format!("/Items/{MOVIE_ID}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(item))
+        .with_priority(1)
+        .mount(mock)
+        .await;
+}
+
+#[tokio::test]
+async fn chapters_event_follows_ready() {
+    let mock = MockServer::start().await;
+    mount_item_with_chapters(
+        &mock,
+        json!([
+            {"StartPositionTicks": 0, "Name": "Opening", "ImageTag": "tag0"},
+            {"StartPositionTicks": 600_000_000, "Name": "", "ImageTag": null},
+            {"StartPositionTicks": 1_200_000_000, "Name": "Credits", "ImageTag": "tag2"},
+        ]),
+    )
+    .await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.play(PlayMode::FromStart).await;
+    let mut seen = h.file_loaded_events().await;
+    seen.push(h.events.recv().await.unwrap());
+    let [
+        ..,
+        PlaybackEvent::Ready { .. },
+        PlaybackEvent::Chapters(chapters),
+    ] = &seen[..]
+    else {
+        panic!("no chapters right after Ready: {seen:?}");
+    };
+    assert_eq!(chapters.len(), 3);
+    assert_eq!(
+        chapters[1].start,
+        Duration::from_secs(600_000_000 / 10_000_000)
+    );
+    assert_eq!(chapters[0].name, "Opening");
+    assert_eq!(chapters[1].name, "");
+    assert_eq!(chapters[1].image, None);
+    assert_eq!(
+        chapters[2].image,
+        Some(ImageRef {
+            item_id: ItemId::from(MOVIE_ID),
+            image_type: ImageType::Chapter,
+            tag: "tag2".into(),
+            index: Some(2),
+        })
+    );
+}
+
+#[tokio::test]
+async fn single_chapter_sends_empty_list() {
+    let mock = MockServer::start().await;
+    mount_item_with_chapters(
+        &mock,
+        json!([{"StartPositionTicks": 0, "Name": "Whole", "ImageTag": "tag0"}]),
+    )
+    .await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.play(PlayMode::FromStart).await;
+    h.file_loaded().await;
+    assert_eq!(
+        h.events.recv().await.unwrap(),
+        PlaybackEvent::Chapters(Vec::new())
+    );
 }

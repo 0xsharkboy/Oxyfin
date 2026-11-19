@@ -6,7 +6,7 @@ use std::time::Duration;
 use oxyfin_api::ItemId;
 use oxyfin_player::{PlayerError, SeekTarget};
 
-use super::{AudioOption, Quality, SkippableSegment, SubtitleOption};
+use super::{AudioOption, Chapter, Quality, SkippableSegment, SubtitleOption};
 use crate::SubtitleStyle;
 use crate::error::CoreError;
 use crate::models::{Episode, ImageRef};
@@ -114,8 +114,8 @@ pub enum PlaybackCommand {
     /// Set the highest streaming quality. The current item, unless it
     /// reached its end, loads again at its position with its tracks, pause
     /// and speed, as from a new [`PlaybackEvent::Loading`], and its
-    /// [`PlaybackEvent::Ready`] is followed by its [`PlaybackEvent::Paused`]
-    /// state. The quality stays for the next items.
+    /// [`PlaybackEvent::Ready`] and [`PlaybackEvent::Chapters`] are followed
+    /// by its [`PlaybackEvent::Paused`] state. The quality stays for the next items.
     SetQuality(Quality),
     /// Change how subtitles look. Applies at once, even with nothing
     /// playing, and again before each item loads.
@@ -171,6 +171,12 @@ pub enum PlaybackEvent {
     ///
     /// [`ImageCache::trickplay_sheet`]: crate::ImageCache::trickplay_sheet
     Trickplay(Trickplay),
+    /// The chapters of the loaded item: sent right after each
+    /// [`PlaybackEvent::Ready`], empty when the item has fewer than two.
+    /// Chapter images come from [`ImageCache::get`].
+    ///
+    /// [`ImageCache::get`]: crate::ImageCache::get
+    Chapters(Vec<Chapter>),
     /// The position changed.
     Position(Duration),
     /// The position entered a part the user can skip, or left it (`None`).

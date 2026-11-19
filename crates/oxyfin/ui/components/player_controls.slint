@@ -11,6 +11,8 @@ export component Scrubber inherits Rectangle {
     in property <float> step: 1;
     in property <string> label;
     in property <bool> knob;
+    // Fractions of the slider, from 0 to 1, where a chapter starts: the bar is cut there.
+    in property <[float]> marks;
     in property <bool> enabled: true;
     in-out property <bool> dragging;
     // The pointer is over the slider, or drags it.
@@ -56,6 +58,14 @@ export component Scrubber inherits Rectangle {
         y: (parent.height - self.height) / 2;
         width: parent.width;
         value: root.ratio;
+    }
+
+    for mark in root.marks: gap := Rectangle {
+        x: mark * parent.width - self.width / 2;
+        y: (parent.height - self.height) / 2;
+        width: Theme.chapter-gap-width;
+        height: Theme.chapter-gap-height;
+        background: Theme.bg-base;
     }
 
     if root.knob && root.enabled: Rectangle {
@@ -112,6 +122,10 @@ export component PlayerControls inherits Rectangle {
     in property <float> volume;
     in property <bool> muted;
     in property <bool> tracks-open;
+    in property <bool> has-chapters;
+    in property <bool> chapters-open;
+    // Where the chapters start, as fractions of the seek bar.
+    in property <[float]> chapter-marks;
     in property <bool> speed-open;
     in property <bool> fullscreen;
     in-out property <bool> scrubbing;
@@ -128,6 +142,7 @@ export component PlayerControls inherits Rectangle {
     callback step-volume(direction: int);
     callback toggle-mute();
     callback toggle-tracks();
+    callback toggle-chapters();
     callback toggle-speed();
     callback toggle-fullscreen();
     callback seek-hovered(seconds: float);
@@ -148,6 +163,7 @@ export component PlayerControls inherits Rectangle {
             maximum: max(root.duration, 0);
             step: 10;
             knob: true;
+            marks: root.chapter-marks;
             enabled: root.duration > 0;
             dragging <=> root.scrubbing;
             committed(value) => {
@@ -258,6 +274,16 @@ export component PlayerControls inherits Rectangle {
                             root.step-volume(direction);
                         }
                     }
+                }
+            }
+
+            if root.has-chapters: IconButton {
+                focus-on-click: false;
+                icon: Icons.list;
+                label: @tr("Chapters");
+                active: root.chapters-open;
+                clicked => {
+                    root.toggle-chapters();
                 }
             }
 

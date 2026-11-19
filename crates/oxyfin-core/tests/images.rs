@@ -22,6 +22,7 @@ fn image(item: &str, tag: &str) -> ImageRef {
         item_id: ItemId::from(item),
         image_type: ImageType::Primary,
         tag: tag.to_owned(),
+        index: None,
     }
 }
 
@@ -469,4 +470,42 @@ async fn a_missing_trickplay_sheet_is_an_error_and_not_cached() {
     );
     let images = Paths::under(dir.path()).cache_dir.join("images");
     assert!(!images.exists() || files_in(&dir).is_empty());
+}
+
+#[tokio::test]
+async fn chapter_images_are_fetched_and_cached_by_index() {
+    let mock = MockServer::start().await;
+    for index in [1, 2] {
+        Mock::given(method("GET"))
+            .and(path(format!("/Items/aaa/Images/Chapter/{index}")))
+            .and(query_param("tag", "t1"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_bytes(format!("chapter {index}").into_bytes()),
+            )
+            .mount(&mock)
+            .await;
+    }
+    let dir = TempDir::new().unwrap();
+    let chapter = |index| ImageRef {
+        item_id: ItemId::from("aaa"),
+        image_type: ImageType::Chapter,
+        tag: "t1".to_owned(),
+        index: Some(index),
+    };
+    let first = cache(&mock, &dir, 1024)
+        .get(&chapter(1), SIZE)
+        .await
+        .unwrap();
+    let second = cache(&mock, &dir, 1024)
+        .get(&chapter(2), SIZE)
+        .await
+        .unwrap();
+    assert_eq!(&*first, b"chapter 1");
+    assert_eq!(&*second, b"chapter 2");
+    let again = cache(&mock, &dir, 1024)
+        .get(&chapter(1), SIZE)
+        .await
+        .unwrap();
+    assert_eq!(&*again, b"chapter 1");
+    assert_eq!(requests(&mock).await, 2);
 }
