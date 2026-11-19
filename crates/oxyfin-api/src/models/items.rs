@@ -1,9 +1,9 @@
 //! Library items and listings.
 
 use super::enums::{BaseItemKind, ImageType, ItemFields, ItemSortBy, SortOrder};
-use crate::{ItemId, Ticks};
-use serde::Deserialize;
-use std::collections::HashMap;
+use crate::{ItemId, MediaSourceId, Ticks};
+use serde::{Deserialize, Deserializer};
+use std::collections::{BTreeMap, HashMap};
 
 /// A page of results.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -115,6 +115,72 @@ pub struct BaseItemDto {
     pub series_primary_image_tag: Option<String>,
     /// Cast and crew.
     pub people: Vec<BaseItemPerson>,
+    /// Trickplay tile sheets, by media source, then by thumbnail width in
+    /// pixels. Empty when the server generated none; look a source up with
+    /// [`BaseItemDto::trickplay_for`].
+    #[serde(deserialize_with = "nullable_trickplay")]
+    pub trickplay: HashMap<String, BTreeMap<u32, TrickplayInfoDto>>,
+}
+
+impl BaseItemDto {
+    /// The trickplay resolutions of `source`, by thumbnail width; `None`
+    /// when the server has none for it.
+    ///
+    /// Source keys are matched ignoring case and dashes: the server writes
+    /// them without dashes, and key normalization may capitalize them.
+    pub fn trickplay_for(
+        &self,
+        source: &MediaSourceId,
+    ) -> Option<&BTreeMap<u32, TrickplayInfoDto>> {
+        let wanted = id_key(source.as_str());
+        self.trickplay
+            .iter()
+            .find(|(key, _)| id_key(key) == wanted)
+            .map(|(_, widths)| widths)
+            .filter(|widths| !widths.is_empty())
+    }
+}
+
+fn id_key(id: &str) -> String {
+    id.chars()
+        .filter(|c| *c != '-')
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
+}
+
+type NullableTrickplay = Option<HashMap<String, Option<BTreeMap<u32, TrickplayInfoDto>>>>;
+
+fn nullable_trickplay<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<HashMap<String, BTreeMap<u32, TrickplayInfoDto>>, D::Error> {
+    let sources = NullableTrickplay::deserialize(deserializer)?.unwrap_or_default();
+    Ok(sources
+        .into_iter()
+        .filter_map(|(source, widths)| Some((source, widths?)))
+        .collect())
+}
+
+/// One resolution of the trickplay thumbnails of a media source.
+///
+/// Thumbnails are laid out row by row in tile sheets of `tile_width` by
+/// `tile_height` thumbnails; thumbnail `n` shows the video at `n * interval`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "PascalCase", default)]
+pub struct TrickplayInfoDto {
+    /// Width of one thumbnail, in pixels.
+    pub width: u32,
+    /// Height of one thumbnail, in pixels.
+    pub height: u32,
+    /// Thumbnails per row of a sheet.
+    pub tile_width: u32,
+    /// Thumbnails per column of a sheet.
+    pub tile_height: u32,
+    /// Number of thumbnails of the whole video.
+    pub thumbnail_count: u32,
+    /// Time between two thumbnails, in milliseconds.
+    pub interval: u32,
+    /// Peak bandwidth, in bits per second.
+    pub bandwidth: u32,
 }
 
 impl Default for BaseItemDto {
@@ -145,6 +211,7 @@ impl Default for BaseItemDto {
             parent_backdrop_image_tags: Vec::new(),
             series_primary_image_tag: None,
             people: Vec::new(),
+            trickplay: HashMap::new(),
         }
     }
 }

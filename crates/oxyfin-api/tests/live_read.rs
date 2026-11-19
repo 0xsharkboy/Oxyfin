@@ -98,6 +98,21 @@ async fn playback_info_and_image() {
         .expect("media segments of an unknown item");
     assert!(none.is_empty());
 
+    // The test server generates no trickplay unless asked to: check sheets when there are some.
+    let detail = session.item(&movie.id).await.expect("item");
+    if let Some((&width, info)) = detail
+        .trickplay_for(&source.id)
+        .and_then(|widths| widths.iter().next())
+    {
+        assert_eq!(info.width, width);
+        assert!(info.tile_width > 0 && info.tile_height > 0 && info.interval > 0);
+        let sheet = session
+            .trickplay_sheet(&movie.id, &source.id, width, 0)
+            .await
+            .expect("first trickplay sheet");
+        assert_eq!(&sheet[..2], [0xFF, 0xD8], "not a JPEG");
+    }
+
     session.logout().await.expect("logout");
 }
 
