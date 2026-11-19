@@ -32,6 +32,7 @@ mod segments;
 mod server;
 mod session;
 mod ticks;
+mod trickplay;
 mod user_data;
 mod version;
 
@@ -42,7 +43,8 @@ pub use images::ImageRequest;
 pub use models::{
     BaseItemDto, BaseItemKind, BaseItemPerson, ImageType, ItemFields, ItemSortBy, ItemsQuery,
     MediaSegmentDto, MediaSegmentType, MediaSourceInfo, MediaStream, MediaStreamType,
-    PlaybackInfoResponse, PublicSystemInfo, QueryResult, SortOrder, UserDto, UserItemDataDto,
+    PlaybackInfoResponse, PublicSystemInfo, QueryResult, SortOrder, TrickplayInfoDto, UserDto,
+    UserItemDataDto,
 };
 pub use playback::{PlaybackReport, StreamSource};
 pub use quick_connect::{QuickConnectSecret, QuickConnectState};
