@@ -105,8 +105,14 @@ fn grid_lays_out_rows_and_opens_on_the_first_click() {
     assert!(columns > 1 && columns < 20, "got {columns} columns");
     let (card_width, gap, margin) = (
         positions[0].1.width,
-        positions[1].0.x - positions[0].0.x - positions[0].1.width,
+        positions[columns].0.y - positions[0].0.y - positions[0].1.height,
         positions[0].0.x,
+    );
+    let last = positions[columns - 1];
+    assert!(
+        (last.0.x + last.1.width - (1300. - margin)).abs() < 0.5,
+        "the last column must end at the right margin, ends at {}",
+        last.0.x + last.1.width
     );
     // Same formula as poster_grid.slint; at 1300px it differs from one without the margins.
     assert_eq!(
