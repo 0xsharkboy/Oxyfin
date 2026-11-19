@@ -150,6 +150,27 @@ nix shell nixpkgs#desktop-file-utils -c desktop-file-validate data/*.desktop
 nix shell nixpkgs#appstream -c appstreamcli validate --no-net data/*.metainfo.xml
 ```
 
+## Flatpak
+
+`flatpak/` holds the Flatpak manifest, `io.github._0xsharkboy.Oxyfin.yml`, on the freedesktop 25.08 runtime. It builds libmpv and the libraries the runtime lacks (libplacebo, libass, uchardet), uses the runtime's FFmpeg with its codecs-extra extension, and builds the app from the working tree (without `target/`) with the crates listed in `flatpak/cargo-sources.json`, since the build has no network. Build, install and run it for your user, keeping the build directories outside the repository:
+
+```sh
+nix shell nixpkgs#flatpak-builder nixpkgs#appstream -c flatpak-builder --user --install --force-clean \
+  --install-deps-from=flathub --state-dir=/tmp/oxyfin-flatpak/state \
+  /tmp/oxyfin-flatpak/build flatpak/io.github._0xsharkboy.Oxyfin.yml
+flatpak run io.github._0xsharkboy.Oxyfin
+flatpak uninstall --user --delete-data io.github._0xsharkboy.Oxyfin
+```
+
+`flatpak-builder` runs `appstreamcli` from the host to compose the metainfo. Without Nix, install `flatpak-builder` and `appstream` from your distribution or use `flatpak run org.flatpak.Builder` with the same arguments. Lint the manifest with `flatpak run --command=flatpak-builder-lint org.flatpak.Builder manifest flatpak/io.github._0xsharkboy.Oxyfin.yml`.
+
+After any change to `Cargo.lock`, regenerate `flatpak/cargo-sources.json` with [`flatpak-cargo-generator.py`](https://github.com/flatpak/flatpak-builder-tools/tree/master/cargo) and commit it with the lock file:
+
+```sh
+nix shell --impure --expr 'with import (builtins.getFlake "nixpkgs") {}; python3.withPackages (p: [p.aiohttp p.tomlkit])' \
+  -c python3 flatpak-cargo-generator.py Cargo.lock -o flatpak/cargo-sources.json
+```
+
 ## Dependencies
 
 - Prefer the standard library and the dependencies already in use.

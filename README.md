@@ -17,6 +17,10 @@ nix run github:0xsharkboy/Oxyfin
 
 From a clone, `nix build` puts the app in `result/bin/oxyfin`, with its desktop entry, icon and metainfo under `result/share/`.
 
+## Running as a Flatpak
+
+The manifest in `flatpak/` builds the app as a Flatpak from a clone. It is not on Flathub yet; see [CONTRIBUTING.md](CONTRIBUTING.md#flatpak) to build and install it locally.
+
 ## Development
 
 The Nix dev shell provides the Rust toolchain, libmpv and every system library the app needs:
