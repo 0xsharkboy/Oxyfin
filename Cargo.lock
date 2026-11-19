@@ -3765,6 +3765,7 @@ version = "0.1.0"
 dependencies = [
  "directories",
  "keyring",
+ "log",
  "oxyfin-api",
  "oxyfin-player",
  "serde",

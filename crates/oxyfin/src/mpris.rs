@@ -253,6 +253,7 @@ impl PlayerState {
             PlaybackEvent::Error(_) => self.ready = false,
             PlaybackEvent::Muted(_)
             | PlaybackEvent::Seeking
+            | PlaybackEvent::Segment(_)
             | PlaybackEvent::Ended
             | PlaybackEvent::TracksChanged { .. }
             | PlaybackEvent::NextUpCountdown { .. }

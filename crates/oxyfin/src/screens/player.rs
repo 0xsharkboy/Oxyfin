@@ -194,7 +194,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
         PlaybackEvent::NextUpCancelled | PlaybackEvent::Stopped => {
             window.set_player_next_up(NextUp::default());
         }
-        PlaybackEvent::Ended | PlaybackEvent::SessionExpired => {}
+        PlaybackEvent::Ended | PlaybackEvent::SessionExpired | PlaybackEvent::Segment(_) => {}
         PlaybackEvent::Error(error @ PlaybackError::Command { .. }) => {
             log::warn!("playback command failed: {error}");
             window.set_player_seek_pending(false);

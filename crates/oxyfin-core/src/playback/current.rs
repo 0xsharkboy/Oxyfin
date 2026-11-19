@@ -5,6 +5,7 @@ use std::time::Duration;
 use oxyfin_api::{ItemId, MediaSourceInfo, PlaySessionId, PlaybackReport, Ticks};
 use oxyfin_player::{Track, TrackId, TrackKind};
 
+use super::segments::{SkippableSegment, active};
 use super::tracks::TrackMap;
 use super::{AudioOption, SubtitleOption};
 use crate::models::Episode;
@@ -42,6 +43,10 @@ pub(super) struct Current {
     /// The media reached its real end; reset by each load since a load makes a new `Current`.
     pub(super) ended: bool,
     pub(super) siblings: Siblings,
+    /// Parts of the item the user can skip, ordered by start.
+    pub(super) segments: Vec<SkippableSegment>,
+    /// The segment offered at the last position, as last emitted.
+    pub(super) segment: Option<SkippableSegment>,
     /// The default selection asked of mpv and not yet seen in a track list:
     /// until it is, track lists show mpv's earlier choice and are ignored.
     pub(super) expected_audio: Option<TrackId>,
@@ -74,6 +79,8 @@ impl Current {
             duration: None,
             ended: false,
             siblings,
+            segments: Vec::new(),
+            segment: None,
             expected_audio: None,
             expected_subtitle: None,
         }
@@ -102,6 +109,21 @@ impl Current {
             possible && selected(TrackKind::Subtitle) != *expected
         });
         self.expected_audio.is_none() && self.expected_subtitle.is_none()
+    }
+
+    /// Recomputes the segment offered at the current position; returns it
+    /// when it changed. None is offered after the real end.
+    pub(super) fn update_segment(&mut self) -> Option<Option<SkippableSegment>> {
+        let segment = if self.ended {
+            None
+        } else {
+            active(&self.segments, self.position, self.duration)
+        };
+        if segment == self.segment {
+            return None;
+        }
+        self.segment = segment;
+        Some(segment)
     }
 
     /// Stops waiting for the default selection once playback has moved from
