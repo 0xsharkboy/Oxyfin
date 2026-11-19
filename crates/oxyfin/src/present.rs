@@ -4,13 +4,13 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use oxyfin_core::{
-    AudioOption, CoreError, Episode, ImageSize, ItemKind, ItemSummary, Person, PlaybackError,
-    PlaybackTitle, SeriesDetails, SubtitleOption,
+    AudioOption, Chapter, CoreError, Episode, ImageSize, ItemKind, ItemSummary, Person,
+    PlaybackError, PlaybackTitle, SeriesDetails, SubtitleOption,
 };
 use slint::SharedString;
 
 use crate::state::Screen;
-use crate::{CardData, EpisodeData, Message, TrackRow};
+use crate::{CardData, ChapterRow, EpisodeData, Message, TrackRow};
 
 /// Message and detail to show for a core error.
 ///
@@ -236,6 +236,35 @@ pub fn audio_rows(options: &[AudioOption]) -> Vec<TrackRow> {
             external: false,
             selected: option.selected,
         })
+        .collect()
+}
+
+/// Rows of the chapters menu. A chapter the media leaves unnamed keeps an
+/// empty title: the menu renders its translated, numbered name.
+pub fn chapter_rows(chapters: &[Chapter]) -> Vec<ChapterRow> {
+    chapters
+        .iter()
+        .map(|chapter| ChapterRow {
+            title: chapter.name.as_str().into(),
+            start_label: clock(chapter.start),
+            start: chapter.start.as_secs_f32(),
+            image: slint::Image::default(),
+            has_image: false,
+        })
+        .collect()
+}
+
+/// Where the seek bar is cut: the start of each chapter but the first, as a
+/// fraction of `duration`. None without a duration.
+pub fn chapter_marks(chapters: &[Chapter], duration: Option<Duration>) -> Vec<f32> {
+    let Some(duration) = duration.filter(|duration| !duration.is_zero()) else {
+        return Vec::new();
+    };
+    chapters
+        .iter()
+        .skip(1)
+        .filter(|chapter| !chapter.start.is_zero() && chapter.start < duration)
+        .map(|chapter| (chapter.start.as_secs_f64() / duration.as_secs_f64()) as f32)
         .collect()
 }
 
@@ -613,6 +642,7 @@ mod tests {
                 item_id: id.into(),
                 image_type: oxyfin_api::ImageType::Primary,
                 tag: tag.into(),
+                index: None,
             }),
             ..episode_at(None, None, 0, false)
         }
@@ -749,5 +779,19 @@ mod tests {
             series_play(Some(&episode_at(None, None, 0, false))),
             SeriesPlay::Play
         );
+    }
+
+    #[test]
+    fn chapter_marks_skip_the_first_and_out_of_range_chapters() {
+        let at = |seconds| Chapter {
+            start: Duration::from_secs(seconds),
+            name: String::new(),
+            image: None,
+        };
+        let chapters = [at(0), at(50), at(100), at(250)];
+        let duration = Some(Duration::from_secs(200));
+        assert_eq!(chapter_marks(&chapters, duration), [0.25, 0.5]);
+        assert!(chapter_marks(&chapters, None).is_empty());
+        assert!(chapter_marks(&chapters, Some(Duration::ZERO)).is_empty());
     }
 }

@@ -1,5 +1,6 @@
 //! Playback of a media: track selection and episode navigation.
 
+mod chapters;
 mod controller;
 mod countdown;
 mod current;
@@ -12,6 +13,7 @@ mod segments;
 mod tracks;
 mod types;
 
+pub use chapters::{CHAPTER_RESTART_GRACE, Chapter, chapter_at, next_chapter, previous_chapter};
 pub use controller::{PlaybackController, PlaybackHandle};
 pub use media_player::{MediaPlayer, PlayerEventSink, PlayerEvents, player_events};
 pub use quality::{QUALITIES, Quality};

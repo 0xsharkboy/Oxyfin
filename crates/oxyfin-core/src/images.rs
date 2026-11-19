@@ -286,6 +286,7 @@ impl ImageCache {
         self.cached(file_name(image, size), async {
             let mut request = ImageRequest::new(image.item_id.clone(), image.image_type.clone());
             request.tag = Some(image.tag.clone());
+            request.index = image.index;
             request.max_width = Some(size.max_width);
             request.max_height = Some(size.max_height);
             self.session.fetch_image(&request).await
@@ -360,10 +361,13 @@ impl ImageCache {
 }
 
 fn file_name(image: &ImageRef, size: ImageSize) -> String {
+    let kind = match image.index {
+        Some(index) => format!("{}{index}", image.image_type.as_str()),
+        None => image.image_type.as_str().to_owned(),
+    };
     format!(
-        "{}-{}-{}-{}x{}",
+        "{}-{kind}-{}-{}x{}",
         sanitize(&image.item_id.to_string()),
-        image.image_type.as_str(),
         sanitize(&image.tag),
         size.max_width,
         size.max_height

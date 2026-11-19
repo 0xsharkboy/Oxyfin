@@ -38,6 +38,12 @@ const NEXT_UP_THUMB_WIDTH: f32 = 160.0;
 #[cfg(feature = "mpv")]
 const NEXT_UP_THUMB_HEIGHT: f32 = 90.0;
 
+/// Logical size of a chapter thumbnail in the chapters menu.
+#[cfg(feature = "mpv")]
+const CHAPTER_THUMB_WIDTH: f32 = 64.0;
+#[cfg(feature = "mpv")]
+const CHAPTER_THUMB_HEIGHT: f32 = 36.0;
+
 /// Height of the artwork shown to the desktop over MPRIS, in pixels.
 #[cfg(all(target_os = "linux", feature = "mpv"))]
 const MPRIS_ART_HEIGHT: u32 = 512;
@@ -448,8 +454,15 @@ impl App {
         self.show_mpris(&event);
         #[cfg(target_os = "linux")]
         self.inhibit_update(crate::inhibit::Update::Event(event.clone()));
+        let chapters = match &event {
+            PlaybackEvent::Chapters(chapters) => Some(chapters.clone()),
+            _ => None,
+        };
         if let Some(message) = player::apply(&window, event) {
             self.notify(message);
+        }
+        if let Some(chapters) = chapters {
+            self.load_chapter_images(&window, &chapters);
         }
 
         let on_player = self.state.borrow().screen() == Screen::Player;
@@ -522,6 +535,40 @@ impl App {
                 window.set_player_next_up(next);
             }
         });
+    }
+
+    /// Loads the thumbnails of the chapters menu the window shows, each into
+    /// its row while the window still shows those chapters.
+    #[cfg(feature = "mpv")]
+    fn load_chapter_images(&self, window: &AppWindow, chapters: &[oxyfin_core::Chapter]) {
+        use slint::Model;
+
+        let Some((generation, _, images)) = self.services() else {
+            return;
+        };
+        let size = crate::present::image_size(
+            CHAPTER_THUMB_WIDTH,
+            CHAPTER_THUMB_HEIGHT,
+            window.window().scale_factor(),
+        );
+        let rows = window.get_player_chapters();
+        for (index, chapter) in chapters.iter().enumerate() {
+            let Some(image) = chapter.image.clone() else {
+                continue;
+            };
+            let (weak, rows) = (window.as_weak(), rows.clone());
+            crate::images::load_into(self, generation, &images, image, size, move |image| {
+                let Some(window) = weak.upgrade() else { return };
+                if window.get_player_chapters() != rows {
+                    return;
+                }
+                if let Some(mut row) = rows.row_data(index) {
+                    row.image = image;
+                    row.has_image = true;
+                    rows.set_row_data(index, row);
+                }
+            });
+        }
     }
 
     /// Shows `sheet` in the seek bar preview: at once when it is decoded

@@ -29,7 +29,7 @@ This file is the single source of truth for planned work. An item is checked onl
 - [x] Transcoding and quality selection
 - [x] Keep the screen awake during playback (Linux)
 - [x] Subtitle and audio delay
-- [ ] Chapters (seek bar markers and menu)
+- [x] Chapters (seek bar markers and menu)
 - [ ] Remember audio and subtitle choices per series
 - [ ] Next episode options (countdown, autoplay, automatic segment skipping)
 - [ ] Subtitle search and download

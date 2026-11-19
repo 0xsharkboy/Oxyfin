@@ -667,6 +667,7 @@ impl PlaybackController {
         // mpv keeps `pause` across loads, so a paused reload reports no change.
         current.paused = prepared.resume.is_some_and(|resume| resume.paused);
         current.trickplay = prepared.trickplay;
+        current.chapters = prepared.chapters;
         current.segments = prepared.segments;
         self.current = Some(current);
         self.loading = false;
@@ -876,6 +877,7 @@ impl PlaybackController {
         current.duration = duration;
         let has_next = current.siblings.next.is_some();
         let trickplay = current.trickplay.clone();
+        let chapters = current.chapters.clone();
         if let Some(trickplay) = trickplay {
             self.emit(PlaybackEvent::Trickplay(trickplay));
         }
@@ -886,6 +888,7 @@ impl PlaybackController {
             has_previous: true,
             has_next,
         });
+        self.emit(PlaybackEvent::Chapters(chapters));
         if let Some(resume) = resume {
             self.emit(PlaybackEvent::Paused(resume.paused));
         }
