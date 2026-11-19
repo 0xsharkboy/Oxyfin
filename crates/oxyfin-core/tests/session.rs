@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use common::{FailingStore, fixture, manager, memory_vault};
 use oxyfin_core::{
-    CoreError, MemoryStore, Paths, SecretStore, SessionManager, SignedIn, SubtitleBackground,
-    SubtitleSize, SubtitleStyle, TokenStorage, TokenVault, account_key,
+    CoreError, MemoryStore, Paths, QUALITIES, Quality, SecretStore, SessionManager, SignedIn,
+    SubtitleBackground, SubtitleSize, SubtitleStyle, TokenStorage, TokenVault, account_key,
 };
 use serde_json::json;
 use tempfile::TempDir;
@@ -554,4 +554,17 @@ async fn subtitle_style_is_saved_across_launches() {
 
     let next = manager(&mock, &dir, memory_vault());
     assert_eq!(next.subtitle_style(), style);
+}
+
+#[tokio::test]
+async fn quality_is_saved_across_launches() {
+    let mock = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let first = manager(&mock, &dir, memory_vault());
+    assert_eq!(first.quality(), Quality::Original);
+    first.set_quality(QUALITIES[3]).unwrap();
+    assert_eq!(first.quality(), QUALITIES[3]);
+
+    let next = manager(&mock, &dir, memory_vault());
+    assert_eq!(next.quality(), QUALITIES[3]);
 }

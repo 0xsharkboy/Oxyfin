@@ -6,7 +6,7 @@ use std::fs;
 use serde::{Deserialize, Serialize};
 
 use crate::subtitles::lenient;
-use crate::{CoreError, Paths, Result, SubtitleStyle};
+use crate::{CoreError, Paths, Quality, Result, SubtitleStyle};
 
 const FILE_NAME: &str = "config.json";
 
@@ -45,6 +45,10 @@ pub struct Config {
     /// style, so the rest of the file still loads.
     #[serde(default, deserialize_with = "lenient")]
     pub subtitles: SubtitleStyle,
+    /// Highest streaming quality the user picked. Unreadable content falls
+    /// back to the original quality.
+    #[serde(default, deserialize_with = "lenient")]
+    pub quality: Quality,
 }
 
 fn storage<E: std::fmt::Display>(error: E) -> CoreError {
@@ -59,6 +63,7 @@ impl Config {
             last_server_url: None,
             file_token_warning_shown: false,
             subtitles: SubtitleStyle::default(),
+            quality: Quality::Original,
         }
     }
 
@@ -178,6 +183,25 @@ mod tests {
         };
         config.save(&paths).unwrap();
         assert_eq!(Config::load_or_create(&paths).unwrap(), config);
+    }
+
+    #[test]
+    fn quality_round_trips_and_falls_back_when_unreadable() {
+        let (_dir, paths) = temp();
+        let mut config = Config::load_or_create(&paths).unwrap();
+        assert_eq!(config.quality, Quality::Original);
+        config.quality = crate::QUALITIES[3];
+        config.save(&paths).unwrap();
+        assert_eq!(Config::load_or_create(&paths).unwrap(), config);
+
+        fs::write(
+            paths.config_dir.join("config.json"),
+            r#"{"device_id":"abc","quality":{"Limited":{"bitrate":"fast"}}}"#,
+        )
+        .unwrap();
+        let config = Config::load_or_create(&paths).unwrap();
+        assert_eq!(config.device_id, "abc");
+        assert_eq!(config.quality, Quality::Original);
     }
 
     #[test]
