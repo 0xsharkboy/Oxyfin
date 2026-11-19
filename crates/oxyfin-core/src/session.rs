@@ -6,8 +6,8 @@ use std::time::Duration;
 use oxyfin_api::{ClientInfo, Server, Session, UserId};
 
 use crate::{
-    Config, CoreError, Paths, QUICK_CONNECT_POLL_INTERVAL, Result, SavedSession, TokenStorage,
-    TokenVault, account_key,
+    Config, CoreError, Paths, QUICK_CONNECT_POLL_INTERVAL, Result, SavedSession, SubtitleStyle,
+    TokenStorage, TokenVault, account_key,
 };
 
 /// A server that passed the version check.
@@ -101,6 +101,16 @@ impl SessionManager {
     /// Returns the last server address a sign-in succeeded on.
     pub fn last_server_url(&self) -> Option<String> {
         self.config().last_server_url.clone()
+    }
+
+    /// Returns how subtitles look, as last saved.
+    pub fn subtitle_style(&self) -> SubtitleStyle {
+        self.config().subtitles
+    }
+
+    /// Saves how subtitles look. The saved style is unchanged on failure.
+    pub fn set_subtitle_style(&self, style: SubtitleStyle) -> Result<()> {
+        self.update(|config| config.subtitles = style)
     }
 
     /// Reaches the server at `url` and checks that its version is supported.

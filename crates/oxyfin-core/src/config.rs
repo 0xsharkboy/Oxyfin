@@ -1,10 +1,12 @@
-//! Persisted configuration: device id and saved session. Never holds a token.
+//! Persisted configuration: device id, saved session and preferences. Never
+//! holds a token.
 
 use std::fs;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{CoreError, Paths, Result};
+use crate::subtitles::lenient;
+use crate::{CoreError, Paths, Result, SubtitleStyle};
 
 const FILE_NAME: &str = "config.json";
 
@@ -39,6 +41,10 @@ pub struct Config {
     /// Whether the plain-file token fallback warning was already shown.
     #[serde(default)]
     pub file_token_warning_shown: bool,
+    /// How subtitles look. Unreadable content falls back to the default
+    /// style, so the rest of the file still loads.
+    #[serde(default, deserialize_with = "lenient")]
+    pub subtitles: SubtitleStyle,
 }
 
 fn storage<E: std::fmt::Display>(error: E) -> CoreError {
@@ -52,6 +58,7 @@ impl Config {
             session: None,
             last_server_url: None,
             file_token_warning_shown: false,
+            subtitles: SubtitleStyle::default(),
         }
     }
 
@@ -157,6 +164,53 @@ mod tests {
         .unwrap();
         let config = Config::load_or_create(&paths).unwrap();
         assert_eq!(config.session.unwrap().server_name, None);
+    }
+
+    #[test]
+    fn subtitle_style_round_trips() {
+        let (_dir, paths) = temp();
+        let mut config = Config::load_or_create(&paths).unwrap();
+        config.subtitles = SubtitleStyle {
+            size: crate::SubtitleSize::Large,
+            color: crate::SubtitleColor::Yellow,
+            background: crate::SubtitleBackground::Box,
+            position: crate::SubtitlePosition::Raised,
+        };
+        config.save(&paths).unwrap();
+        assert_eq!(Config::load_or_create(&paths).unwrap(), config);
+    }
+
+    #[test]
+    fn unreadable_subtitle_style_keeps_the_rest_of_the_file() {
+        let session =
+            r#""session":{"server_url":"https://jf.example","user_id":"u1","user_name":"Ana"}"#;
+        for subtitles in [
+            "",
+            r#","subtitles":{"size":"gigantic","color":"yellow"}"#,
+            r#","subtitles":"large""#,
+            r#","subtitles":null"#,
+        ] {
+            let (_dir, paths) = temp();
+            fs::create_dir_all(&paths.config_dir).unwrap();
+            fs::write(
+                paths.config_dir.join("config.json"),
+                format!(r#"{{"device_id":"abc",{session}{subtitles}}}"#),
+            )
+            .unwrap();
+            let config = Config::load_or_create(&paths).unwrap();
+            assert_eq!(config.device_id, "abc", "with {subtitles}");
+            assert_eq!(config.session.unwrap().user_id, "u1", "with {subtitles}");
+            assert!(!paths.config_dir.join("config.json.bad").exists());
+            let expected = if subtitles.contains("yellow") {
+                SubtitleStyle {
+                    color: crate::SubtitleColor::Yellow,
+                    ..SubtitleStyle::default()
+                }
+            } else {
+                SubtitleStyle::default()
+            };
+            assert_eq!(config.subtitles, expected, "with {subtitles}");
+        }
     }
 
     #[test]

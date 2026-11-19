@@ -7,6 +7,7 @@ use oxyfin_api::ItemId;
 use oxyfin_player::{PlayerError, SeekTarget};
 
 use super::{AudioOption, SkippableSegment, SubtitleOption};
+use crate::SubtitleStyle;
 use crate::error::CoreError;
 use crate::models::Episode;
 
@@ -102,6 +103,9 @@ pub enum PlaybackCommand {
     SelectAudio(i32),
     /// Select the subtitle track with this Jellyfin stream index, or none.
     SelectSubtitle(Option<i32>),
+    /// Change how subtitles look. Applies at once, even with nothing
+    /// playing, and again before each item loads.
+    SetSubtitleStyle(SubtitleStyle),
     /// Stop playback.
     Stop,
 }

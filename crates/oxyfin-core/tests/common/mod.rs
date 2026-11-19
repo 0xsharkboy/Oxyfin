@@ -10,7 +10,7 @@ use oxyfin_core::{
     CoreError, MediaPlayer, MemoryStore, Paths, PlaybackEvent, Result, SecretStore, SessionManager,
     TokenVault,
 };
-use oxyfin_player::{MediaSource, PlayerError, SeekTarget, TrackId};
+use oxyfin_player::{MediaSource, PlayerError, SeekTarget, SubtitleAppearance, TrackId};
 use serde_json::Value;
 use tempfile::TempDir;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -107,6 +107,8 @@ pub enum Call {
         /// Track language.
         language: Option<String>,
     },
+    /// `set_subtitle_appearance`.
+    SetSubtitles(SubtitleAppearance),
 }
 
 /// Pause, speed and volume of a [`FakePlayer`]. Like mpv, a load keeps them.
@@ -262,6 +264,12 @@ impl MediaPlayer for FakePlayer {
         Ok(TrackId(
             self.next_subtitle.fetch_add(1, Ordering::SeqCst) + 1,
         ))
+    }
+    fn set_subtitle_appearance(
+        &self,
+        appearance: &SubtitleAppearance,
+    ) -> std::result::Result<(), PlayerError> {
+        self.record(Call::SetSubtitles(*appearance))
     }
 }
 

@@ -12,7 +12,7 @@ use oxyfin_api::ItemId;
 use oxyfin_core::{
     PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackController, PlaybackError, PlaybackEvent,
     PlaybackHandle, PlaybackTimings, PlayerEventSink, SHUTDOWN_TIMEOUT, SegmentKind,
-    SkippableSegment, UNLOAD_GRACE, player_events,
+    SkippableSegment, SubtitleBackground, SubtitleSize, SubtitleStyle, UNLOAD_GRACE, player_events,
 };
 use oxyfin_player::{PlayerEvent, SeekTarget, Track, TrackId, TrackKind, UnloadReason};
 use serde_json::{Value, json};
@@ -2300,5 +2300,57 @@ async fn failed_segments_only_skip_the_feature() {
             .iter()
             .any(|e| matches!(e, PlaybackEvent::Segment(_) | PlaybackEvent::Error(_))),
         "{seen:?}"
+    );
+}
+
+fn large_box() -> SubtitleStyle {
+    SubtitleStyle {
+        size: SubtitleSize::Large,
+        background: SubtitleBackground::Box,
+        ..SubtitleStyle::default()
+    }
+}
+
+#[tokio::test]
+async fn subtitle_style_applies_with_nothing_playing() {
+    let h = harness(quiet()).await;
+    h.handle
+        .send(PlaybackCommand::SetSubtitleStyle(large_box()));
+    h.player
+        .wait_call(|c| *c == Call::SetSubtitles(large_box().appearance()))
+        .await;
+}
+
+#[tokio::test]
+async fn subtitle_style_applies_again_before_each_load() {
+    let mut h = harness(quiet()).await;
+    h.handle
+        .send(PlaybackCommand::SetSubtitleStyle(large_box()));
+    h.start().await;
+    let styled = Call::SetSubtitles(large_box().appearance());
+    let calls = h.player.calls();
+    let applied: Vec<usize> = calls
+        .iter()
+        .enumerate()
+        .filter(|(_, call)| **call == styled)
+        .map(|(index, _)| index)
+        .collect();
+    let load = calls
+        .iter()
+        .position(|call| matches!(call, Call::Load(_)))
+        .unwrap_or_else(|| panic!("no load in {calls:?}"));
+    assert_eq!(applied.len(), 2, "{calls:?}");
+    assert_eq!(applied[1] + 1, load, "{calls:?}");
+}
+
+#[tokio::test]
+async fn without_a_style_loads_leave_subtitles_alone() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    assert!(
+        !h.player
+            .calls()
+            .iter()
+            .any(|call| matches!(call, Call::SetSubtitles(_)))
     );
 }

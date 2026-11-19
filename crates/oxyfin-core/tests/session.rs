@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use common::{FailingStore, fixture, manager, memory_vault};
 use oxyfin_core::{
-    CoreError, MemoryStore, Paths, SecretStore, SessionManager, SignedIn, TokenStorage, TokenVault,
-    account_key,
+    CoreError, MemoryStore, Paths, SecretStore, SessionManager, SignedIn, SubtitleBackground,
+    SubtitleSize, SubtitleStyle, TokenStorage, TokenVault, account_key,
 };
 use serde_json::json;
 use tempfile::TempDir;
@@ -536,4 +536,22 @@ async fn failed_config_save_keeps_the_previous_token() {
     let restored = manager.restore().await.unwrap().unwrap();
     assert_eq!(restored.session.user_id(), first.session.user_id());
     assert!(primary.get(&old_account).unwrap().is_some());
+}
+
+#[tokio::test]
+async fn subtitle_style_is_saved_across_launches() {
+    let mock = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let first = manager(&mock, &dir, memory_vault());
+    assert_eq!(first.subtitle_style(), SubtitleStyle::default());
+    let style = SubtitleStyle {
+        size: SubtitleSize::Large,
+        background: SubtitleBackground::Box,
+        ..SubtitleStyle::default()
+    };
+    first.set_subtitle_style(style).unwrap();
+    assert_eq!(first.subtitle_style(), style);
+
+    let next = manager(&mock, &dir, memory_vault());
+    assert_eq!(next.subtitle_style(), style);
 }
