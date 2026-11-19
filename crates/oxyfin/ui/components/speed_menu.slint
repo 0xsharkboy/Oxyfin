@@ -1,13 +1,18 @@
-import { MenuPanel, MenuHeader, MenuOption } from "track_menu.slint";
+import { QualityRow } from "../theme.slint";
+import { MenuPanel, MenuHeader, MenuDivider, MenuOption } from "track_menu.slint";
 
-// Playback speed menu of the player; the selection follows the speed the player reports.
+// Playback settings menu of the player: speed and streaming quality. The speed follows what the
+// player reports; the quality is the choice the user made.
 export component SpeedMenu inherits MenuPanel {
     in property <[float]> speeds;
     in property <float> speed;
+    in property <[QualityRow]> qualities;
+    in property <int> quality;
     callback select(speed: float);
+    callback select-quality(index: int);
 
     accessible-role: list;
-    accessible-label: @tr("Playback speed");
+    accessible-label: @tr("Playback settings");
 
     MenuHeader {
         text: @tr("SPEED");
@@ -18,6 +23,21 @@ export component SpeedMenu inherits MenuPanel {
         selected: abs(value - root.speed) < 0.001;
         chosen => {
             root.select(value);
+        }
+    }
+
+    MenuDivider { }
+
+    MenuHeader {
+        text: @tr("QUALITY");
+    }
+
+    for row[index] in root.qualities: MenuOption {
+        label: row.height == 0 ? @tr("Original") : @tr("{}p", row.height);
+        detail: row.kbps == 0 ? "" : row.kbps >= 1000 ? @tr("{} Mbps", row.kbps / 1000) : @tr("{} kbps", row.kbps);
+        selected: index == root.quality;
+        chosen => {
+            root.select-quality(index);
         }
     }
 }

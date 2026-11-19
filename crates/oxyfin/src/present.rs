@@ -42,7 +42,7 @@ pub fn core_error_message(error: &CoreError) -> (Message, SharedString) {
 /// Message to show for a playback error. The player detail is never rendered.
 pub fn playback_error_message(error: &PlaybackError) -> Message {
     match error {
-        PlaybackError::NoPlayableSource => Message::NoDirectPlay,
+        PlaybackError::NoPlayableSource => Message::NoPlayableSource,
         PlaybackError::NothingToPlay => Message::NothingToPlay,
         PlaybackError::LoadFailed { .. } => Message::LoadFailed,
         PlaybackError::Network => Message::ServerUnreachable,
@@ -362,7 +362,7 @@ mod tests {
     #[test]
     fn every_playback_error_has_a_message() {
         let cases = [
-            (PlaybackError::NoPlayableSource, Message::NoDirectPlay),
+            (PlaybackError::NoPlayableSource, Message::NoPlayableSource),
             (PlaybackError::NothingToPlay, Message::NothingToPlay),
             (
                 PlaybackError::LoadFailed { detail: "x".into() },

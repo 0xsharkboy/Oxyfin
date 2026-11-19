@@ -2,7 +2,7 @@ import "fonts/Inter-Regular.ttf";
 import "fonts/Inter-Medium.ttf";
 import "fonts/Inter-SemiBold.ttf";
 import "fonts/Inter-Bold.ttf";
-import { Theme, CardData, Message, Messages, NextUp, SeekPreview, SkipKind, TrackRow, TrickplayGrid } from "theme.slint";
+import { Theme, CardData, Message, Messages, NextUp, QualityRow, SeekPreview, SkipKind, TrackRow, TrickplayGrid } from "theme.slint";
 import { StartingScreen } from "screens/starting.slint";
 import { SignInScreen, ServerState, ServerStatus } from "screens/sign_in.slint";
 import { QuickConnectScreen } from "screens/quick_connect.slint";
@@ -16,7 +16,7 @@ import { SeriesScreen, SeriesData, SeriesPlayKind, EpisodeData } from "screens/s
 import { TopBarPage } from "components/top_bar.slint";
 import { NoticeBanner, NoticeData } from "components/notice_banner.slint";
 
-export { CardData, Message, Messages, NextUp, SeekPreview, SkipKind, TrackRow, TrickplayGrid } from "theme.slint";
+export { CardData, Message, Messages, NextUp, QualityRow, SeekPreview, SkipKind, TrackRow, TrickplayGrid } from "theme.slint";
 export { ServerState, ServerStatus }
 export { HomeBanner, HomeRow, HomeRowKind, HomeTitles }
 export { NoticeData }
@@ -149,6 +149,8 @@ export component AppWindow inherits Window {
     in property <bool> player-muted;
     in property <float> player-speed: 1;
     in property <[float]> player-speeds;
+    in property <[QualityRow]> player-qualities;
+    in property <int> player-quality;
     in property <bool> player-has-next;
     in property <[TrackRow]> player-audio;
     in property <[TrackRow]> player-subtitles;
@@ -174,6 +176,7 @@ export component AppWindow inherits Window {
     callback player-command-cancel-next-up();
     callback player-command-set-speed(speed: float);
     callback player-command-step-speed(direction: int);
+    callback player-command-set-quality(index: int);
     callback player-command-set-volume(volume: float);
     callback player-command-step-volume(direction: int);
     callback player-command-set-muted(muted: bool);
@@ -437,6 +440,8 @@ export component AppWindow inherits Window {
         muted: root.player-muted;
         speed: root.player-speed;
         speeds: root.player-speeds;
+        qualities: root.player-qualities;
+        quality: root.player-quality;
         has-next: root.player-has-next;
         audio: root.player-audio;
         subtitles: root.player-subtitles;
@@ -485,6 +490,9 @@ export component AppWindow inherits Window {
         }
         command-step-speed(direction) => {
             root.player-command-step-speed(direction);
+        }
+        command-set-quality(index) => {
+            root.player-command-set-quality(index);
         }
         command-set-volume(volume) => {
             root.player-command-set-volume(volume);

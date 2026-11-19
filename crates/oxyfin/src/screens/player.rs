@@ -4,8 +4,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use oxyfin_core::{
-    PlaybackCommand, PlaybackError, PlaybackEvent, SEEK_STEP, SPEEDS, SegmentKind,
-    SkippableSegment, Trickplay, TrickplaySheet,
+    PlaybackCommand, PlaybackError, PlaybackEvent, QUALITIES, Quality, SEEK_STEP, SPEEDS,
+    SegmentKind, SkippableSegment, Trickplay, TrickplaySheet,
 };
 use oxyfin_player::SeekTarget;
 use slint::platform::WindowEvent;
@@ -14,7 +14,7 @@ use slint::{ComponentHandle, LogicalPosition, ModelRc, SharedString, VecModel};
 use crate::present::{
     audio_rows, clock, next_up_title, playback_error_message, playback_title, subtitle_rows,
 };
-use crate::{AppWindow, Message, NextUp, SeekPreview, SkipKind, TrickplayGrid};
+use crate::{AppWindow, Message, NextUp, QualityRow, SeekPreview, SkipKind, TrickplayGrid};
 
 /// Volume change of one step of the volume keys, in percent.
 pub const VOLUME_STEP: f64 = 5.0;
@@ -27,6 +27,12 @@ pub const VOLUME_STEP: f64 = 5.0;
 pub fn bind(window: &AppWindow, send: Rc<dyn Fn(PlaybackCommand)>) {
     window.set_player_speeds(ModelRc::new(VecModel::from(
         SPEEDS.iter().map(|speed| *speed as f32).collect::<Vec<_>>(),
+    )));
+    window.set_player_qualities(ModelRc::new(VecModel::from(
+        QUALITIES
+            .iter()
+            .map(|quality| quality_row(*quality))
+            .collect::<Vec<_>>(),
     )));
 
     let command = |command: PlaybackCommand| {
@@ -76,6 +82,19 @@ pub fn bind(window: &AppWindow, send: Rc<dyn Fn(PlaybackCommand)>) {
             window.set_player_seek_pending(true);
         }
         to(PlaybackCommand::Seek(skip_target(direction)));
+    });
+    let (to, weak) = (Rc::clone(&send), window.as_weak());
+    window.on_player_command_set_quality(move |index| {
+        let Some(quality) = usize::try_from(index)
+            .ok()
+            .and_then(|index| QUALITIES.get(index))
+        else {
+            return;
+        };
+        if let Some(window) = weak.upgrade() {
+            window.set_player_quality(index);
+        }
+        to(PlaybackCommand::SetQuality(*quality));
     });
     let (to, weak) = (Rc::clone(&send), window.as_weak());
     window.on_player_command_step_speed(move |direction| {
@@ -131,6 +150,26 @@ pub fn reset(window: &AppWindow) {
     clear_preview(window);
     show_segment(window, None);
     show_progress(window, Duration::ZERO, None);
+}
+
+/// Shows `quality` as the chosen one in the player menu; a quality the menu
+/// does not offer shows as the original one.
+pub fn show_quality(window: &AppWindow, quality: Quality) {
+    let index = QUALITIES
+        .iter()
+        .position(|offered| *offered == quality)
+        .unwrap_or_default();
+    window.set_player_quality(i32::try_from(index).unwrap_or_default());
+}
+
+fn quality_row(quality: Quality) -> QualityRow {
+    match quality {
+        Quality::Original => QualityRow::default(),
+        Quality::Limited { bitrate, height } => QualityRow {
+            height: to_int(height),
+            kbps: i32::try_from(bitrate / 1000).unwrap_or(i32::MAX),
+        },
+    }
 }
 
 /// Leaves the player screen: the window does not stay fullscreen behind the other screens.
