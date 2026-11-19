@@ -209,6 +209,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             window.set_player_total(clock(duration.unwrap_or_default()));
         }
         PlaybackEvent::Position(position) => {
+            window.set_player_reported_position(position.as_secs_f32());
             if !window.get_player_scrubbing() && !window.get_player_seek_pending() {
                 window.set_player_position(position.as_secs_f32());
                 window.set_player_elapsed(clock(position));
@@ -219,7 +220,14 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
         PlaybackEvent::Volume(volume) => window.set_player_volume(volume as f32),
         PlaybackEvent::Muted(muted) => window.set_player_muted(muted),
         PlaybackEvent::Seeking => {}
-        PlaybackEvent::Seeked => window.set_player_seek_pending(false),
+        PlaybackEvent::Seeked => {
+            window.set_player_seek_pending(false);
+            if !window.get_player_scrubbing() {
+                let position = window.get_player_reported_position();
+                window.set_player_position(position);
+                window.set_player_elapsed(clock(Duration::from_secs_f32(position.max(0.0))));
+            }
+        }
         PlaybackEvent::TracksChanged { audio, subtitles } => {
             show_tracks(window, &audio, &subtitles);
         }
@@ -365,6 +373,7 @@ fn trickplay(grid: &TrickplayGrid) -> Option<Trickplay> {
 
 fn show_progress(window: &AppWindow, position: Duration, duration: Option<Duration>) {
     window.set_player_seek_pending(false);
+    window.set_player_reported_position(position.as_secs_f32());
     window.set_player_position(position.as_secs_f32());
     window.set_player_elapsed(clock(position));
     window.set_player_duration(duration.map_or(0.0, |duration| duration.as_secs_f32()));
