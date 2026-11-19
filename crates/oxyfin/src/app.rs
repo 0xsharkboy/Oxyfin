@@ -70,6 +70,8 @@ pub struct App {
     creating_player: Cell<Option<GenerationId>>,
     #[cfg(all(target_os = "linux", feature = "mpv"))]
     mpris: RefCell<Option<crate::mpris::Mpris>>,
+    #[cfg(all(target_os = "linux", feature = "mpv"))]
+    inhibitor: RefCell<Option<crate::inhibit::Inhibitor>>,
     pub(crate) sign_in: SignInController,
     pub(crate) home: HomeController,
     pub(crate) library: LibraryController,
@@ -111,6 +113,8 @@ impl App {
             creating_player: Cell::new(None),
             #[cfg(all(target_os = "linux", feature = "mpv"))]
             mpris: RefCell::new(None),
+            #[cfg(all(target_os = "linux", feature = "mpv"))]
+            inhibitor: RefCell::new(None),
             sign_in: SignInController::default(),
             home: HomeController::default(),
             library: LibraryController::default(),
@@ -204,6 +208,32 @@ impl App {
         });
         if let Err(error) = result {
             log::warn!("cannot receive the MPRIS calls: {error}");
+        }
+    }
+
+    /// Keeps the screen awake while an item plays on the player screen, until
+    /// [`App::take_inhibitor`].
+    #[cfg(all(target_os = "linux", feature = "mpv"))]
+    pub fn start_inhibitor(&self) {
+        use crate::inhibit::{Inhibitor, Update};
+
+        let inhibitor = Inhibitor::start(&self.runtime, crate::mpris::Bus::Session);
+        inhibitor.update(Update::Active(
+            self.state.borrow().screen() == Screen::Player,
+        ));
+        *self.inhibitor.borrow_mut() = Some(inhibitor);
+    }
+
+    /// Takes the screen inhibitor, for `main` to release it before exiting.
+    #[cfg(all(target_os = "linux", feature = "mpv"))]
+    pub fn take_inhibitor(&self) -> Option<crate::inhibit::Inhibitor> {
+        self.inhibitor.borrow_mut().take()
+    }
+
+    #[cfg(all(target_os = "linux", feature = "mpv"))]
+    fn inhibit_update(&self, update: crate::inhibit::Update) {
+        if let Some(inhibitor) = &*self.inhibitor.borrow() {
+            inhibitor.update(update);
         }
     }
 
@@ -416,6 +446,8 @@ impl App {
         }
         #[cfg(target_os = "linux")]
         self.show_mpris(&event);
+        #[cfg(target_os = "linux")]
+        self.inhibit_update(crate::inhibit::Update::Event(event.clone()));
         if let Some(message) = player::apply(&window, event) {
             self.notify(message);
         }
@@ -953,6 +985,8 @@ impl App {
                     }
                     #[cfg(all(target_os = "linux", feature = "mpv"))]
                     self.mpris_update(crate::mpris::Update::Active(screen == Screen::Player));
+                    #[cfg(all(target_os = "linux", feature = "mpv"))]
+                    self.inhibit_update(crate::inhibit::Update::Active(screen == Screen::Player));
                     let root = self.state.borrow().stack().first().cloned();
                     window.set_top_bar_page(top_bar_page(root.as_ref()));
                     if screen == Screen::Settings {
