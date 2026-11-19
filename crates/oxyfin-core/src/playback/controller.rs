@@ -509,7 +509,7 @@ impl PlaybackController {
         let resume = Resume {
             position: current.position,
             audio: audio.or(current.audio),
-            subtitle: current.subtitle,
+            subtitle: current.pending_subtitle.or(current.subtitle),
             paused: current.paused,
             speed: self.speed,
         };
@@ -756,7 +756,15 @@ impl PlaybackController {
             };
             let title = stream.display_title.as_deref().or(stream.title.as_deref());
             let language = stream.language.as_deref();
-            if let Ok(id) = self.player.add_external_subtitle(&url, title, language) {
+            if transcoded {
+                // The server may first extract it from the source file, which takes minutes.
+                if let Err(error) = self
+                    .player
+                    .add_external_subtitle_later(&url, title, language)
+                {
+                    log::warn!("cannot add the subtitle file: {error}");
+                }
+            } else if let Ok(id) = self.player.add_external_subtitle(&url, title, language) {
                 current.externals.push((stream.index, id));
                 tracks.push(Track {
                     id,
@@ -794,12 +802,20 @@ impl PlaybackController {
             mark_selected(&mut tracks, TrackKind::Audio, Some(audio));
             current.expected_audio = Some(audio);
         }
-        let subtitle = resume
+        let wanted = resume
             .map_or(current.source.default_subtitle_stream_index, |resume| {
                 resume.subtitle
             })
-            .filter(|index| *index >= 0)
-            .and_then(|index| map.mpv_subtitle(index));
+            .filter(|index| *index >= 0);
+        let subtitle = wanted.and_then(|index| map.mpv_subtitle(index));
+        current.pending_subtitle = wanted.filter(|index| {
+            transcoded
+                && subtitle.is_none()
+                && current
+                    .external_urls
+                    .iter()
+                    .any(|(added, _)| added == index)
+        });
         if self.player.select_subtitle(subtitle).is_ok() {
             mark_selected(&mut tracks, TrackKind::Subtitle, subtitle);
             current.expected_subtitle = Some(subtitle);
@@ -852,6 +868,27 @@ impl PlaybackController {
         let Some(current) = self.current.as_mut().filter(|c| c.loaded) else {
             return;
         };
+        if let Some(index) = current.pending_subtitle {
+            let url = current
+                .external_urls
+                .iter()
+                .find(|(added, _)| *added == index)
+                .map(|(_, url)| url.as_str());
+            let arrived = tracks
+                .iter()
+                .find(|track| {
+                    track.kind == TrackKind::Subtitle
+                        && url.is_some()
+                        && track.external_url.as_deref() == url
+                })
+                .map(|track| track.id);
+            if let Some(id) = arrived {
+                current.pending_subtitle = None;
+                if self.player.select_subtitle(Some(id)).is_ok() {
+                    current.expected_subtitle = Some(Some(id));
+                }
+            }
+        }
         if !current.selection_settled(tracks) {
             return;
         }

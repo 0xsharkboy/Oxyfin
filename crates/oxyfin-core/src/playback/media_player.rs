@@ -35,6 +35,14 @@ pub trait MediaPlayer: Send + Sync + 'static {
         title: Option<&str>,
         language: Option<&str>,
     ) -> Result<TrackId, PlayerError>;
+    /// Adds an external subtitle file without waiting for it; it is listed
+    /// in a later track list, with its URL, once loaded.
+    fn add_external_subtitle_later(
+        &self,
+        url: &str,
+        title: Option<&str>,
+        language: Option<&str>,
+    ) -> Result<(), PlayerError>;
     /// Sets how subtitles look, for the current and later media.
     fn set_subtitle_appearance(&self, appearance: &SubtitleAppearance) -> Result<(), PlayerError>;
 }
@@ -75,6 +83,14 @@ impl MediaPlayer for oxyfin_player::Player {
         language: Option<&str>,
     ) -> Result<TrackId, PlayerError> {
         oxyfin_player::Player::add_external_subtitle(self, url, title, language)
+    }
+    fn add_external_subtitle_later(
+        &self,
+        url: &str,
+        title: Option<&str>,
+        language: Option<&str>,
+    ) -> Result<(), PlayerError> {
+        oxyfin_player::Player::add_external_subtitle_later(self, url, title, language)
     }
     fn set_subtitle_appearance(&self, appearance: &SubtitleAppearance) -> Result<(), PlayerError> {
         oxyfin_player::Player::set_subtitle_appearance(self, appearance)

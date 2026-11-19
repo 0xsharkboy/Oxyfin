@@ -58,6 +58,8 @@ pub(super) struct Current {
     /// until it is, track lists show mpv's earlier choice and are ignored.
     pub(super) expected_audio: Option<TrackId>,
     pub(super) expected_subtitle: Option<Option<TrackId>>,
+    /// Subtitle stream to select once its file, added in the background, is listed.
+    pub(super) pending_subtitle: Option<i32>,
 }
 
 impl Current {
@@ -93,6 +95,7 @@ impl Current {
             segment: None,
             expected_audio: None,
             expected_subtitle: None,
+            pending_subtitle: None,
         }
     }
 
@@ -149,7 +152,10 @@ impl Current {
     pub(super) fn forget_expected(&mut self, kind: TrackKind) {
         match kind {
             TrackKind::Audio => self.expected_audio = None,
-            TrackKind::Subtitle => self.expected_subtitle = None,
+            TrackKind::Subtitle => {
+                self.expected_subtitle = None;
+                self.pending_subtitle = None;
+            }
             TrackKind::Video => {}
         }
     }
