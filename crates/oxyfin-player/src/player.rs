@@ -161,6 +161,30 @@ impl Player {
         self.set_property("mute", muted)
     }
 
+    /// Delays the subtitles by `millis` milliseconds, earlier when negative.
+    ///
+    /// mpv keeps the delay when the next media loads.
+    pub fn set_subtitle_delay(&self, millis: i64) -> Result<(), PlayerError> {
+        self.set_property("sub-delay", seconds(millis))
+    }
+
+    /// The subtitle delay, in milliseconds.
+    pub fn subtitle_delay(&self) -> Result<i64, PlayerError> {
+        self.get_millis("sub-delay")
+    }
+
+    /// Delays the audio by `millis` milliseconds, earlier when negative.
+    ///
+    /// mpv keeps the delay when the next media loads.
+    pub fn set_audio_delay(&self, millis: i64) -> Result<(), PlayerError> {
+        self.set_property("audio-delay", seconds(millis))
+    }
+
+    /// The audio delay, in milliseconds.
+    pub fn audio_delay(&self) -> Result<i64, PlayerError> {
+        self.get_millis("audio-delay")
+    }
+
     /// Selects the audio track `track` (an id of an audio track), or disables
     /// audio with `None`.
     pub fn select_audio(&self, track: Option<TrackId>) -> Result<(), PlayerError> {
@@ -376,6 +400,16 @@ impl Player {
             })
     }
 
+    fn get_millis(&self, name: &str) -> Result<i64, PlayerError> {
+        self.mpv
+            .get_property::<f64>(name)
+            .map(|secs| (secs * 1000.0).round() as i64)
+            .map_err(|e| PlayerError::Property {
+                name: name.to_owned(),
+                message: describe(&e),
+            })
+    }
+
     fn command(&self, name: &str, args: &[&str]) -> Result<(), PlayerError> {
         self.mpv
             .command(name, args)
@@ -406,6 +440,10 @@ const NO_COLOR: &str = "#00000000";
 fn is_not_found(code: libmpv2::MpvError) -> bool {
     use libmpv2::mpv_error;
     code == mpv_error::PropertyNotFound || code == mpv_error::OptionNotFound
+}
+
+fn seconds(millis: i64) -> f64 {
+    millis as f64 / 1000.0
 }
 
 fn track_value(track: Option<TrackId>) -> String {

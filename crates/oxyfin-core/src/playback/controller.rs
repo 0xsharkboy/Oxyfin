@@ -100,6 +100,10 @@ pub struct PlaybackController {
     request: Option<LoadRequest>,
     /// Playback speed, as the player last reported it.
     speed: f64,
+    /// Subtitle delay of the current item, in milliseconds.
+    subtitle_delay: i64,
+    /// Audio delay of the current item, in milliseconds.
+    audio_delay: i64,
     /// Set by [`PlaybackHandle::shutdown`]: no new item is loaded.
     closing: Arc<AtomicBool>,
 }
@@ -160,6 +164,8 @@ impl PlaybackController {
             quality: Quality::Original,
             request: None,
             speed: 1.0,
+            subtitle_delay: 0,
+            audio_delay: 0,
             pending: None,
             closing: closing.clone(),
         };
@@ -393,6 +399,18 @@ impl PlaybackController {
             PlaybackCommand::SetMuted(muted) => {
                 self.call(self.player.set_muted(muted));
             }
+            PlaybackCommand::SetSubtitleDelay(millis) => {
+                if self.call(self.player.set_subtitle_delay(millis)) {
+                    self.subtitle_delay = millis;
+                    self.emit(PlaybackEvent::SubtitleDelay(millis));
+                }
+            }
+            PlaybackCommand::SetAudioDelay(millis) => {
+                if self.call(self.player.set_audio_delay(millis)) {
+                    self.audio_delay = millis;
+                    self.emit(PlaybackEvent::AudioDelay(millis));
+                }
+            }
             PlaybackCommand::SelectAudio(index) => {
                 self.forget_expected(TrackKind::Audio);
                 let track = self.map().and_then(|map| map.mpv_audio(index));
@@ -598,6 +616,18 @@ impl PlaybackController {
         }
     }
 
+    /// Puts both delays back to zero for a new item; mpv would keep them.
+    fn reset_delays(&mut self) {
+        if self.subtitle_delay != 0 && self.call(self.player.set_subtitle_delay(0)) {
+            self.subtitle_delay = 0;
+            self.emit(PlaybackEvent::SubtitleDelay(0));
+        }
+        if self.audio_delay != 0 && self.call(self.player.set_audio_delay(0)) {
+            self.audio_delay = 0;
+            self.emit(PlaybackEvent::AudioDelay(0));
+        }
+    }
+
     /// Loads the fetched item, once the previous media has unloaded or its
     /// grace has passed.
     fn load_pending(&mut self) {
@@ -616,6 +646,9 @@ impl PlaybackController {
             && let Err(error) = self.player.set_subtitle_appearance(appearance)
         {
             log::warn!("cannot set the subtitle style: {error}");
+        }
+        if prepared.resume.is_none() {
+            self.reset_delays();
         }
         self.awaiting_unload = false;
         if let Err(error) = self.player.load(&prepared.media) {

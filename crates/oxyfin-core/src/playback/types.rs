@@ -100,6 +100,13 @@ pub enum PlaybackCommand {
     SetVolume(f64),
     /// Mute or unmute.
     SetMuted(bool),
+    /// Delay the subtitles by this many milliseconds, earlier when
+    /// negative. The delay stays when the item loads again, such as for a
+    /// quality change, and goes back to zero for the next item.
+    SetSubtitleDelay(i64),
+    /// Delay the audio by this many milliseconds, earlier when negative.
+    /// Kept and reset like [`PlaybackCommand::SetSubtitleDelay`].
+    SetAudioDelay(i64),
     /// Select the audio track with this Jellyfin stream index.
     SelectAudio(i32),
     /// Select the subtitle track with this Jellyfin stream index, or none.
@@ -181,6 +188,10 @@ pub enum PlaybackEvent {
     Volume(f64),
     /// The muted state changed.
     Muted(bool),
+    /// The subtitle delay changed, in milliseconds.
+    SubtitleDelay(i64),
+    /// The audio delay changed, in milliseconds.
+    AudioDelay(i64),
     /// A seek requested by the user started.
     Seeking,
     /// A seek requested by the user finished.

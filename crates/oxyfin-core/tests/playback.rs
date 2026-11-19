@@ -2896,3 +2896,62 @@ async fn quality_switch_near_end_keeps_the_end() {
     let reload = h.wait_load(2).await;
     assert_eq!(reload.start, Some(Duration::from_secs(9)));
 }
+
+#[tokio::test]
+async fn delays_are_set_and_reported_in_milliseconds() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::SetSubtitleDelay(300));
+    h.handle.send(PlaybackCommand::SetAudioDelay(-100));
+    let seen = events_until(&mut h.events, |e| *e == PlaybackEvent::AudioDelay(-100)).await;
+    assert!(
+        seen.contains(&PlaybackEvent::SubtitleDelay(300)),
+        "{seen:?}"
+    );
+    let calls = h.player.calls();
+    assert!(calls.contains(&Call::SetSubtitleDelay(300)));
+    assert!(calls.contains(&Call::SetAudioDelay(-100)));
+}
+
+#[tokio::test]
+async fn the_next_item_starts_without_the_delays() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::SetSubtitleDelay(300));
+    h.handle.send(PlaybackCommand::SetAudioDelay(-100));
+    wait_event(&mut h.events, |e| *e == PlaybackEvent::AudioDelay(-100)).await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(OTHER_ID),
+        mode: PlayMode::FromStart,
+    });
+    h.player.wait_call(|c| *c == Call::Stop).await;
+    h.sink.send(PlayerEvent::Unloaded(UnloadReason::Stopped));
+    wait_loads(&h, 2).await;
+    let seen = h.file_loaded_events().await;
+    assert!(seen.contains(&PlaybackEvent::SubtitleDelay(0)), "{seen:?}");
+    assert!(seen.contains(&PlaybackEvent::AudioDelay(0)), "{seen:?}");
+    let calls = h.player.calls();
+    let second_load = calls
+        .iter()
+        .rposition(|call| matches!(call, Call::Load(_)))
+        .unwrap();
+    assert!(position_of(&calls, &Call::SetSubtitleDelay(0)) < second_load);
+    assert!(position_of(&calls, &Call::SetAudioDelay(0)) < second_load);
+}
+
+#[tokio::test]
+async fn a_quality_change_keeps_the_delays() {
+    let mock = MockServer::start().await;
+    mount_transcode_for(&mock, 1_500_000).await;
+    mount_status(&mock, "DELETE", ENCODINGS, 204).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::SetSubtitleDelay(300));
+    wait_event(&mut h.events, |e| *e == PlaybackEvent::SubtitleDelay(300)).await;
+
+    h.handle.send(PlaybackCommand::SetQuality(LOW));
+    h.wait_load(2).await;
+    h.loaded_with(transcode_tracks()).await;
+    let calls = h.player.calls();
+    assert!(!calls.contains(&Call::SetSubtitleDelay(0)), "{calls:?}");
+}

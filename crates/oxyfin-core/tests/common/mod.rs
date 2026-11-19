@@ -94,6 +94,10 @@ pub enum Call {
     SetMuted(bool),
     /// `set_speed`.
     SetSpeed(f64),
+    /// `set_subtitle_delay`, in milliseconds.
+    SetSubtitleDelay(i64),
+    /// `set_audio_delay`, in milliseconds.
+    SetAudioDelay(i64),
     /// `select_audio`.
     SelectAudio(Option<TrackId>),
     /// `select_subtitle`.
@@ -245,6 +249,12 @@ impl MediaPlayer for FakePlayer {
         self.record(Call::SetSpeed(speed))?;
         self.update(|state| state.speed = speed);
         Ok(())
+    }
+    fn set_subtitle_delay(&self, millis: i64) -> std::result::Result<(), PlayerError> {
+        self.record(Call::SetSubtitleDelay(millis))
+    }
+    fn set_audio_delay(&self, millis: i64) -> std::result::Result<(), PlayerError> {
+        self.record(Call::SetAudioDelay(millis))
     }
     fn select_audio(&self, track: Option<TrackId>) -> std::result::Result<(), PlayerError> {
         self.record(Call::SelectAudio(track))
