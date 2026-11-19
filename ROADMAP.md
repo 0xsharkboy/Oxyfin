@@ -26,7 +26,7 @@ This file is the single source of truth for planned work. An item is checked onl
 - [x] Media keys and MPRIS (Linux)
 - [ ] Media keys on Windows (SMTC) and macOS (MPNowPlayingInfoCenter)
 - [ ] Trickplay thumbnails
-- [ ] Skip intro (media segments)
+- [x] Skip intro (media segments)
 - [ ] Subtitle settings
 - [ ] Transcoding and quality selection
 - [ ] Multiple servers and users
