@@ -74,3 +74,15 @@ async fn fetch_image_reports_status_errors() {
     let err = session(&mock).fetch_image(&request).await.unwrap_err();
     assert!(matches!(err, Error::Status { status: 404, .. }), "{err:?}");
 }
+
+#[tokio::test]
+async fn chapter_image_url_has_its_index() {
+    let mock = MockServer::start().await;
+    let mut request = ImageRequest::new("abc".into(), ImageType::Chapter);
+    request.index = Some(3);
+    request.tag = Some("t1".to_owned());
+    assert_eq!(
+        session(&mock).image_url(&request).as_str(),
+        format!("{}/Items/abc/Images/Chapter/3?tag=t1", mock.uri())
+    );
+}

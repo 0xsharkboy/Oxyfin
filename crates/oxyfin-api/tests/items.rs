@@ -3,7 +3,8 @@
 mod common;
 
 use common::{
-    TEST_TOKEN, TEST_USER_ID, authorization_is, fixture, session, to_pascal_case, variants,
+    TEST_TOKEN, TEST_USER_ID, authorization_is, fixture, session, to_camel_case, to_pascal_case,
+    variants,
 };
 use oxyfin_api::{
     BaseItemDto, BaseItemKind, ImageType, ItemFields, ItemId, ItemSortBy, ItemsQuery, SortOrder,
@@ -450,4 +451,75 @@ fn video_kind_is_recognized() {
     let item: BaseItemDto = serde_json::from_value(json!({"Id": "v", "Type": "Video"})).unwrap();
     assert_eq!(item.r#type, BaseItemKind::Video);
     assert_eq!(BaseItemKind::Video.as_str(), "Video");
+}
+
+#[tokio::test]
+async fn item_reads_chapters() {
+    let mut checked = 0;
+    for version in ["10.10.7", "10.11.11", "12.4.0"] {
+        let mut captured = to_pascal_case(fixture(version, "item_movie"));
+        assert!(
+            captured["Chapters"].is_array(),
+            "{version}: the fixture has no Chapters"
+        );
+        captured["Chapters"] = json!([
+            {"StartPositionTicks": 0, "Name": "Opening", "ImageTag": "tag0"},
+            {"StartPositionTicks": 600_000_000, "Name": null},
+        ]);
+        captured["ParentId"] = json!("ba9c5cad4ccd875366bf54fd50e04928");
+        let id = ItemId::from(captured["Id"].as_str().unwrap());
+        for (case, body) in [
+            ("PascalCase", captured.clone()),
+            ("camelCase", to_camel_case(captured.clone())),
+        ] {
+            let label = format!("{version} {case}");
+            let mock = MockServer::start().await;
+            mount(&mock, &format!("/Items/{id}"), &body).await;
+            let dto = session(&mock).item(&id).await.unwrap();
+            assert!(!dto.chapters.is_empty(), "{label}");
+            assert_eq!(dto.chapters[0].start_position_ticks, 0, "{label}");
+            assert_eq!(dto.chapters[0].name.as_deref(), Some("Opening"), "{label}");
+            assert_eq!(
+                dto.chapters[0].image_tag.as_deref(),
+                Some("tag0"),
+                "{label}"
+            );
+            assert_eq!(dto.chapters[1].start_position_ticks, 600_000_000, "{label}");
+            assert_eq!(dto.chapters[1].name, None, "{label}");
+            assert_eq!(dto.chapters[1].image_tag, None, "{label}");
+            assert_eq!(
+                dto.parent_id,
+                Some(ItemId::from("ba9c5cad4ccd875366bf54fd50e04928")),
+                "{label}"
+            );
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 6);
+}
+
+#[tokio::test]
+async fn captured_items_decode_their_chapters() {
+    for (label, body) in variants("item_movie") {
+        let captured = to_pascal_case(fixture(version_of(&label), "item_movie"));
+        let id = ItemId::from(captured["Id"].as_str().unwrap());
+        let mock = MockServer::start().await;
+        mount(&mock, &format!("/Items/{id}"), &body).await;
+        let dto = session(&mock).item(&id).await.unwrap();
+        assert_eq!(
+            dto.chapters.len(),
+            captured["Chapters"].as_array().map_or(0, Vec::len),
+            "{label}"
+        );
+    }
+}
+
+#[test]
+fn null_chapters_decode_as_none() {
+    let dto: BaseItemDto =
+        serde_json::from_value(json!({"Id": "abc", "Chapters": null, "ParentId": null})).unwrap();
+    assert!(dto.chapters.is_empty());
+    assert_eq!(dto.parent_id, None);
+    assert_eq!(ItemFields::Chapters.as_str(), "Chapters");
+    assert_eq!(ImageType::Chapter.as_str(), "Chapter");
 }

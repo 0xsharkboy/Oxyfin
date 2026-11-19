@@ -12,7 +12,8 @@ pub use enums::{
     SubtitleDeliveryMethod,
 };
 pub use items::{
-    BaseItemDto, BaseItemPerson, ItemsQuery, QueryResult, TrickplayInfoDto, UserItemDataDto,
+    BaseItemDto, BaseItemPerson, ChapterInfo, ItemsQuery, QueryResult, TrickplayInfoDto,
+    UserItemDataDto,
 };
 pub use playback::{MediaSourceInfo, MediaStream, PlaybackInfoResponse};
 pub use segments::MediaSegmentDto;
