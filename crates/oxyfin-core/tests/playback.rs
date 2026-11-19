@@ -11,8 +11,8 @@ use common::{
 use oxyfin_api::ItemId;
 use oxyfin_core::{
     PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackController, PlaybackError, PlaybackEvent,
-    PlaybackHandle, PlaybackTimings, PlayerEventSink, SHUTDOWN_TIMEOUT, UNLOAD_GRACE,
-    player_events,
+    PlaybackHandle, PlaybackTimings, PlayerEventSink, SHUTDOWN_TIMEOUT, SegmentKind,
+    SkippableSegment, UNLOAD_GRACE, player_events,
 };
 use oxyfin_player::{PlayerEvent, SeekTarget, Track, TrackId, TrackKind, UnloadReason};
 use serde_json::{Value, json};
@@ -2110,4 +2110,195 @@ async fn play_series_without_episode_reports_nothing_to_play() {
     })
     .await;
     assert!(!h.player.calls().iter().any(|c| matches!(c, Call::Load(_))));
+}
+
+fn segment_json(kind: &str, start: Duration, end: Duration) -> Value {
+    json!({
+        "Id": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "ItemId": MOVIE_ID,
+        "Type": kind,
+        "StartTicks": start.as_nanos() / 100,
+        "EndTicks": end.as_nanos() / 100,
+    })
+}
+
+async fn mount_segments(mock: &MockServer, id: &str, response: ResponseTemplate) {
+    Mock::given(method("GET"))
+        .and(path(format!("/MediaSegments/{id}")))
+        .respond_with(response)
+        .mount(mock)
+        .await;
+}
+
+fn segments_body(items: Vec<Value>) -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_json(json!({ "Items": items, "TotalRecordCount": 0 }))
+}
+
+fn intro(start: u64, end: u64) -> SkippableSegment {
+    SkippableSegment {
+        kind: SegmentKind::Intro,
+        start: Duration::from_secs(start),
+        end: Duration::from_secs(end),
+    }
+}
+
+fn segment_events(seen: &[PlaybackEvent]) -> Vec<Option<SkippableSegment>> {
+    seen.iter()
+        .filter_map(|e| match e {
+            PlaybackEvent::Segment(segment) => Some(*segment),
+            _ => None,
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn intro_is_offered_while_the_position_is_inside() {
+    let mock = MockServer::start().await;
+    let body = segments_body(vec![
+        segment_json("Intro", Duration::from_secs(2), Duration::from_secs(8)),
+        segment_json("Commercial", Duration::ZERO, Duration::from_secs(10)),
+    ]);
+    mount_segments(&mock, MOVIE_ID, body).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.play(PlayMode::FromStart).await;
+    let seen = h.file_loaded_events().await;
+    assert!(segment_events(&seen).is_empty(), "{seen:?}");
+
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(1)));
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(3)));
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::Segment(_))).await;
+    assert_eq!(segment_events(&seen), vec![Some(intro(2, 8))]);
+    assert!(seen.contains(&PlaybackEvent::Position(Duration::from_secs(3))));
+
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(4)));
+    let target = SeekTarget::Absolute(Duration::from_secs(8));
+    h.handle.send(PlaybackCommand::Seek(target));
+    h.player.wait_call(|c| *c == Call::Seek(target)).await;
+    h.sink.send(PlayerEvent::Seeking);
+    h.sink
+        .send(PlayerEvent::Position(Duration::from_millis(7_960)));
+    h.sink.send(PlayerEvent::Seeked);
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::Seeked)).await;
+    assert_eq!(segment_events(&seen), vec![None], "{seen:?}");
+
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(5)));
+    let seen = h.stop().await;
+    assert_eq!(
+        segment_events(&seen),
+        vec![Some(intro(2, 8)), None],
+        "{seen:?}"
+    );
+}
+
+#[tokio::test]
+async fn segments_that_arrive_late_are_offered_at_once() {
+    let mock = MockServer::start().await;
+    let body = segments_body(vec![segment_json(
+        "Intro",
+        Duration::ZERO,
+        Duration::from_secs(8),
+    )])
+    .set_delay(Duration::from_millis(300));
+    mount_segments(&mock, MOVIE_ID, body).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.play(PlayMode::FromStart).await;
+    let seen = h.file_loaded_events().await;
+    assert!(segment_events(&seen).is_empty(), "{seen:?}");
+    let segment = wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Segment(_))).await;
+    assert_eq!(segment, PlaybackEvent::Segment(Some(intro(0, 8))));
+}
+
+#[tokio::test]
+async fn segments_of_an_item_waiting_to_load_are_kept() {
+    let mock = MockServer::start().await;
+    let body = segments_body(vec![segment_json(
+        "Recap",
+        Duration::ZERO,
+        Duration::from_secs(5),
+    )]);
+    mount_segments(&mock, OTHER_ID, body).await;
+    let mut h = harness_on(
+        mock,
+        PlaybackTimings {
+            unload_grace: Duration::from_secs(5),
+            ..quiet()
+        },
+    )
+    .await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(OTHER_ID),
+        mode: PlayMode::FromStart,
+    });
+    h.player.wait_call(|c| *c == Call::Stop).await;
+    let start = tokio::time::Instant::now();
+    while bodies(&h.mock, &format!("/MediaSegments/{OTHER_ID}"))
+        .await
+        .is_empty()
+    {
+        assert!(start.elapsed() < common::DEADLINE, "no segments request");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    h.sink.send(PlayerEvent::Unloaded(UnloadReason::Stopped));
+    wait_loads(&h, 2).await;
+    h.file_loaded().await;
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(1)));
+    let segment = wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Segment(_))).await;
+    let recap = SkippableSegment {
+        kind: SegmentKind::Recap,
+        start: Duration::ZERO,
+        end: Duration::from_secs(5),
+    };
+    assert_eq!(segment, PlaybackEvent::Segment(Some(recap)));
+}
+
+#[tokio::test]
+async fn skipping_the_credits_to_the_end_starts_the_countdown() {
+    let mock = MockServer::start().await;
+    let credits = segment_json("Outro", Duration::from_secs(540), Duration::from_secs(700));
+    mount_segments(&mock, EPISODES[1], segments_body(vec![credits])).await;
+    let mut h = harness_on(mock, episode_timings(Duration::from_secs(3600))).await;
+    h.start_item(EPISODES[1], TEN_MINUTES).await;
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(550)));
+    let segment = wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Segment(_))).await;
+    let offered = SkippableSegment {
+        kind: SegmentKind::Credits,
+        start: Duration::from_secs(540),
+        end: TEN_MINUTES,
+    };
+    assert_eq!(segment, PlaybackEvent::Segment(Some(offered)));
+
+    let target = SeekTarget::Absolute(offered.end);
+    h.handle.send(PlaybackCommand::Seek(target));
+    h.player.wait_call(|c| *c == Call::Seek(target)).await;
+    h.sink.send(PlayerEvent::Seeking);
+    h.sink
+        .send(PlayerEvent::Position(Duration::from_millis(599_990)));
+    h.sink.send(PlayerEvent::Seeked);
+    h.sink.send(PlayerEvent::Ended);
+    let seen = events_until(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::NextUpCountdown { .. })
+    })
+    .await;
+    assert_eq!(segment_events(&seen), vec![None], "{seen:?}");
+    assert!(seen.contains(&PlaybackEvent::Ended), "{seen:?}");
+    assert_eq!(countdowns(&seen), vec![(EPISODES[2].to_owned(), 10)]);
+}
+
+#[tokio::test]
+async fn failed_segments_only_skip_the_feature() {
+    let mock = MockServer::start().await;
+    mount_segments(&mock, MOVIE_ID, ResponseTemplate::new(500)).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    wait_requests(&h.mock, &format!("/MediaSegments/{MOVIE_ID}"), 1).await;
+    h.sink.send(PlayerEvent::Position(Duration::from_secs(4)));
+    let seen = h.stop().await;
+    assert!(
+        !seen
+            .iter()
+            .any(|e| matches!(e, PlaybackEvent::Segment(_) | PlaybackEvent::Error(_))),
+        "{seen:?}"
+    );
 }

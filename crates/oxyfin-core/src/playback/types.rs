@@ -6,7 +6,7 @@ use std::time::Duration;
 use oxyfin_api::ItemId;
 use oxyfin_player::{PlayerError, SeekTarget};
 
-use super::{AudioOption, SubtitleOption};
+use super::{AudioOption, SkippableSegment, SubtitleOption};
 use crate::error::CoreError;
 use crate::models::Episode;
 
@@ -144,6 +144,13 @@ pub enum PlaybackEvent {
     },
     /// The position changed.
     Position(Duration),
+    /// The position entered a part the user can skip, or left it (`None`).
+    ///
+    /// Segments come from the server after the item starts; without them,
+    /// or when fetching them fails, this event never comes. Skipping is a
+    /// [`PlaybackCommand::Seek`] to [`SkippableSegment::end`]. The real end
+    /// of the item always leaves the segment.
+    Segment(Option<SkippableSegment>),
     /// The paused state changed.
     Paused(bool),
     /// The playback speed changed.

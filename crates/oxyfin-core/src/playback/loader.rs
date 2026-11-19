@@ -10,6 +10,7 @@ use tokio::task::JoinHandle;
 
 use super::current::Siblings;
 use super::queue::neighbours;
+use super::segments::{SkippableSegment, skippable};
 use super::types::{PlayMode, PlaybackTitle};
 use crate::catalog::Catalog;
 use crate::error::CoreError;
@@ -23,6 +24,8 @@ pub(super) struct Prepared {
     pub(super) media: MediaSource,
     pub(super) start: Option<Duration>,
     pub(super) siblings: Siblings,
+    /// Segments that arrived while the item waited to load.
+    pub(super) segments: Vec<SkippableSegment>,
 }
 
 /// Why an item cannot be loaded.
@@ -38,6 +41,9 @@ pub(super) enum LoadStage {
     Loading { item: ItemId, title: PlaybackTitle },
     /// The network phase is over.
     Done(Box<Result<Prepared, LoadFailure>>),
+    /// The skippable segments of the prepared item, fetched after `Done` so
+    /// they never delay playback. Not sent when fetching them failed.
+    Segments(Vec<SkippableSegment>),
 }
 
 /// A [`LoadStage`] tagged with the load it belongs to.
@@ -83,7 +89,14 @@ impl Loader {
                 let _ = messages.send(LoadMessage { generation, stage });
             };
             let outcome = fetch(&session, item, mode, &send).await;
+            let prepared = outcome.as_ref().ok().map(|prepared| prepared.item.clone());
             send(LoadStage::Done(Box::new(outcome)));
+            if let Some(item) = prepared {
+                match session.media_segments(&item).await {
+                    Ok(segments) => send(LoadStage::Segments(skippable(segments))),
+                    Err(error) => log::warn!("cannot fetch the media segments: {error}"),
+                }
+            }
         }));
     }
 
@@ -172,6 +185,7 @@ async fn fetch(
         media,
         start,
         siblings,
+        segments: Vec::new(),
     })
 }
 

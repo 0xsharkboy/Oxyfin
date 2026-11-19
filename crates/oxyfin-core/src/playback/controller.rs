@@ -277,6 +277,18 @@ impl PlaybackController {
         }
     }
 
+    /// Emits the segment offered at the current position when it changed.
+    fn show_segment(&mut self) {
+        let change = self
+            .current
+            .as_mut()
+            .filter(|current| current.loaded)
+            .and_then(Current::update_segment);
+        if let Some(segment) = change {
+            self.emit(PlaybackEvent::Segment(segment));
+        }
+    }
+
     /// Cancels the next episode countdown, if one runs.
     fn cancel_countdown(&mut self) {
         if self.countdown.take().is_some() {
@@ -449,6 +461,14 @@ impl PlaybackController {
         }
         match message.stage {
             LoadStage::Loading { item, title } => self.emit(PlaybackEvent::Loading { item, title }),
+            LoadStage::Segments(segments) => {
+                if let Some((prepared, _)) = self.pending.as_mut() {
+                    prepared.segments = segments;
+                } else if let Some(current) = self.current.as_mut() {
+                    current.segments = segments;
+                    self.show_segment();
+                }
+            }
             LoadStage::Done(outcome) => match *outcome {
                 Ok(prepared) => {
                     let deadline = Instant::now() + self.timings.unload_grace;
@@ -489,13 +509,15 @@ impl PlaybackController {
             self.load_failed();
             return self.emit(PlaybackEvent::Error(PlaybackError::load(error)));
         }
-        self.current = Some(Current::new(
+        let mut current = Current::new(
             prepared.item,
             prepared.source,
             prepared.play_session_id,
             prepared.start.unwrap_or_default(),
             prepared.siblings,
-        ));
+        );
+        current.segments = prepared.segments;
+        self.current = Some(current);
         self.loading = false;
     }
 
@@ -519,6 +541,7 @@ impl PlaybackController {
                     current.position = position;
                     current.position_moved(position);
                     self.emit(PlaybackEvent::Position(position));
+                    self.show_segment();
                 }
             }
             PlayerEvent::Paused(paused) => self.on_paused(paused),
@@ -568,6 +591,7 @@ impl PlaybackController {
         current.ended = true;
         let next = current.siblings.next.clone();
         self.next_progress = None;
+        self.show_segment();
         self.emit(PlaybackEvent::Ended);
         if let Some(next) = next {
             self.start_countdown(next);
@@ -666,6 +690,7 @@ impl PlaybackController {
         });
         self.schedule_progress();
         self.report(ReportKind::Start);
+        self.show_segment();
         if let Some(command) = self.navigation.take() {
             self.on_command(command);
         }

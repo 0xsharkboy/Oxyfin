@@ -7,11 +7,13 @@ mod loader;
 mod media_player;
 mod queue;
 mod reporter;
+mod segments;
 mod tracks;
 mod types;
 
 pub use controller::{PlaybackController, PlaybackHandle};
 pub use media_player::{MediaPlayer, PlayerEventSink, PlayerEvents, player_events};
+pub use segments::{SegmentKind, SkippableSegment};
 pub use types::{
     NEXT_UP_COUNTDOWN, PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent,
     PlaybackTimings, PlaybackTitle, SEEK_STEP, SHUTDOWN_TIMEOUT, SPEEDS, UNLOAD_GRACE,
