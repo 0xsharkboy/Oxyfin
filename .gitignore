@@ -3,3 +3,4 @@ docs/superpowers/
 /target
 result
 .direnv/
+.flatpak-builder/
