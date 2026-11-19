@@ -135,6 +135,64 @@ async fn playback_info_posts_the_bitrate_and_the_tracks() {
         max_streaming_bitrate: Some(4_000_000),
         audio_stream_index: Some(3),
         subtitle_stream_index: Some(-1),
+        max_height: None,
+    };
+    session(&mock)
+        .playback_info_with(&ItemId::from("abc"), &options)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn limited_quality_sends_a_height_condition() {
+    let mock = MockServer::start().await;
+    let mut body = playback_info_body();
+    body["MaxStreamingBitrate"] = json!(1_500_000);
+    body["DeviceProfile"]["CodecProfiles"] = json!([{
+        "Type": "Video",
+        "Conditions": [{
+            "Condition": "LessThanEqual",
+            "Property": "Height",
+            "Value": "480",
+            "IsRequired": false,
+        }, {
+            "Condition": "LessThanEqual",
+            "Property": "Width",
+            "Value": "854",
+            "IsRequired": false,
+        }],
+    }]);
+    Mock::given(method("POST"))
+        .and(path("/Items/abc/PlaybackInfo"))
+        .and(body_json(body))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"MediaSources": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let options = PlaybackOptions {
+        max_streaming_bitrate: Some(1_500_000),
+        max_height: Some(480),
+        ..PlaybackOptions::default()
+    };
+    session(&mock)
+        .playback_info_with(&ItemId::from("abc"), &options)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn original_quality_sends_no_height_limit() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/Items/abc/PlaybackInfo"))
+        .and(body_json(playback_info_body()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"MediaSources": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let options = PlaybackOptions {
+        max_height: None,
+        ..PlaybackOptions::default()
     };
     session(&mock)
         .playback_info_with(&ItemId::from("abc"), &options)

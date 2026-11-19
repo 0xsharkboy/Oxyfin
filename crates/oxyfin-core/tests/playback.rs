@@ -2611,6 +2611,11 @@ async fn a_quality_change_reloads_at_the_position_with_the_tracks() {
     assert_eq!(reload.start, Some(Duration::from_secs(5)));
     let infos = wait_requests(&h.mock, PLAYBACK_INFO, 2).await;
     assert_eq!(infos[1]["MaxStreamingBitrate"], json!(1_500_000));
+    assert!(infos[0]["DeviceProfile"].get("CodecProfiles").is_none());
+    assert_eq!(
+        infos[1]["DeviceProfile"]["CodecProfiles"][0]["Conditions"][0]["Value"],
+        json!("480")
+    );
     assert_eq!(infos[1]["AudioStreamIndex"], json!(2));
     assert_eq!(infos[1]["SubtitleStreamIndex"], json!(0));
     let stopped = wait_requests(&h.mock, STOPPED, 1).await;
