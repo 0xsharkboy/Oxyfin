@@ -64,6 +64,7 @@ pub struct App {
     quitting: Cell<bool>,
     pending_stops: Cell<u32>,
     notice_timer: Timer,
+    sheets: RefCell<crate::images::SheetCache>,
     #[cfg(feature = "mpv")]
     video: crate::video::VideoSource,
     #[cfg(feature = "mpv")]
@@ -104,6 +105,7 @@ impl App {
             quitting: Cell::new(false),
             pending_stops: Cell::new(0),
             notice_timer: Timer::default(),
+            sheets: RefCell::default(),
             #[cfg(feature = "mpv")]
             video: Default::default(),
             #[cfg(feature = "mpv")]
@@ -400,6 +402,9 @@ impl App {
         let Some(window) = self.window() else { return };
         let stopped = event == PlaybackEvent::Stopped;
         let ended = event == PlaybackEvent::Ended;
+        if stopped {
+            self.sheets.borrow_mut().clear();
+        }
         if let PlaybackEvent::NextUpCountdown { episode, .. } = &event {
             self.load_next_up_image(&window, episode);
         }
@@ -471,6 +476,30 @@ impl App {
                 next.image = image;
                 next.has_image = true;
                 window.set_player_next_up(next);
+            }
+        });
+    }
+
+    /// Shows `sheet` in the seek bar preview: at once when it is decoded
+    /// already, otherwise once fetched and decoded off the Slint thread.
+    fn load_trickplay_sheet(&self, sheet: oxyfin_core::TrickplaySheet) {
+        let Some(window) = self.window() else { return };
+        let decoded = self.sheets.borrow_mut().get(&sheet);
+        if let Some(image) = decoded {
+            player::show_sheet(&window, &sheet, image);
+            return;
+        }
+        let Some((generation, _, images)) = self.services() else {
+            return;
+        };
+        if !self.sheets.borrow_mut().start(&sheet) {
+            return;
+        }
+        let loaded = sheet.clone();
+        crate::images::load_sheet(self, generation, &images, sheet, move |app, image| {
+            app.sheets.borrow_mut().finish(&loaded, image.clone());
+            if let (Some(image), Some(window)) = (image, app.window()) {
+                player::show_sheet(&window, &loaded, image);
             }
         });
     }
@@ -793,6 +822,15 @@ impl App {
             Rc::new(move |command| {
                 if let Some(app) = this.upgrade() {
                     app.send_playback(command);
+                }
+            }),
+        );
+        let this = self.this.clone();
+        player::bind_preview(
+            window,
+            Rc::new(move |sheet| {
+                if let Some(app) = this.upgrade() {
+                    app.load_trickplay_sheet(sheet);
                 }
             }),
         );

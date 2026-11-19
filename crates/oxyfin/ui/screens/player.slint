@@ -1,5 +1,6 @@
 import { Spinner } from "std-widgets.slint";
-import { Theme, Message, Messages, TrackRow, NextUp, SkipKind } from "../theme.slint";
+import { Theme, Message, Messages, TrackRow, NextUp, SeekPreview, SkipKind } from "../theme.slint";
+import { SeekPreviewPopup } from "../components/seek_preview.slint";
 import { Icons } from "../icons.slint";
 import { Button, ButtonStyle } from "../components/button.slint";
 import { IconButton } from "../components/icon_button.slint";
@@ -37,6 +38,7 @@ export component PlayerScreen inherits Rectangle {
     in property <float> skip-end;
     in property <bool> fullscreen;
     in-out property <bool> scrubbing;
+    in property <SeekPreview> preview;
     out property <bool> controls-visible: root.awake || root.paused || root.menu != PlayerMenu.none || root.scrubbing || root.loading || root.has-error;
 
     callback back();
@@ -57,6 +59,8 @@ export component PlayerScreen inherits Rectangle {
     callback command-set-muted(muted: bool);
     callback command-select-audio(index: int);
     callback command-select-subtitle(index: int);
+    // The pointer hovers or drags the seek bar at `seconds`: the preview should show that time.
+    callback preview-requested(seconds: float);
 
     property <PlayerMenu> menu: PlayerMenu.none;
     // False once the pointer rested for the hide delay while playing.
@@ -309,6 +313,9 @@ export component PlayerScreen inherits Rectangle {
                 toggle-fullscreen => {
                     root.toggle-fullscreen();
                 }
+                seek-hovered(seconds) => {
+                    root.preview-requested(seconds);
+                }
             }
 
             if root.menu == PlayerMenu.tracks: TrackMenu {
@@ -364,6 +371,14 @@ export component PlayerScreen inherits Rectangle {
                 cancel => {
                     root.command-cancel-next-up();
                 }
+            }
+
+            // Follows the pointer over the seek bar, kept inside the window. Declared last so
+            // that it draws over the skip button and the next episode toast.
+            if root.controls-visible && controls.seek-hovering: SeekPreviewPopup {
+                x: max(Theme.space-sm, min(parent.width - self.width - Theme.space-sm, controls.x + controls.seek-hover-x - self.width / 2));
+                y: controls.y + controls.seek-top - self.height - Theme.space-sm;
+                preview: root.preview;
             }
         }
     }

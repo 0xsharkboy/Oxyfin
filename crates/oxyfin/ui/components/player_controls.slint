@@ -13,8 +13,15 @@ export component Scrubber inherits Rectangle {
     in property <bool> knob;
     in property <bool> enabled: true;
     in-out property <bool> dragging;
+    // The pointer is over the slider, or drags it.
+    out property <bool> hovering: root.enabled && (touch.has-hover || root.dragging);
+    // Value under the pointer, and its position along the slider.
+    out property <float> hover-value: root.dragging ? root.drag-value : root.pick(touch.mouse-x);
+    out property <length> hover-x: root.maximum > 0 ? root.hover-value / root.maximum * root.width : 0;
     callback committed(value: float);
     callback stepped(direction: int);
+    // The value under the pointer changed while hovering or dragging.
+    callback hovered(value: float);
 
     property <float> drag-value;
     property <float> shown: root.dragging ? root.drag-value : root.value;
@@ -59,12 +66,18 @@ export component Scrubber inherits Rectangle {
         background: Theme.accent;
     }
 
-    TouchArea {
+    touch := TouchArea {
         enabled: root.enabled;
         mouse-cursor: pointer;
         pointer-event(event) => {
             if event.kind == PointerEventKind.cancel {
                 root.dragging = false;
+                return;
+            }
+            if event.kind == PointerEventKind.move {
+                if !root.dragging {
+                    root.hovered(root.pick(self.mouse-x));
+                }
                 return;
             }
             if event.button != PointerEventButton.left {
@@ -73,6 +86,7 @@ export component Scrubber inherits Rectangle {
             if event.kind == PointerEventKind.down {
                 root.drag-value = root.pick(self.mouse-x);
                 root.dragging = true;
+                root.hovered(root.drag-value);
             } else if event.kind == PointerEventKind.up && root.dragging {
                 root.dragging = false;
                 root.committed(root.drag-value);
@@ -81,6 +95,7 @@ export component Scrubber inherits Rectangle {
         moved => {
             if root.dragging {
                 root.drag-value = root.pick(self.mouse-x);
+                root.hovered(root.drag-value);
             }
         }
     }
@@ -100,6 +115,10 @@ export component PlayerControls inherits Rectangle {
     in property <bool> speed-open;
     in property <bool> fullscreen;
     in-out property <bool> scrubbing;
+    // Where the pointer hovers or drags the seek bar, for the preview above it.
+    out property <bool> seek-hovering: seek-bar.hovering;
+    out property <length> seek-hover-x: layout.x + seek-bar.x + seek-bar.hover-x;
+    out property <length> seek-top: layout.y + seek-bar.y;
     callback toggle-pause();
     callback seek(seconds: float);
     callback skip(direction: int);
@@ -111,6 +130,7 @@ export component PlayerControls inherits Rectangle {
     callback toggle-tracks();
     callback toggle-speed();
     callback toggle-fullscreen();
+    callback seek-hovered(seconds: float);
 
     background: Theme.player-scrim-bottom;
     height: layout.preferred-height;
@@ -122,7 +142,7 @@ export component PlayerControls inherits Rectangle {
         padding-right: Theme.space-2xl;
         spacing: Theme.space-md;
 
-        Scrubber {
+        seek-bar := Scrubber {
             label: @tr("Seek");
             value: root.position;
             maximum: max(root.duration, 0);
@@ -135,6 +155,9 @@ export component PlayerControls inherits Rectangle {
             }
             stepped(direction) => {
                 root.skip(direction);
+            }
+            hovered(value) => {
+                root.seek-hovered(value);
             }
         }
 

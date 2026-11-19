@@ -1,10 +1,12 @@
 //! Image loading: bytes from the cache decoded off the Slint thread, then shown as a `slint::Image`.
 
+use std::collections::{HashSet, VecDeque};
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::app::App;
 use crate::state::{GenerationId, Msg};
-use oxyfin_core::{CoreError, ImageCache, ImageRef, ImageSize};
+use oxyfin_core::{CoreError, ImageCache, ImageRef, ImageSize, TrickplaySheet};
 use slint::{Rgba8Pixel, SharedPixelBuffer};
 
 /// Decodes JPEG, PNG or WebP bytes into RGBA pixels; `None` for anything else.
@@ -63,6 +65,93 @@ pub fn load_into(
     );
 }
 
+/// Fetches a trickplay sheet and decodes it on the runtime, then calls
+/// `apply` with the result on the Slint thread, `None` on a failure. A fetch
+/// rejected with 401 ends the session of generation `id` instead.
+pub fn load_sheet(
+    app: &App,
+    id: GenerationId,
+    images: &Arc<ImageCache>,
+    sheet: TrickplaySheet,
+    apply: impl FnOnce(&Rc<App>, Option<slint::Image>) + 'static,
+) {
+    let images = Arc::clone(images);
+    app.spawn(
+        async move {
+            let bytes = match images.trickplay_sheet(&sheet).await {
+                Ok(bytes) => bytes,
+                Err(CoreError::SessionExpired) => return Loaded::Expired,
+                Err(error) => {
+                    log::debug!("cannot fetch trickplay sheet {sheet:?}: {error}");
+                    return Loaded::Failed;
+                }
+            };
+            match tokio::task::spawn_blocking(move || decode(&bytes)).await {
+                Ok(Some(pixels)) => Loaded::Pixels(pixels),
+                _ => {
+                    log::debug!("cannot decode trickplay sheet {sheet:?}");
+                    Loaded::Failed
+                }
+            }
+        },
+        move |app, loaded| match loaded {
+            Loaded::Pixels(pixels) => apply(app, Some(slint::Image::from_rgba8(pixels))),
+            Loaded::Expired => {
+                apply(app, None);
+                app.dispatch(Msg::Expired(id));
+            }
+            Loaded::Failed => apply(app, None),
+        },
+    );
+}
+
+/// Decoded trickplay sheets of the seek bar preview: the last
+/// [`DECODED_SHEETS`] shown, and the ones being loaded.
+///
+/// A decoded sheet of 10 by 10 thumbnails 320 pixels wide takes 23 MB, so
+/// few are kept; the encoded ones stay in the [`ImageCache`].
+#[derive(Default)]
+pub struct SheetCache {
+    decoded: VecDeque<(TrickplaySheet, slint::Image)>,
+    loading: HashSet<TrickplaySheet>,
+}
+
+/// Number of decoded trickplay sheets kept.
+pub const DECODED_SHEETS: usize = 2;
+
+impl SheetCache {
+    /// The decoded `sheet`, if kept; it becomes the most recent one.
+    pub fn get(&mut self, sheet: &TrickplaySheet) -> Option<slint::Image> {
+        let index = self.decoded.iter().position(|(kept, _)| kept == sheet)?;
+        let entry = self.decoded.remove(index)?;
+        let image = entry.1.clone();
+        self.decoded.push_back(entry);
+        Some(image)
+    }
+
+    /// Marks `sheet` as loading; false when it already is.
+    pub fn start(&mut self, sheet: &TrickplaySheet) -> bool {
+        self.loading.insert(sheet.clone())
+    }
+
+    /// Ends the load of `sheet`, keeping its image when it has one.
+    pub fn finish(&mut self, sheet: &TrickplaySheet, image: Option<slint::Image>) {
+        self.loading.remove(sheet);
+        if let Some(image) = image {
+            self.decoded.retain(|(kept, _)| kept != sheet);
+            self.decoded.push_back((sheet.clone(), image));
+            while self.decoded.len() > DECODED_SHEETS {
+                self.decoded.pop_front();
+            }
+        }
+    }
+
+    /// Drops every decoded sheet, to free their memory after playback.
+    pub fn clear(&mut self) {
+        self.decoded.clear();
+    }
+}
+
 enum Loaded {
     Pixels(SharedPixelBuffer<Rgba8Pixel>),
     Expired,
@@ -93,6 +182,45 @@ mod tests {
     fn truncated_bytes_do_not_decode() {
         let bytes = png(16, 16);
         assert!(decode(&bytes[..bytes.len() / 2]).is_none());
+    }
+
+    fn sheet(index: u32) -> TrickplaySheet {
+        TrickplaySheet {
+            item: "item".into(),
+            media_source: "source".into(),
+            resolution: 320,
+            index,
+            layout: (10_000, 10, 10),
+        }
+    }
+
+    fn image(width: u32) -> slint::Image {
+        slint::Image::from_rgba8(SharedPixelBuffer::new(width, 1))
+    }
+
+    #[test]
+    fn sheet_cache_keeps_the_last_decoded_sheets() {
+        let mut cache = SheetCache::default();
+        assert!(cache.start(&sheet(0)));
+        assert!(!cache.start(&sheet(0)), "already loading");
+        cache.finish(&sheet(0), Some(image(1)));
+        assert!(cache.start(&sheet(1)));
+        cache.finish(&sheet(1), Some(image(2)));
+        assert_eq!(cache.get(&sheet(0)).map(|i| i.size().width), Some(1));
+        cache.finish(&sheet(2), Some(image(3)));
+        assert!(cache.get(&sheet(1)).is_none(), "the least recent goes");
+        assert!(cache.get(&sheet(0)).is_some() && cache.get(&sheet(2)).is_some());
+        cache.clear();
+        assert!(cache.get(&sheet(0)).is_none());
+    }
+
+    #[test]
+    fn a_failed_sheet_can_be_loaded_again() {
+        let mut cache = SheetCache::default();
+        assert!(cache.start(&sheet(4)));
+        cache.finish(&sheet(4), None);
+        assert!(cache.get(&sheet(4)).is_none());
+        assert!(cache.start(&sheet(4)));
     }
 
     #[test]
