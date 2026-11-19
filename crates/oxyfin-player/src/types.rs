@@ -54,6 +54,34 @@ impl fmt::Debug for MediaSource {
     }
 }
 
+/// How subtitles look. Color and background apply to plain-text subtitles;
+/// with mpv's default `sub-ass-override`, ASS/SSA subtitles keep their own
+/// style but follow the scale and the position.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SubtitleAppearance {
+    /// Size factor of the text, `1.0` being mpv's default size.
+    pub scale: f64,
+    /// Color of the text, as red, green and blue.
+    pub color: [u8; 3],
+    /// Whether the text sits on a dark translucent box instead of having an
+    /// outline.
+    pub background_box: bool,
+    /// Vertical position, in percent of the screen height from the top (mpv
+    /// `sub-pos`): `100.0`, the default, is mpv's usual place near the bottom.
+    pub position: f64,
+}
+
+impl Default for SubtitleAppearance {
+    fn default() -> Self {
+        Self {
+            scale: 1.0,
+            color: [0xFF, 0xFF, 0xFF],
+            background_box: false,
+            position: 100.0,
+        }
+    }
+}
+
 /// A seek request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SeekTarget {

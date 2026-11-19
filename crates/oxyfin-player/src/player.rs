@@ -9,7 +9,10 @@ use libmpv2::Mpv;
 use crate::error::describe;
 use crate::events::{self, Shared};
 use crate::tracks;
-use crate::{MediaSource, PlayerError, PlayerEvent, SeekTarget, Track, TrackId, TrackKind};
+use crate::{
+    MediaSource, PlayerError, PlayerEvent, SeekTarget, SubtitleAppearance, Track, TrackId,
+    TrackKind,
+};
 
 /// Where mpv sends decoded video.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -201,6 +204,45 @@ impl Player {
             })
     }
 
+    /// Sets how subtitles look, for the current and later media.
+    ///
+    /// Every option is tried; the first failure is returned. mpv older than
+    /// 0.39 has no border style, so that option is skipped there and the box
+    /// may not show.
+    pub fn set_subtitle_appearance(
+        &self,
+        appearance: &SubtitleAppearance,
+    ) -> Result<(), PlayerError> {
+        let [red, green, blue] = appearance.color;
+        let (style, back) = if appearance.background_box {
+            ("background-box", BOX_COLOR)
+        } else {
+            ("outline-and-shadow", NO_COLOR)
+        };
+        let border = match self.mpv.set_property("sub-border-style", style) {
+            Err(libmpv2::Error::Raw(code)) if is_not_found(code) => Ok(()),
+            other => other.map_err(|e| PlayerError::Property {
+                name: "sub-border-style".to_owned(),
+                message: describe(&e),
+            }),
+        };
+        let position = if appearance.position.is_nan() {
+            100.0
+        } else {
+            appearance.position.clamp(0.0, 150.0)
+        };
+        [
+            self.set_property("sub-scale", appearance.scale.to_string()),
+            self.set_property("sub-color", format!("#{red:02X}{green:02X}{blue:02X}")),
+            border,
+            self.set_property("sub-back-color", back),
+            self.set_property("sub-pos", position.to_string()),
+        ]
+        .into_iter()
+        .collect::<Result<Vec<()>, _>>()
+        .map(|_| ())
+    }
+
     /// Returns a one-line summary of decoding and rendering counters
     /// (hardware decoder, video size, dropped and delayed frames, fps).
     ///
@@ -330,6 +372,90 @@ impl Drop for Player {
     }
 }
 
+/// Dark translucent box behind subtitles, as `#AARRGGBB`.
+const BOX_COLOR: &str = "#AF000000";
+/// Fully transparent, as `#AARRGGBB`.
+const NO_COLOR: &str = "#00000000";
+
+fn is_not_found(code: libmpv2::MpvError) -> bool {
+    use libmpv2::mpv_error;
+    code == mpv_error::PropertyNotFound || code == mpv_error::OptionNotFound
+}
+
 fn track_value(track: Option<TrackId>) -> String {
     track.map_or_else(|| "no".to_owned(), |id| id.0.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn headless() -> Player {
+        let options = PlayerOptions {
+            video_output: VideoOutput::None,
+        };
+        Player::new(options, |_| {}).unwrap()
+    }
+
+    fn read(player: &Player, name: &str) -> Option<String> {
+        player.mpv.get_property::<String>(name).ok()
+    }
+
+    fn number(player: &Player, name: &str) -> f64 {
+        read(player, name).unwrap().parse().unwrap()
+    }
+
+    #[test]
+    fn subtitle_appearance_sets_the_mpv_options() {
+        let player = headless();
+        player
+            .set_subtitle_appearance(&SubtitleAppearance {
+                scale: 1.25,
+                color: [0xFF, 0xE0, 0x00],
+                background_box: true,
+                position: 90.0,
+            })
+            .unwrap();
+
+        assert_eq!(number(&player, "sub-scale"), 1.25);
+        assert_eq!(number(&player, "sub-pos"), 90.0);
+        assert_eq!(read(&player, "sub-color").unwrap(), "#FFFFE000");
+        assert_eq!(read(&player, "sub-back-color").unwrap(), BOX_COLOR);
+        // Older mpv versions have no border style.
+        if let Some(style) = read(&player, "sub-border-style") {
+            assert_eq!(style, "background-box");
+        }
+    }
+
+    #[test]
+    fn default_subtitle_appearance_restores_the_outline() {
+        let player = headless();
+        let boxed = SubtitleAppearance {
+            background_box: true,
+            ..SubtitleAppearance::default()
+        };
+        player.set_subtitle_appearance(&boxed).unwrap();
+        player
+            .set_subtitle_appearance(&SubtitleAppearance::default())
+            .unwrap();
+
+        assert_eq!(number(&player, "sub-scale"), 1.0);
+        assert_eq!(number(&player, "sub-pos"), 100.0);
+        assert_eq!(read(&player, "sub-color").unwrap(), "#FFFFFFFF");
+        assert_eq!(read(&player, "sub-back-color").unwrap(), NO_COLOR);
+        if let Some(style) = read(&player, "sub-border-style") {
+            assert_eq!(style, "outline-and-shadow");
+        }
+    }
+
+    #[test]
+    fn subtitle_position_is_kept_in_range() {
+        let player = headless();
+        let appearance = SubtitleAppearance {
+            position: 400.0,
+            ..SubtitleAppearance::default()
+        };
+        player.set_subtitle_appearance(&appearance).unwrap();
+        assert_eq!(number(&player, "sub-pos"), 150.0);
+    }
 }
