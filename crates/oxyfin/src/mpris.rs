@@ -254,6 +254,7 @@ impl PlayerState {
             PlaybackEvent::Muted(_)
             | PlaybackEvent::Seeking
             | PlaybackEvent::Segment(_)
+            | PlaybackEvent::Trickplay(_)
             | PlaybackEvent::Ended
             | PlaybackEvent::TracksChanged { .. }
             | PlaybackEvent::NextUpCountdown { .. }

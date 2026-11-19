@@ -60,6 +60,7 @@ mod quick_connect;
 mod secrets;
 mod session;
 mod subtitles;
+mod trickplay;
 
 pub use catalog::{BrowseQuery, BrowseSource, Catalog, ContentKind, SortField, WatchFilter};
 pub use config::{Config, SavedSession};
@@ -84,3 +85,4 @@ pub use session::{ServerHandle, SessionManager, SignedIn};
 pub use subtitles::{
     SubtitleBackground, SubtitleColor, SubtitlePosition, SubtitleSize, SubtitleStyle,
 };
+pub use trickplay::{TRICKPLAY_WIDTH, Trickplay, TrickplaySheet, TrickplayTile};

@@ -9,6 +9,7 @@ use super::segments::{SkippableSegment, active};
 use super::tracks::TrackMap;
 use super::{AudioOption, SubtitleOption};
 use crate::models::Episode;
+use crate::trickplay::Trickplay;
 
 /// A last position at most this far from the duration counts as the real end.
 const END_MARGIN: Duration = Duration::from_secs(10);
@@ -43,6 +44,8 @@ pub(super) struct Current {
     /// The media reached its real end; reset by each load since a load makes a new `Current`.
     pub(super) ended: bool,
     pub(super) siblings: Siblings,
+    /// Seek bar thumbnails of the source, when the server has some.
+    pub(super) trickplay: Option<Trickplay>,
     /// Parts of the item the user can skip, ordered by start.
     pub(super) segments: Vec<SkippableSegment>,
     /// The segment offered at the last position, as last emitted.
@@ -79,6 +82,7 @@ impl Current {
             duration: None,
             ended: false,
             siblings,
+            trickplay: None,
             segments: Vec::new(),
             segment: None,
             expected_audio: None,

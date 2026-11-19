@@ -201,7 +201,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             show_segment(window, None);
         }
         PlaybackEvent::Segment(segment) => show_segment(window, segment),
-        PlaybackEvent::Ended | PlaybackEvent::SessionExpired => {}
+        PlaybackEvent::Ended | PlaybackEvent::SessionExpired | PlaybackEvent::Trickplay(_) => {}
         PlaybackEvent::Error(error @ PlaybackError::Command { .. }) => {
             log::warn!("playback command failed: {error}");
             window.set_player_seek_pending(false);

@@ -8,11 +8,12 @@ use std::time::Duration;
 use common::{
     Call, FakePlayer, TEST_TOKEN, bodies, events_until, fixture, session, wait_event, wait_requests,
 };
-use oxyfin_api::ItemId;
+use oxyfin_api::{ItemId, MediaSourceId};
 use oxyfin_core::{
     PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackController, PlaybackError, PlaybackEvent,
     PlaybackHandle, PlaybackTimings, PlayerEventSink, SHUTDOWN_TIMEOUT, SegmentKind,
-    SkippableSegment, SubtitleBackground, SubtitleSize, SubtitleStyle, UNLOAD_GRACE, player_events,
+    SkippableSegment, SubtitleBackground, SubtitleSize, SubtitleStyle, Trickplay, UNLOAD_GRACE,
+    player_events,
 };
 use oxyfin_player::{PlayerEvent, SeekTarget, Track, TrackId, TrackKind, UnloadReason};
 use serde_json::{Value, json};
@@ -2352,5 +2353,57 @@ async fn without_a_style_loads_leave_subtitles_alone() {
             .calls()
             .iter()
             .any(|call| matches!(call, Call::SetSubtitles(_)))
+    );
+}
+
+#[tokio::test]
+async fn trickplay_of_the_source_comes_just_before_ready() {
+    let mock = MockServer::start().await;
+    let mut item = fixture("item_movie");
+    item["Trickplay"] = json!({
+        MOVIE_ID: {
+            "160": {"Width": 160, "Height": 90, "TileWidth": 3, "TileHeight": 3,
+                    "ThumbnailCount": 10, "Interval": 1000, "Bandwidth": 27125}
+        }
+    });
+    Mock::given(method("GET"))
+        .and(path(format!("/Items/{MOVIE_ID}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(item))
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.play(PlayMode::FromStart).await;
+    let seen = h.file_loaded_events().await;
+    let [
+        ..,
+        PlaybackEvent::Trickplay(trickplay),
+        PlaybackEvent::Ready { .. },
+    ] = &seen[..]
+    else {
+        panic!("no trickplay just before Ready: {seen:?}");
+    };
+    assert_eq!(
+        *trickplay,
+        Trickplay {
+            item: ItemId::from(MOVIE_ID),
+            media_source: MediaSourceId::from(MOVIE_ID),
+            resolution: 160,
+            width: 160,
+            height: 90,
+            columns: 3,
+            rows: 3,
+            count: 10,
+            interval: Duration::from_secs(1),
+        }
+    );
+
+    h.play_item(OTHER_ID, PlayMode::FromStart).await;
+    let seen = h.file_loaded_events().await;
+    assert!(
+        !seen
+            .iter()
+            .any(|e| matches!(e, PlaybackEvent::Trickplay(_))),
+        "an item without trickplay has none: {seen:?}"
     );
 }

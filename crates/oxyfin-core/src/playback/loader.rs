@@ -15,6 +15,7 @@ use super::types::{PlayMode, PlaybackTitle};
 use crate::catalog::Catalog;
 use crate::error::CoreError;
 use crate::models::{Episode, ItemSummary, UserState};
+use crate::trickplay::Trickplay;
 
 /// An item ready to be loaded into the player.
 pub(super) struct Prepared {
@@ -24,6 +25,8 @@ pub(super) struct Prepared {
     pub(super) media: MediaSource,
     pub(super) start: Option<Duration>,
     pub(super) siblings: Siblings,
+    /// Seek bar thumbnails of the source, when the server has some.
+    pub(super) trickplay: Option<Trickplay>,
     /// Segments that arrived while the item waited to load.
     pub(super) segments: Vec<SkippableSegment>,
 }
@@ -168,6 +171,7 @@ async fn fetch(
         .into_iter()
         .find(|source| source.supports_direct_play)
         .ok_or(LoadFailure::NoDirectPlaySource)?;
+    let trickplay = Trickplay::from_dto(&dto, &source.id);
     let stream = session.stream_source(&item, &source.id);
     let mut media =
         MediaSource::new(stream.url.as_str()).with_header("Authorization", stream.authorization);
@@ -185,6 +189,7 @@ async fn fetch(
         media,
         start,
         siblings,
+        trickplay,
         segments: Vec::new(),
     })
 }
