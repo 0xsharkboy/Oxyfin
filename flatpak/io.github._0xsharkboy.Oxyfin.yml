@@ -17,6 +17,8 @@ finish-args:
   - --talk-name=org.freedesktop.secrets
   # Media keys and desktop media controls go through MPRIS.
   - --own-name=org.mpris.MediaPlayer2.oxyfin
+  # The screen is kept awake through the portal, or this service without one.
+  - --talk-name=org.freedesktop.ScreenSaver
 
 cleanup:
   - /include
