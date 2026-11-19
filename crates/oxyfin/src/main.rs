@@ -100,10 +100,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         app.start_mpris();
         app.start_inhibitor();
     }
-    if launch::fullscreen_requested(std::env::args_os().skip(1)) || app.start_fullscreen() {
-        window.window().set_fullscreen(true);
-    }
+    let fullscreen =
+        launch::fullscreen_requested(std::env::args_os().skip(1)) || app.start_fullscreen();
+    window.window().set_fullscreen(fullscreen);
     window.show()?;
+    if fullscreen {
+        // Asked again once the event loop runs: the first configure of a Wayland window can undo it.
+        let weak = window.as_weak();
+        slint::Timer::single_shot(Duration::ZERO, move || {
+            if let Some(window) = weak.upgrade() {
+                window.window().set_fullscreen(true);
+            }
+        });
+    }
     slint::run_event_loop_until_quit()?;
     if let Err(error) = window.hide() {
         log::warn!("cannot hide the window: {error}");
