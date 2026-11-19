@@ -99,6 +99,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             },
         )?;
     }
+    #[cfg(all(target_os = "linux", feature = "mpv"))]
+    app.start_mpris();
     window.show()?;
     slint::run_event_loop_until_quit()?;
     if let Err(error) = window.hide() {
