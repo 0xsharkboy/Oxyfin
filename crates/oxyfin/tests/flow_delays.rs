@@ -1,5 +1,6 @@
 //! Audio and subtitle delays: the track menu rows and the mpv shortcuts send
-//! their commands, the menu and the on-screen feedback show the values.
+//! relative steps, which the core adds up even before the window shows the
+//! previous one; the menu and the on-screen feedback show the values.
 
 mod common;
 
@@ -96,12 +97,12 @@ fn shortcuts_step_the_delays_like_mpv_and_show_them() {
     assert_eq!(
         *sent.borrow(),
         vec![
-            PlaybackCommand::SetSubtitleDelay(100),
-            PlaybackCommand::SetSubtitleDelay(300),
-            PlaybackCommand::SetSubtitleDelay(300),
-            PlaybackCommand::SetAudioDelay(100),
-            PlaybackCommand::SetAudioDelay(100),
-            PlaybackCommand::SetAudioDelay(-100),
+            PlaybackCommand::AdjustSubtitleDelay(-100),
+            PlaybackCommand::AdjustSubtitleDelay(100),
+            PlaybackCommand::AdjustSubtitleDelay(100),
+            PlaybackCommand::AdjustAudioDelay(100),
+            PlaybackCommand::AdjustAudioDelay(100),
+            PlaybackCommand::AdjustAudioDelay(-100),
         ]
     );
     assert!(!window.window().is_fullscreen());
@@ -168,8 +169,8 @@ fn the_track_menu_shows_and_changes_the_delays() {
     assert_eq!(
         *sent.borrow(),
         vec![
-            PlaybackCommand::SetSubtitleDelay(100),
-            PlaybackCommand::SetAudioDelay(-1300),
+            PlaybackCommand::AdjustSubtitleDelay(100),
+            PlaybackCommand::AdjustAudioDelay(-100),
             PlaybackCommand::SetAudioDelay(0),
         ]
     );

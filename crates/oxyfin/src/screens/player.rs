@@ -120,21 +120,14 @@ pub fn bind(window: &AppWindow, send: Rc<dyn Fn(PlaybackCommand)>) {
     window.on_player_command_set_subtitle_delay(move |ms| {
         to(PlaybackCommand::SetSubtitleDelay(ms.into()))
     });
-    let (to, weak) = (Rc::clone(&send), window.as_weak());
+    // Relative steps: the core adds them up, even before the window shows the previous one.
+    let to = Rc::clone(&send);
     window.on_player_command_step_audio_delay(move |direction| {
-        let Some(window) = weak.upgrade() else { return };
-        to(PlaybackCommand::SetAudioDelay(step_delay(
-            window.get_player_audio_delay(),
-            direction,
-        )));
+        to(PlaybackCommand::AdjustAudioDelay(delay_step(direction)))
     });
-    let (to, weak) = (Rc::clone(&send), window.as_weak());
+    let to = Rc::clone(&send);
     window.on_player_command_step_subtitle_delay(move |direction| {
-        let Some(window) = weak.upgrade() else { return };
-        to(PlaybackCommand::SetSubtitleDelay(step_delay(
-            window.get_player_subtitle_delay(),
-            direction,
-        )));
+        to(PlaybackCommand::AdjustSubtitleDelay(delay_step(direction)))
     });
     let weak = window.as_weak();
     window.on_player_command_step_chapter(move |direction| {
@@ -569,14 +562,13 @@ fn step_volume(current: f64, direction: i32) -> f64 {
     (current + step).clamp(0.0, 100.0)
 }
 
-/// The delay one step from `current` in `direction`, in milliseconds.
-fn step_delay(current: i32, direction: i32) -> i64 {
-    let step = if direction < 0 {
+/// One delay step in `direction`, in milliseconds: earlier for a negative direction.
+fn delay_step(direction: i32) -> i64 {
+    if direction < 0 {
         -DELAY_STEP_MS
     } else {
         DELAY_STEP_MS
-    };
-    i64::from(current) + step
+    }
 }
 
 /// A delay for the window, which keeps it in an `int`.
@@ -624,10 +616,8 @@ mod tests {
 
     #[test]
     fn delay_steps_are_a_tenth_of_a_second() {
-        assert_eq!(step_delay(0, 1), 100);
-        assert_eq!(step_delay(0, -1), -100);
-        assert_eq!(step_delay(-100, 1), 0);
-        assert_eq!(step_delay(i32::MAX, 1), i64::from(i32::MAX) + 100);
+        assert_eq!(delay_step(1), 100);
+        assert_eq!(delay_step(-1), -100);
         assert_eq!(saturate(i64::from(i32::MAX) + 100), i32::MAX);
         assert_eq!(saturate(i64::MIN), i32::MIN);
         assert_eq!(saturate(-300), -300);
