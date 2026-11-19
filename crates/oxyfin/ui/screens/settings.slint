@@ -2,6 +2,15 @@ import { Theme } from "../theme.slint";
 import { Button, ButtonStyle } from "../components/button.slint";
 import { TopBar, TopBarPage } from "../components/top_bar.slint";
 import { BodyText, DisplayText, HeadingText, LabelText } from "../components/text.slint";
+import { Chip } from "../components/chip.slint";
+
+// How subtitles look, as indexes into the choices of each row (see `oxyfin_core::SubtitleStyle`).
+export struct SubtitleChoice {
+    size: int,
+    color: int,
+    background: int,
+    position: int,
+}
 
 component SettingRow inherits HorizontalLayout {
     in property <string> label;
@@ -19,6 +28,74 @@ component SettingRow inherits HorizontalLayout {
         text: root.value;
         overflow: elide;
         vertical-alignment: center;
+    }
+}
+
+// A setting picked among a few chips.
+component ChoiceRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <[string]> options;
+    in property <int> selected;
+    callback chosen(index: int);
+
+    spacing: Theme.space-lg;
+
+    LabelText {
+        width: 160px;
+        text: root.label;
+        vertical-alignment: center;
+    }
+    HorizontalLayout {
+        horizontal-stretch: 1;
+        alignment: start;
+        spacing: Theme.space-sm;
+
+        for option[index] in root.options: Chip {
+            label: option;
+            selected: index == root.selected;
+            clicked => {
+                root.chosen(index);
+            }
+        }
+    }
+}
+
+// A frame of video with a subtitle line drawn as the player would.
+component SubtitlePreview inherits Rectangle {
+    in property <SubtitleChoice> choice;
+
+    // Scales of `oxyfin_core::SubtitleSize`, smallest first.
+    property <[float]> scales: [0.8, 1, 1.25, 1.5];
+    property <bool> boxed: root.choice.background == 1;
+    // mpv keeps the bottom of the text this far above the bottom of the video.
+    property <length> margin: root.height * 0.06;
+    property <length> bottom: root.choice.position == 1 ? root.height * 0.9 - root.margin : root.height - root.margin;
+
+    height: 128px;
+    border-radius: Theme.radius-md;
+    clip: true;
+    background: Theme.hero-placeholder;
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: root.bottom - self.height;
+        width: min(line.preferred-width + 2 * Theme.space-xs, parent.width);
+        height: line.preferred-height;
+        background: root.boxed ? Theme.subtitle-box : transparent;
+
+        line := Text {
+            width: parent.width - 2 * Theme.space-xs;
+            x: Theme.space-xs;
+            text: @tr("The quick brown fox jumps over the lazy dog");
+            font-size: 18px * root.scales[root.choice.size];
+            font-weight: 500;
+            color: root.choice.color == 1 ? Theme.subtitle-yellow : Theme.subtitle-white;
+            stroke: root.boxed ? transparent : Theme.subtitle-outline;
+            stroke-width: root.boxed ? 0 : 1.5px;
+            stroke-style: outside;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
     }
 }
 
@@ -42,7 +119,7 @@ component SettingSection inherits Rectangle {
     }
 }
 
-// Settings: the signed-in account, the application version and the sign-out action.
+// Settings: the signed-in account, the subtitle style, the application version and the sign-out action.
 export component SettingsScreen inherits Rectangle {
     in property <string> server-name;
     in property <string> server-address;
@@ -50,9 +127,11 @@ export component SettingsScreen inherits Rectangle {
     in property <bool> token-in-file;
     in property <string> version;
     in property <TopBarPage> page: TopBarPage.none;
+    in property <SubtitleChoice> subtitles;
     callback open-tab(page: TopBarPage);
     callback back();
     callback sign-out();
+    callback subtitles-changed(choice: SubtitleChoice);
 
     accessible-role: groupbox;
     accessible-label: @tr("Settings");
@@ -127,6 +206,66 @@ export component SettingsScreen inherits Rectangle {
                                 clicked => {
                                     root.sign-out();
                                 }
+                            }
+                        }
+                    }
+
+                    SettingSection {
+                        title: @tr("Subtitles");
+
+                        SubtitlePreview {
+                            choice: root.subtitles;
+                        }
+                        ChoiceRow {
+                            label: @tr("Size");
+                            options: [@tr("Small"), @tr("Normal"), @tr("Large"), @tr("Extra large")];
+                            selected: root.subtitles.size;
+                            chosen(index) => {
+                                root.subtitles-changed({
+                                    size: index,
+                                    color: root.subtitles.color,
+                                    background: root.subtitles.background,
+                                    position: root.subtitles.position,
+                                });
+                            }
+                        }
+                        ChoiceRow {
+                            label: @tr("Color");
+                            options: [@tr("White"), @tr("Yellow")];
+                            selected: root.subtitles.color;
+                            chosen(index) => {
+                                root.subtitles-changed({
+                                    size: root.subtitles.size,
+                                    color: index,
+                                    background: root.subtitles.background,
+                                    position: root.subtitles.position,
+                                });
+                            }
+                        }
+                        ChoiceRow {
+                            label: @tr("Background");
+                            options: [@tr("Outline"), @tr("Box")];
+                            selected: root.subtitles.background;
+                            chosen(index) => {
+                                root.subtitles-changed({
+                                    size: root.subtitles.size,
+                                    color: root.subtitles.color,
+                                    background: index,
+                                    position: root.subtitles.position,
+                                });
+                            }
+                        }
+                        ChoiceRow {
+                            label: @tr("Position");
+                            options: [@tr("Bottom"), @tr("Raised")];
+                            selected: root.subtitles.position;
+                            chosen(index) => {
+                                root.subtitles-changed({
+                                    size: root.subtitles.size,
+                                    color: root.subtitles.color,
+                                    background: root.subtitles.background,
+                                    position: index,
+                                });
                             }
                         }
                     }

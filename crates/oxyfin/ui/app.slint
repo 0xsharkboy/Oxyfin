@@ -8,7 +8,7 @@ import { SignInScreen, ServerState, ServerStatus } from "screens/sign_in.slint";
 import { QuickConnectScreen } from "screens/quick_connect.slint";
 import { HomeScreen, HomeBanner, HomeRow, HomeRowKind, HomeTitles } from "screens/home.slint";
 import { PlayerScreen } from "screens/player.slint";
-import { SettingsScreen } from "screens/settings.slint";
+import { SettingsScreen, SubtitleChoice } from "screens/settings.slint";
 import { LibraryScreen, LibraryTitles } from "screens/library.slint";
 import { SearchScreen, SearchTitles } from "screens/search.slint";
 import { MovieScreen, MovieData } from "screens/movie.slint";
@@ -25,6 +25,7 @@ export { SearchTitles }
 export { MovieData }
 export { SeriesData, SeriesPlayKind, EpisodeData }
 export { TopBarPage }
+export { SubtitleChoice }
 
 // Mirrors the Rust `state::Screen` one to one.
 export enum Screen { starting, sign-in, quick-connect, home, library, search, movie, series, player, settings }
@@ -181,6 +182,8 @@ export component AppWindow inherits Window {
     in property <string> settings-server-address;
     in property <string> settings-user-name;
     in property <bool> settings-token-in-file;
+    in property <SubtitleChoice> settings-subtitles;
+    callback settings-subtitles-changed(choice: SubtitleChoice);
     in property <string> app-version;
     callback close-settings();
     callback sign-out();
@@ -502,6 +505,10 @@ export component AppWindow inherits Window {
         server-address: root.settings-server-address;
         user-name: root.settings-user-name;
         token-in-file: root.settings-token-in-file;
+        subtitles: root.settings-subtitles;
+        subtitles-changed(choice) => {
+            root.settings-subtitles-changed(choice);
+        }
         version: root.app-version;
         back => {
             root.close-settings();
