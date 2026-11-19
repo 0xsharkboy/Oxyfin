@@ -19,3 +19,13 @@ unwrap_used = "warn"
 expect_used = "warn"
 print_stdout = "warn"
 undocumented_unsafe_blocks = "warn"
+
+# Trickplay sheets are large JPEGs: an unoptimized decoder takes seconds on each.
+[profile.dev.package.image]
+opt-level = 3
+
+[profile.dev.package.zune-jpeg]
+opt-level = 3
+
+[profile.dev.package.zune-core]
+opt-level = 3

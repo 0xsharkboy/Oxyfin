@@ -117,7 +117,7 @@ pub struct SheetCache {
 }
 
 /// Number of decoded trickplay sheets kept.
-pub const DECODED_SHEETS: usize = 2;
+pub const DECODED_SHEETS: usize = 4;
 
 impl SheetCache {
     /// The decoded `sheet`, if kept; it becomes the most recent one.
@@ -199,19 +199,44 @@ mod tests {
     }
 
     #[test]
-    fn sheet_cache_keeps_the_last_decoded_sheets() {
+    fn sheet_cache_keeps_four_sheets() {
         let mut cache = SheetCache::default();
         assert!(cache.start(&sheet(0)));
         assert!(!cache.start(&sheet(0)), "already loading");
-        cache.finish(&sheet(0), Some(image(1)));
-        assert!(cache.start(&sheet(1)));
-        cache.finish(&sheet(1), Some(image(2)));
-        assert_eq!(cache.get(&sheet(0)).map(|i| i.size().width), Some(1));
-        cache.finish(&sheet(2), Some(image(3)));
-        assert!(cache.get(&sheet(1)).is_none(), "the least recent goes");
-        assert!(cache.get(&sheet(0)).is_some() && cache.get(&sheet(2)).is_some());
+        for index in 0..5 {
+            cache.finish(&sheet(index), Some(image(index + 1)));
+        }
+        assert!(cache.get(&sheet(0)).is_none(), "the least recent goes");
+        for index in 1..5 {
+            assert_eq!(
+                cache.get(&sheet(index)).map(|i| i.size().width),
+                Some(index + 1)
+            );
+        }
+        assert!(cache.get(&sheet(1)).is_some());
+        cache.finish(&sheet(5), Some(image(6)));
+        assert!(cache.get(&sheet(2)).is_none(), "a sheet shown again stays");
+        assert!(cache.get(&sheet(1)).is_some());
         cache.clear();
-        assert!(cache.get(&sheet(0)).is_none());
+        assert!(cache.get(&sheet(1)).is_none());
+    }
+
+    #[test]
+    #[ignore = "timing, run by hand"]
+    fn decodes_a_full_sheet_quickly() {
+        let pixels: Vec<u8> = (0..3200u32 * 1800 * 3).map(|i| (i % 251) as u8).collect();
+        let mut bytes = Cursor::new(Vec::new());
+        image::RgbImage::from_raw(3200, 1800, pixels)
+            .unwrap()
+            .write_to(&mut bytes, ImageFormat::Jpeg)
+            .unwrap();
+        let bytes = bytes.into_inner();
+        let start = std::time::Instant::now();
+        let buffer = decode(&bytes).unwrap();
+        let took = start.elapsed();
+        eprintln!("decoded a 3200x1800 sheet in {took:?}");
+        assert_eq!((buffer.width(), buffer.height()), (3200, 1800));
+        assert!(took < std::time::Duration::from_millis(400), "{took:?}");
     }
 
     #[test]
