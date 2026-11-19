@@ -1,4 +1,4 @@
-//! Streaming quality: the bitrate limit the player asks of the server.
+//! Streaming quality: the bitrate and height limits the player asks of the server.
 
 use serde::{Deserialize, Serialize};
 
@@ -9,12 +9,12 @@ pub enum Quality {
     /// No limit: the file plays as is whenever the server allows it.
     #[default]
     Original,
-    /// At most `bitrate` bits per second; the server scales the picture down
-    /// to about `height` lines to fit it.
+    /// At most `bitrate` bits per second and `height` lines; the server
+    /// transcodes a file above either limit.
     Limited {
         /// Highest bitrate, in bits per second.
         bitrate: u64,
-        /// Picture height the server picks for this bitrate, for display.
+        /// Highest picture height, in lines.
         height: u32,
     },
 }
@@ -27,11 +27,18 @@ impl Quality {
             Self::Limited { bitrate, .. } => Some(bitrate),
         }
     }
+
+    /// The picture height limit, in lines; `None` for no limit.
+    pub fn max_height(self) -> Option<u32> {
+        match self {
+            Self::Original => None,
+            Self::Limited { height, .. } => Some(height),
+        }
+    }
 }
 
 /// Qualities offered to the user, from the highest. The limits follow the
-/// quality menu of Jellyfin's web client, where the server maps each one to
-/// the picture height listed here.
+/// quality menu of Jellyfin's web client.
 pub const QUALITIES: [Quality; 7] = [
     Quality::Original,
     Quality::Limited {
@@ -63,6 +70,12 @@ pub const QUALITIES: [Quality; 7] = [
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn limited_quality_has_a_height() {
+        assert_eq!(Quality::Original.max_height(), None);
+        assert_eq!(QUALITIES[4].max_height(), Some(480));
+    }
 
     #[test]
     fn original_has_no_limit() {

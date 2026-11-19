@@ -476,6 +476,7 @@ impl PlaybackController {
             mode,
             options: PlaybackOptions {
                 max_streaming_bitrate: self.quality.max_bitrate(),
+                max_height: self.quality.max_height(),
                 ..PlaybackOptions::default()
             },
             resume: None,
@@ -519,6 +520,7 @@ impl PlaybackController {
                 max_streaming_bitrate: self.quality.max_bitrate(),
                 audio_stream_index: resume.audio,
                 subtitle_stream_index: Some(text_subtitle(&current.source, resume.subtitle)),
+                max_height: self.quality.max_height(),
             },
             resume: Some(resume),
         };
@@ -535,6 +537,7 @@ impl PlaybackController {
         if self.loading {
             if let Some(mut request) = self.request.clone() {
                 request.options.max_streaming_bitrate = quality.max_bitrate();
+                request.options.max_height = quality.max_height();
                 self.start_load(request);
             }
         } else if self.current.as_ref().is_some_and(|current| !current.ended) {

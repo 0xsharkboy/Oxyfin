@@ -49,6 +49,9 @@ pub struct PlaybackOptions {
     pub audio_stream_index: Option<i32>,
     /// Subtitle stream to deliver, `-1` for none; the server's default when `None`.
     pub subtitle_stream_index: Option<i32>,
+    /// Highest picture height the player accepts, in lines: a transcode is
+    /// scaled down to it. `None` accepts any height.
+    pub max_height: Option<u32>,
 }
 
 /// Playback state sent to the server.
@@ -130,15 +133,15 @@ const TEXT_SUBTITLES: [&str; 6] = ["srt", "subrip", "ass", "ssa", "vtt", "webvtt
 /// and transcoding.
 ///
 /// mpv plays nearly every container and codec, so direct play has no
-/// restriction and only the bitrate limit forces a transcode. The transcode
-/// is H.264 in MPEG-TS over HLS, the most widely decodable, with text
-/// subtitles as separate files.
-fn device_profile() -> Value {
+/// restriction and only the bitrate and height limits force a transcode.
+/// The transcode is H.264 in MPEG-TS over HLS, the most widely decodable,
+/// with text subtitles as separate files.
+fn device_profile(max_height: Option<u32>) -> Value {
     let subtitles: Vec<Value> = TEXT_SUBTITLES
         .iter()
         .map(|format| json!({ "Format": format, "Method": "External" }))
         .collect();
-    json!({
+    let mut profile = json!({
         "Name": crate::CLIENT_NAME,
         "DirectPlayProfiles": [{ "Type": "Video" }, { "Type": "Audio" }],
         "TranscodingProfiles": [{
@@ -151,7 +154,24 @@ fn device_profile() -> Value {
             "MaxAudioChannels": "6",
         }],
         "SubtitleProfiles": subtitles,
-    })
+    });
+    if let Some(height) = max_height {
+        // Under a bitrate limit the server ignores a height alone, so the 16:9 width goes along.
+        let width = (u64::from(height) * 16).div_ceil(9);
+        let limit = |property: &str, value: u64| {
+            json!({
+                "Condition": "LessThanEqual",
+                "Property": property,
+                "Value": value.to_string(),
+                "IsRequired": false,
+            })
+        };
+        profile["CodecProfiles"] = json!([{
+            "Type": "Video",
+            "Conditions": [limit("Height", u64::from(height)), limit("Width", width)],
+        }]);
+    }
+    profile
 }
 
 impl Session {
@@ -181,7 +201,7 @@ impl Session {
             allow_video_stream_copy: true,
             allow_audio_stream_copy: true,
             auto_open_live_stream: false,
-            device_profile: device_profile(),
+            device_profile: device_profile(options.max_height),
         };
         let query = [("userId", self.user_id().to_string())];
         self.server()
