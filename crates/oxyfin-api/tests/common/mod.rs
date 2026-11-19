@@ -15,7 +15,7 @@ pub const TEST_TOKEN: &str = "test-token";
 /// User id used by [`session`].
 pub const TEST_USER_ID: &str = "0123456789abcdef0123456789abcdef";
 
-/// The package directory, read at run time: cargo may reuse a test binary\n/// built from another checkout of the same tree, whose path is gone.\npub fn manifest_dir() -> PathBuf {\n    std::env::var_os("CARGO_MANIFEST_DIR")\n        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)\n}\n\n/// Loads `tests/fixtures/<version>/<name>.json`.
+/// Loads `tests/fixtures/<version>/<name>.json`.
 pub fn fixture(version: &str, name: &str) -> Value {
     let path = manifest_dir()
         .join("tests")

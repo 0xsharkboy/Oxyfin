@@ -131,7 +131,7 @@ impl Drop for Gate {
     }
 }
 
-/// The package directory, read at run time: cargo may reuse a test binary\n/// built from another checkout of the same tree, whose path is gone.\npub fn manifest_dir() -> PathBuf {\n    std::env::var_os("CARGO_MANIFEST_DIR")\n        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)\n}\n\n/// Returns the path of a file in `tests/fixtures`.
+/// Returns the path of a file in `tests/fixtures`.
 pub fn fixture(name: &str) -> PathBuf {
     manifest_dir().join("tests").join("fixtures").join(name)
 }
