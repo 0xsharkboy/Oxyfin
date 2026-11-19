@@ -77,7 +77,9 @@ impl Trickplay {
             height: info.height,
             columns: info.tile_width,
             rows: info.tile_height,
-            count: info.thumbnail_count,
+            count: info
+                .thumbnail_count
+                .max(thumbnails_over(dto, info.interval)),
             interval: Duration::from_millis(u64::from(info.interval)),
         })
     }
@@ -112,6 +114,22 @@ impl Trickplay {
             layout: (interval, self.columns, self.rows),
         }
     }
+}
+
+/// Whole intervals in the run time of `dto`: thumbnails the server surely
+/// took, one every `interval` milliseconds from the start; 0 when the run
+/// time is unknown. Some servers report the number of sheets as the
+/// thumbnail count, so the count is checked against it.
+fn thumbnails_over(dto: &BaseItemDto, interval: u32) -> u32 {
+    const TICKS_PER_MILLISECOND: u64 = 10_000;
+    let Some(ticks) = dto
+        .run_time_ticks
+        .and_then(|ticks| u64::try_from(ticks.0).ok())
+    else {
+        return 0;
+    };
+    let interval = u64::from(interval.max(1)) * TICKS_PER_MILLISECOND;
+    u32::try_from(ticks / interval).unwrap_or(u32::MAX)
 }
 
 fn usable(info: &TrickplayInfoDto) -> bool {
@@ -242,6 +260,35 @@ mod tests {
         let last = trickplay.tile_at(Duration::from_secs(2490));
         assert_eq!((last.sheet.index, last.x, last.y), (2, 2880, 720));
         assert_eq!(trickplay.tile_at(Duration::from_secs(100_000)), last);
+    }
+
+    fn with_count(count: u32, run_time: Option<u64>) -> Trickplay {
+        let mut info = info(320);
+        info["ThumbnailCount"] = json!(count);
+        let mut item = json!({"Id": ITEM, "Type": "Movie", "Trickplay": {ITEM: {"320": info}}});
+        if let Some(seconds) = run_time {
+            item["RunTimeTicks"] = json!(seconds * 10_000_000);
+        }
+        let dto: BaseItemDto = serde_json::from_value(item).unwrap();
+        Trickplay::from_dto(&dto, &source()).unwrap()
+    }
+
+    #[test]
+    fn run_time_overrides_a_thumbnail_count_that_counts_sheets() {
+        let trickplay = with_count(5, Some(4920));
+        assert_eq!(trickplay.count, 492);
+        let tile = trickplay.tile_at(Duration::from_secs(45 * 60));
+        assert_eq!((tile.sheet.index, tile.x, tile.y), (2, 0, 7 * 180));
+    }
+
+    #[test]
+    fn unknown_run_time_keeps_the_server_count() {
+        assert_eq!(with_count(5, None).count, 5);
+    }
+
+    #[test]
+    fn a_larger_server_count_is_kept() {
+        assert_eq!(with_count(742, Some(7000)).count, 742);
     }
 
     #[test]
