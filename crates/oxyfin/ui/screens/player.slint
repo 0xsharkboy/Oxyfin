@@ -1,6 +1,7 @@
 import { Spinner } from "std-widgets.slint";
-import { Theme, Message, Messages, TrackRow, NextUp } from "../theme.slint";
+import { Theme, Message, Messages, TrackRow, NextUp, SkipKind } from "../theme.slint";
 import { Icons } from "../icons.slint";
+import { Button, ButtonStyle } from "../components/button.slint";
 import { IconButton } from "../components/icon_button.slint";
 import { BodyText, HeadingText, LabelText } from "../components/text.slint";
 import { PlayerControls } from "../components/player_controls.slint";
@@ -32,6 +33,8 @@ export component PlayerScreen inherits Rectangle {
     in property <[TrackRow]> audio;
     in property <[TrackRow]> subtitles;
     in property <NextUp> next-up;
+    in property <SkipKind> skip-kind;
+    in property <float> skip-end;
     in property <bool> fullscreen;
     in-out property <bool> scrubbing;
     out property <bool> controls-visible: root.awake || root.paused || root.menu != PlayerMenu.none || root.scrubbing || root.loading || root.has-error;
@@ -90,6 +93,19 @@ export component PlayerScreen inherits Rectangle {
     changed toast-visible => {
         if !self.toast-visible {
             keys.focus();
+        }
+    }
+    // Stays up while the controls hide, like the skip buttons of common players.
+    property <bool> skip-visible: root.skip-kind != SkipKind.none && !root.toast-visible && root.menu == PlayerMenu.none && !root.loading && !root.has-error;
+    changed skip-visible => {
+        if !self.skip-visible {
+            keys.focus();
+        }
+    }
+
+    function skip-segment() {
+        if root.skip-visible {
+            root.command-seek(root.skip-end);
         }
     }
 
@@ -161,6 +177,8 @@ export component PlayerScreen inherits Rectangle {
                     }
                 } else if event.text == "p" || event.text == "P" {
                     root.command-previous();
+                } else if event.text == "s" || event.text == "S" {
+                    root.skip-segment();
                 } else if event.text == Key.Escape {
                     root.escape();
                 } else {
@@ -316,6 +334,23 @@ export component PlayerScreen inherits Rectangle {
                 select(speed) => {
                     root.command-set-speed(speed);
                     root.menu = PlayerMenu.none;
+                }
+            }
+
+            if root.skip-visible: Button {
+                width: self.preferred-width;
+                height: self.preferred-height;
+                x: parent.width - self.width - Theme.space-2xl;
+                y: (root.controls-visible ? root.menu-bottom : parent.height - Theme.space-2xl) - self.height;
+                focus-on-click: false;
+                style: ButtonStyle.secondary;
+                icon: Icons.skip-next;
+                label: root.skip-kind == SkipKind.intro ? @tr("Skip intro") : root.skip-kind == SkipKind.recap ? @tr("Skip recap") : root.skip-kind == SkipKind.preview ? @tr("Skip preview") : @tr("Skip credits");
+                drop-shadow-offset-y: 8px;
+                drop-shadow-blur: 12px;
+                drop-shadow-color: Theme.menu-shadow;
+                clicked => {
+                    root.skip-segment();
                 }
             }
 
