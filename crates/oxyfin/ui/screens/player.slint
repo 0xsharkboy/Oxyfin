@@ -69,6 +69,8 @@ export component PlayerScreen inherits Rectangle {
     property <PlayerMenu> menu: PlayerMenu.none;
     // False once the pointer rested for the hide delay while playing.
     property <bool> awake: true;
+    // The controls stay up while the pointer rests on them, such as on the seek bar preview.
+    property <bool> pointer-on-controls: surface.has-hover && root.controls-visible && surface.mouse-y >= controls.y;
     property <length> button-size: 24px + 2 * Theme.space-sm;
     property <length> menu-bottom: controls.y + Theme.space-3xl - Theme.space-xl;
     property <length> menu-max-height: root.menu-bottom - top-bar.height;
@@ -125,7 +127,7 @@ export component PlayerScreen inherits Rectangle {
 
     hide-timer := Timer {
         interval: 3s;
-        running: root.awake && !root.paused && root.menu == PlayerMenu.none && !root.scrubbing && !root.loading && !root.has-error;
+        running: root.awake && !root.paused && root.menu == PlayerMenu.none && !root.scrubbing && !root.loading && !root.has-error && !root.pointer-on-controls;
         triggered => {
             root.awake = false;
             keys.focus();

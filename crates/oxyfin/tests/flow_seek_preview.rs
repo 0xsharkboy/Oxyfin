@@ -236,3 +236,35 @@ fn without_trickplay_the_preview_shows_only_the_time() {
         popup.size()
     );
 }
+
+fn controls_visible(window: &AppWindow) -> bool {
+    find(window, "Seek", AccessibleRole::Slider).is_some()
+}
+
+#[test]
+fn controls_stay_while_the_pointer_rests_on_the_seek_bar() {
+    let Setup { window, .. } = setup(Some(trickplay()));
+    hover(&window, 0.5005);
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_secs(5));
+    assert!(
+        controls_visible(&window),
+        "the controls hid under the pointer"
+    );
+    assert!(
+        preview(&window).is_some(),
+        "the preview hid under the pointer"
+    );
+}
+
+#[test]
+fn controls_hide_after_leaving_the_seek_bar() {
+    let Setup { window, .. } = setup(Some(trickplay()));
+    hover(&window, 0.5005);
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_secs(5));
+    window.window().dispatch_event(WindowEvent::PointerMoved {
+        position: LogicalPosition::new(WIDTH / 2., HEIGHT / 3.),
+    });
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_secs(4));
+    assert!(!controls_visible(&window), "the controls stayed up");
+    assert!(preview(&window).is_none());
+}
