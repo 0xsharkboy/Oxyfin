@@ -4,6 +4,9 @@ import { TopBar, TopBarPage } from "../components/top_bar.slint";
 import { BodyText, DisplayText, HeadingText, LabelText } from "../components/text.slint";
 import { Chip } from "../components/chip.slint";
 
+// Where the sign-in token is kept; mirrors the core `TokenStorage`.
+export enum TokenStore { keyring, file, memory }
+
 // How subtitles look, as indexes into the choices of each row (see `oxyfin_core::SubtitleStyle`).
 export struct SubtitleChoice {
     size: int,
@@ -124,7 +127,7 @@ export component SettingsScreen inherits Rectangle {
     in property <string> server-name;
     in property <string> server-address;
     in property <string> user-name;
-    in property <bool> token-in-file;
+    in property <TokenStore> token-store;
     in property <string> version;
     in property <TopBarPage> page: TopBarPage.none;
     in property <SubtitleChoice> subtitles;
@@ -194,7 +197,9 @@ export component SettingsScreen inherits Rectangle {
                         }
                         SettingRow {
                             label: @tr("Sign-in token");
-                            value: root.token-in-file ? @tr("Stored in a private file") : @tr("Stored in the system keyring");
+                            value: root.token-store == TokenStore.file ? @tr("Stored in a private file")
+                                : root.token-store == TokenStore.memory ? @tr("Kept in memory for this session")
+                                : @tr("Stored in the system keyring");
                         }
                         HorizontalLayout {
                             padding-top: Theme.space-sm;

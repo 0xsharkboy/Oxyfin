@@ -8,8 +8,7 @@ use std::time::Duration;
 
 use oxyfin_api::{ItemId, Session};
 use oxyfin_core::{
-    Catalog, Config, CoreError, ImageCache, Paths, SessionManager, SignedIn, TokenStorage,
-    TokenVault,
+    Catalog, Config, CoreError, ImageCache, Paths, SessionManager, SignedIn, TokenVault,
 };
 use oxyfin_core::{PlayMode, PlaybackCommand};
 use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode};
@@ -957,7 +956,7 @@ fn session_info(signed: &SignedIn) -> SessionInfo {
         user_name: signed.user_name.clone(),
         server_url: signed.server_url.clone(),
         server_name: signed.server_name.clone(),
-        token_in_file: signed.token_storage == TokenStorage::File,
+        token_storage: signed.token_storage,
         show_file_token_warning: signed.show_file_token_warning,
     }
 }

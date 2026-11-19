@@ -2,11 +2,11 @@
 //! application version.
 
 use oxyfin_core::{
-    SubtitleBackground, SubtitleColor, SubtitlePosition, SubtitleSize, SubtitleStyle,
+    SubtitleBackground, SubtitleColor, SubtitlePosition, SubtitleSize, SubtitleStyle, TokenStorage,
 };
 
 use crate::state::SessionInfo;
-use crate::{AppWindow, SubtitleChoice};
+use crate::{AppWindow, SubtitleChoice, TokenStore};
 
 /// Version of the application, shown on the settings screen.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -32,7 +32,11 @@ pub fn show(window: &AppWindow, session: Option<&SessionInfo>) {
             .unwrap_or_default()
             .into(),
     );
-    window.set_settings_token_in_file(session.is_some_and(|info| info.token_in_file));
+    window.set_settings_token_store(match session.map(|info| info.token_storage) {
+        Some(TokenStorage::File) => TokenStore::File,
+        Some(TokenStorage::Memory) => TokenStore::Memory,
+        Some(TokenStorage::Keyring) | None => TokenStore::Keyring,
+    });
 }
 
 /// The chips selected for `style`.
@@ -78,8 +82,27 @@ mod tests {
             user_name: "alice".into(),
             server_url: "http://h:8096".into(),
             server_name: server_name.map(str::to_owned),
-            token_in_file: false,
+            token_storage: TokenStorage::Keyring,
             show_file_token_warning: false,
+        }
+    }
+
+    #[test]
+    fn the_token_store_follows_the_session() {
+        i_slint_backend_testing::init_no_event_loop();
+        let window = AppWindow::new().unwrap();
+
+        for (storage, store) in [
+            (TokenStorage::Keyring, TokenStore::Keyring),
+            (TokenStorage::File, TokenStore::File),
+            (TokenStorage::Memory, TokenStore::Memory),
+        ] {
+            let session = SessionInfo {
+                token_storage: storage,
+                ..info(None)
+            };
+            show(&window, Some(&session));
+            assert_eq!(window.get_settings_token_store(), store);
         }
     }
 

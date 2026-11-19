@@ -179,12 +179,15 @@ pub enum TokenStorage {
     Keyring,
     /// The private fallback file.
     File,
+    /// Process memory, forgotten when the app exits.
+    Memory,
 }
 
 /// Saves tokens to a primary store and falls back to a secondary one.
 pub struct TokenVault {
     primary: Arc<dyn SecretStore>,
     fallback: Arc<dyn SecretStore>,
+    in_memory: bool,
 }
 
 impl std::fmt::Debug for TokenVault {
@@ -196,7 +199,28 @@ impl std::fmt::Debug for TokenVault {
 impl TokenVault {
     /// Builds a vault from a primary store and a fallback store.
     pub fn new(primary: Arc<dyn SecretStore>, fallback: Arc<dyn SecretStore>) -> Self {
-        Self { primary, fallback }
+        Self {
+            primary,
+            fallback,
+            in_memory: false,
+        }
+    }
+
+    /// Builds a vault that keeps tokens in memory only, for throwaway runs.
+    pub fn memory() -> Self {
+        Self {
+            primary: Arc::new(MemoryStore::default()),
+            fallback: Arc::new(MemoryStore::default()),
+            in_memory: true,
+        }
+    }
+
+    fn reported(&self, storage: TokenStorage) -> TokenStorage {
+        if self.in_memory {
+            TokenStorage::Memory
+        } else {
+            storage
+        }
     }
 
     /// Builds the production vault: system keyring, then a file in the data directory.
@@ -211,12 +235,12 @@ impl TokenVault {
         match self.primary.set(account, token) {
             Ok(()) => {
                 let _ = self.fallback.delete(account);
-                Ok(TokenStorage::Keyring)
+                Ok(self.reported(TokenStorage::Keyring))
             }
             Err(_) => {
                 self.fallback.set(account, token)?;
                 let _ = self.primary.delete(account);
-                Ok(TokenStorage::File)
+                Ok(self.reported(TokenStorage::File))
             }
         }
     }
@@ -226,12 +250,12 @@ impl TokenVault {
     /// A primary error counts as a missing token so a machine without a keyring still works.
     pub fn load(&self, account: &str) -> Result<Option<(String, TokenStorage)>> {
         if let Ok(Some(token)) = self.primary.get(account) {
-            return Ok(Some((token, TokenStorage::Keyring)));
+            return Ok(Some((token, self.reported(TokenStorage::Keyring))));
         }
         Ok(self
             .fallback
             .get(account)?
-            .map(|token| (token, TokenStorage::File)))
+            .map(|token| (token, self.reported(TokenStorage::File))))
     }
 
     /// Removes the token from both stores.
@@ -274,6 +298,18 @@ mod tests {
         fn delete(&self, account: &str) -> Result<()> {
             self.0.delete(account)
         }
+    }
+
+    #[test]
+    fn memory_vault_reports_memory_storage() {
+        let vault = TokenVault::memory();
+        assert_eq!(vault.save("a", "t").unwrap(), TokenStorage::Memory);
+        assert_eq!(
+            vault.load("a").unwrap(),
+            Some(("t".into(), TokenStorage::Memory))
+        );
+        vault.clear("a").unwrap();
+        assert_eq!(vault.load("a").unwrap(), None);
     }
 
     #[test]
