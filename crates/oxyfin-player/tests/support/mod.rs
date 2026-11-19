@@ -131,12 +131,9 @@ impl Drop for Gate {
     }
 }
 
-/// Returns the path of a file in `tests/fixtures`.
+/// The package directory, read at run time: cargo may reuse a test binary\n/// built from another checkout of the same tree, whose path is gone.\npub fn manifest_dir() -> PathBuf {\n    std::env::var_os("CARGO_MANIFEST_DIR")\n        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)\n}\n\n/// Returns the path of a file in `tests/fixtures`.
 pub fn fixture(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join(name)
+    manifest_dir().join("tests").join("fixtures").join(name)
 }
 
 /// Creates a player with no video and no audio output.
@@ -275,4 +272,11 @@ fn handle(
         None => writer
             .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"),
     };
+}
+
+/// The package directory, read at run time: cargo may reuse a test binary
+/// built from another checkout of the same tree, whose path is gone.
+pub fn manifest_dir() -> PathBuf {
+    std::env::var_os("CARGO_MANIFEST_DIR")
+        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)
 }

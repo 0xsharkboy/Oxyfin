@@ -3,7 +3,7 @@
 
 use std::cell::RefCell;
 use std::future::Future;
-use std::path::Path;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -30,9 +30,9 @@ pub const SERVER_VERSION: &str = "12.4.0";
 /// Quick Connect code of the fixtures.
 pub const QUICK_CONNECT_CODE: &str = "668908";
 
-/// Text of `tests/fixtures/<name>.json`.
+/// The package directory, read at run time: cargo may reuse a test binary\n/// built from another checkout of the same tree, whose path is gone.\npub fn manifest_dir() -> PathBuf {\n    std::env::var_os("CARGO_MANIFEST_DIR")\n        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)\n}\n\n/// Text of `tests/fixtures/<name>.json`.
 pub fn fixture(name: &str) -> String {
-    let file = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let file = manifest_dir()
         .join("tests")
         .join("fixtures")
         .join(format!("{name}.json"));
@@ -372,4 +372,11 @@ pub type QueryLog = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
 pub fn has_param(query: &str, key: &str, value: &str) -> bool {
     let wanted = format!("{key}={value}");
     query.split('&').any(|pair| pair == wanted)
+}
+
+/// The package directory, read at run time: cargo may reuse a test binary
+/// built from another checkout of the same tree, whose path is gone.
+pub fn manifest_dir() -> PathBuf {
+    std::env::var_os("CARGO_MANIFEST_DIR")
+        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)
 }

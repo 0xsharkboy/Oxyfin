@@ -1,7 +1,7 @@
 //! Helpers shared by the integration tests.
 #![allow(dead_code)]
 
-use std::path::Path;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -22,9 +22,9 @@ pub const TEST_TOKEN: &str = "test-token";
 /// User id used by [`session`].
 pub const TEST_USER_ID: &str = "0123456789abcdef0123456789abcdef";
 
-/// Loads `tests/fixtures/<name>.json`.
+/// The package directory, read at run time: cargo may reuse a test binary\n/// built from another checkout of the same tree, whose path is gone.\npub fn manifest_dir() -> PathBuf {\n    std::env::var_os("CARGO_MANIFEST_DIR")\n        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)\n}\n\n/// Loads `tests/fixtures/<name>.json`.
 pub fn fixture(name: &str) -> Value {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let path = manifest_dir()
         .join("tests")
         .join("fixtures")
         .join(format!("{name}.json"));
@@ -353,4 +353,11 @@ pub async fn wait_requests(mock: &MockServer, route: &str, count: usize) -> Vec<
         );
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     }
+}
+
+/// The package directory, read at run time: cargo may reuse a test binary
+/// built from another checkout of the same tree, whose path is gone.
+pub fn manifest_dir() -> PathBuf {
+    std::env::var_os("CARGO_MANIFEST_DIR")
+        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)
 }
