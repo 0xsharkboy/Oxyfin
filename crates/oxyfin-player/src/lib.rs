@@ -17,4 +17,7 @@ pub use error::PlayerError;
 pub use player::{Player, PlayerOptions, VideoOutput};
 #[cfg(feature = "mpv")]
 pub use render::VideoRenderer;
-pub use types::{MediaSource, PlayerEvent, SeekTarget, Track, TrackId, TrackKind, UnloadReason};
+pub use types::{
+    MediaSource, PlayerEvent, SeekTarget, SubtitleAppearance, Track, TrackId, TrackKind,
+    UnloadReason,
+};
