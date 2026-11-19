@@ -5,8 +5,9 @@ use std::time::Duration;
 use oxyfin_api::{ItemId, MediaSourceInfo, PlayMethod, PlaySessionId, PlaybackReport, Ticks};
 use oxyfin_player::{Track, TrackId, TrackKind};
 
+use super::loader::Resume;
 use super::segments::{SkippableSegment, active};
-use super::tracks::TrackMap;
+use super::tracks::{Delivery, TrackMap};
 use super::{AudioOption, SubtitleOption};
 use crate::models::Episode;
 use crate::trickplay::Trickplay;
@@ -28,6 +29,9 @@ pub(super) struct Current {
     pub(super) item: ItemId,
     pub(super) source: MediaSourceInfo,
     pub(super) play_session_id: Option<PlaySessionId>,
+    pub(super) delivery: Delivery,
+    /// State to restore once the media is loaded, when it loads again.
+    pub(super) resume: Option<Resume>,
     pub(super) loaded: bool,
     pub(super) map: Option<TrackMap>,
     pub(super) externals: Vec<(i32, TrackId)>,
@@ -68,6 +72,8 @@ impl Current {
             item,
             source,
             play_session_id,
+            delivery: Delivery::Direct,
+            resume: None,
             loaded: false,
             map: None,
             externals: Vec::new(),
@@ -172,7 +178,10 @@ impl Current {
             is_paused: self.paused,
             audio_stream_index: self.audio,
             subtitle_stream_index: self.subtitle,
-            play_method: PlayMethod::DirectPlay,
+            play_method: match self.delivery {
+                Delivery::Direct => PlayMethod::DirectPlay,
+                Delivery::Transcoded { .. } => PlayMethod::Transcode,
+            },
         }
     }
 
@@ -183,6 +192,7 @@ impl Current {
             tracks,
             &self.externals,
             &self.external_urls,
+            self.delivery,
         );
         let selected = |kind: TrackKind| {
             tracks

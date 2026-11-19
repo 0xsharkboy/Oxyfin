@@ -5,7 +5,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use oxyfin_api::{ItemId, MediaStreamType, Session, Ticks};
+use oxyfin_api::{
+    ItemId, MediaSourceInfo, MediaStreamType, PlaybackOptions, Session, SubtitleDeliveryMethod,
+    Ticks,
+};
 use oxyfin_player::{
     PlayerError, PlayerEvent, SeekTarget, SubtitleAppearance, Track, TrackKind, UnloadReason,
 };
@@ -15,10 +18,11 @@ use tokio::time::{Instant, sleep_until};
 
 use super::countdown::Countdown;
 use super::current::{Current, Siblings, mark_selected};
-use super::loader::{LoadFailure, LoadMessage, LoadStage, Loader, Prepared};
+use super::loader::{LoadFailure, LoadMessage, LoadRequest, LoadStage, Loader, Prepared, Resume};
 use super::media_player::{MediaPlayer, PlayerEvents};
+use super::quality::Quality;
 use super::reporter::{ReportKind, Reporter};
-use super::tracks::{TrackMap, subtitle_format};
+use super::tracks::{Delivery, TrackMap, subtitle_format};
 use super::types::{PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent, PlaybackTimings};
 use crate::error::CoreError;
 use crate::models::Episode;
@@ -90,6 +94,12 @@ pub struct PlaybackController {
     navigation: Option<PlaybackCommand>,
     /// How subtitles look, once the binary has said so.
     subtitles: Option<SubtitleAppearance>,
+    /// Highest streaming quality, for every load.
+    quality: Quality,
+    /// The load in progress, while `loading`.
+    request: Option<LoadRequest>,
+    /// Playback speed, as the player last reported it.
+    speed: f64,
     /// Set by [`PlaybackHandle::shutdown`]: no new item is loaded.
     closing: Arc<AtomicBool>,
 }
@@ -147,6 +157,9 @@ impl PlaybackController {
             loading: false,
             navigation: None,
             subtitles: None,
+            quality: Quality::Original,
+            request: None,
+            speed: 1.0,
             pending: None,
             closing: closing.clone(),
         };
@@ -280,6 +293,19 @@ impl PlaybackController {
         if report && current.reporting() {
             self.reporter.send(ReportKind::Stopped, current.report());
         }
+        if report {
+            self.stop_transcoding(&current);
+        }
+    }
+
+    /// Asks the server to end the transcode of `current`, if it has one.
+    fn stop_transcoding(&self, current: &Current) {
+        // Without a play session id, the server would end every transcode of the device.
+        if let (Delivery::Transcoded { .. }, Some(id)) =
+            (current.delivery, &current.play_session_id)
+        {
+            self.reporter.stop_transcoding(id.clone());
+        }
     }
 
     /// Emits the segment offered at the current position when it changed.
@@ -372,8 +398,11 @@ impl PlaybackController {
                 let track = self.map().and_then(|map| map.mpv_audio(index));
                 if let Some(track) = track {
                     self.call(self.player.select_audio(Some(track)));
+                } else if self.transcoding() {
+                    self.reload(Some(index));
                 }
             }
+            PlaybackCommand::SetQuality(quality) => self.set_quality(quality),
             PlaybackCommand::SelectSubtitle(None) => {
                 self.forget_expected(TrackKind::Subtitle);
                 self.call(self.player.select_subtitle(None));
@@ -442,12 +471,75 @@ impl PlaybackController {
     /// Stops the current item and starts fetching `item`; the controller
     /// keeps running meanwhile and loads it once fetched.
     fn play(&mut self, item: ItemId, mode: PlayMode) {
+        self.start_load(LoadRequest {
+            item,
+            mode,
+            options: PlaybackOptions {
+                max_streaming_bitrate: self.quality.max_bitrate(),
+                ..PlaybackOptions::default()
+            },
+            resume: None,
+        });
+    }
+
+    fn start_load(&mut self, request: LoadRequest) {
         self.cancel_countdown();
         self.release(true);
         self.navigation = None;
         self.loading = true;
         self.pending = None;
-        self.loader.start(self.session.clone(), item, mode);
+        self.request = Some(request.clone());
+        self.loader.start(self.session.clone(), request);
+    }
+
+    /// Whether the current item plays a server transcode.
+    fn transcoding(&self) -> bool {
+        self.current
+            .as_ref()
+            .is_some_and(|current| matches!(current.delivery, Delivery::Transcoded { .. }))
+    }
+
+    /// Loads the current item again at its position, with its tracks, pause
+    /// and speed; `audio` replaces its audio stream.
+    fn reload(&mut self, audio: Option<i32>) {
+        let Some(current) = self.current.as_ref() else {
+            return;
+        };
+        let resume = Resume {
+            position: current.position,
+            audio: audio.or(current.audio),
+            subtitle: current.subtitle,
+            paused: current.paused,
+            speed: self.speed,
+        };
+        let request = LoadRequest {
+            item: current.item.clone(),
+            mode: PlayMode::FromStart,
+            options: PlaybackOptions {
+                max_streaming_bitrate: self.quality.max_bitrate(),
+                audio_stream_index: resume.audio,
+                subtitle_stream_index: Some(text_subtitle(&current.source, resume.subtitle)),
+            },
+            resume: Some(resume),
+        };
+        self.start_load(request);
+    }
+
+    /// Applies a new quality: the item being loaded starts again, the item
+    /// playing loads again unless it reached its end.
+    fn set_quality(&mut self, quality: Quality) {
+        if quality == self.quality {
+            return;
+        }
+        self.quality = quality;
+        if self.loading {
+            if let Some(mut request) = self.request.clone() {
+                request.options.max_streaming_bitrate = quality.max_bitrate();
+                self.start_load(request);
+            }
+        } else if self.current.as_ref().is_some_and(|current| !current.ended) {
+            self.reload(None);
+        }
     }
 
     /// Abandons the item being fetched or waiting to load, if any.
@@ -455,12 +547,14 @@ impl PlaybackController {
         self.loader.cancel();
         self.pending = None;
         self.loading = false;
+        self.request = None;
         self.navigation = None;
     }
 
     /// The load ended without an item: a navigation waiting for it is dropped.
     fn load_failed(&mut self) {
         self.loading = false;
+        self.request = None;
         self.navigation = None;
     }
 
@@ -489,9 +583,9 @@ impl PlaybackController {
                     self.load_failed();
                     self.fail(error);
                 }
-                Err(LoadFailure::NoDirectPlaySource) => {
+                Err(LoadFailure::NoPlayableSource) => {
                     self.load_failed();
-                    self.emit(PlaybackEvent::Error(PlaybackError::NoDirectPlaySource));
+                    self.emit(PlaybackEvent::Error(PlaybackError::NoPlayableSource));
                 }
                 Err(LoadFailure::NothingToPlay) => {
                     self.load_failed();
@@ -532,10 +626,15 @@ impl PlaybackController {
             prepared.start.unwrap_or_default(),
             prepared.siblings,
         );
+        current.delivery = prepared.delivery;
+        current.resume = prepared.resume;
+        // mpv keeps `pause` across loads, so a paused reload reports no change.
+        current.paused = prepared.resume.is_some_and(|resume| resume.paused);
         current.trickplay = prepared.trickplay;
         current.segments = prepared.segments;
         self.current = Some(current);
         self.loading = false;
+        self.request = None;
     }
 
     fn on_player_event(&mut self, event: PlayerEvent) {
@@ -562,7 +661,10 @@ impl PlaybackController {
                 }
             }
             PlayerEvent::Paused(paused) => self.on_paused(paused),
-            PlayerEvent::Speed(speed) => self.emit(PlaybackEvent::Speed(speed)),
+            PlayerEvent::Speed(speed) => {
+                self.speed = speed;
+                self.emit(PlaybackEvent::Speed(speed));
+            }
             PlayerEvent::Volume(volume) => self.emit(PlaybackEvent::Volume(volume)),
             PlayerEvent::Muted(muted) => self.emit(PlaybackEvent::Muted(muted)),
             PlayerEvent::Seeking => {
@@ -587,6 +689,7 @@ impl PlaybackController {
                 if current.reporting() {
                     self.reporter.send(ReportKind::Stopped, current.report());
                 }
+                self.stop_transcoding(&current);
                 self.navigation = None;
                 self.emit(PlaybackEvent::Error(PlaybackError::load(message)));
             }
@@ -619,21 +722,35 @@ impl PlaybackController {
         let Some(current) = self.current.as_mut().filter(|c| !c.loaded) else {
             return;
         };
-        let externals = current
+        let transcoded = matches!(current.delivery, Delivery::Transcoded { .. });
+        let subtitles = current
             .source
             .media_streams
             .iter()
-            .filter(|s| s.is_external && s.r#type == MediaStreamType::Subtitle);
-        for stream in externals {
-            let url = self
-                .session
-                .subtitle_url(
-                    &current.item,
-                    &current.source.id,
-                    stream.index,
-                    subtitle_format(stream.codec.as_deref()),
-                )
-                .to_string();
+            .filter(|s| s.r#type == MediaStreamType::Subtitle);
+        for stream in subtitles {
+            let url = if transcoded {
+                // A transcode carries no subtitle: the server serves them as files.
+                let delivered = stream.delivery_method == Some(SubtitleDeliveryMethod::External);
+                match stream.delivery_url.as_deref().filter(|_| delivered) {
+                    Some(url) => match self.session.server_url(url) {
+                        Some(url) => url.to_string(),
+                        None => continue,
+                    },
+                    None => continue,
+                }
+            } else if stream.is_external {
+                self.session
+                    .subtitle_url(
+                        &current.item,
+                        &current.source.id,
+                        stream.index,
+                        subtitle_format(stream.codec.as_deref()),
+                    )
+                    .to_string()
+            } else {
+                continue;
+            };
             let title = stream.display_title.as_deref().or(stream.title.as_deref());
             let language = stream.language.as_deref();
             if let Ok(id) = self.player.add_external_subtitle(&url, title, language) {
@@ -661,10 +778,12 @@ impl PlaybackController {
             &tracks,
             &current.externals,
             &current.external_urls,
+            current.delivery,
         );
-        let audio = current
-            .source
-            .default_audio_stream_index
+        let resume = current.resume.take();
+        let default_audio = current.source.default_audio_stream_index;
+        let audio = resume
+            .map_or(default_audio, |resume| resume.audio.or(default_audio))
             .and_then(|index| map.mpv_audio(index));
         if let Some(audio) = audio
             && self.player.select_audio(Some(audio)).is_ok()
@@ -672,18 +791,24 @@ impl PlaybackController {
             mark_selected(&mut tracks, TrackKind::Audio, Some(audio));
             current.expected_audio = Some(audio);
         }
-        let subtitle = current
-            .source
-            .default_subtitle_stream_index
+        let subtitle = resume
+            .map_or(current.source.default_subtitle_stream_index, |resume| {
+                resume.subtitle
+            })
             .filter(|index| *index >= 0)
             .and_then(|index| map.mpv_subtitle(index));
         if self.player.select_subtitle(subtitle).is_ok() {
             mark_selected(&mut tracks, TrackKind::Subtitle, subtitle);
             current.expected_subtitle = Some(subtitle);
         }
-        let _ = self.player.set_speed(1.0);
+        let _ = self
+            .player
+            .set_speed(resume.map_or(1.0, |resume| resume.speed));
         // mpv keeps `pause` across loads without reporting it.
-        match self.player.set_paused(false) {
+        match self
+            .player
+            .set_paused(resume.is_some_and(|resume| resume.paused))
+        {
             Ok(()) | Err(PlayerError::NoMediaLoaded) => {}
             Err(error) => {
                 let _ = self
@@ -709,6 +834,9 @@ impl PlaybackController {
             has_previous: true,
             has_next,
         });
+        if let Some(resume) = resume {
+            self.emit(PlaybackEvent::Paused(resume.paused));
+        }
         self.schedule_progress();
         self.report(ReportKind::Start);
         self.show_segment();
@@ -748,4 +876,19 @@ impl PlaybackController {
             self.schedule_progress();
         }
     }
+}
+
+/// The subtitle stream to ask of the server: `subtitle` when the server can
+/// deliver it as a file, `-1` otherwise, so that a transcode never has
+/// subtitles burned into its picture.
+fn text_subtitle(source: &MediaSourceInfo, subtitle: Option<i32>) -> i32 {
+    subtitle
+        .filter(|index| {
+            source.media_streams.iter().any(|stream| {
+                stream.index == *index
+                    && stream.r#type == MediaStreamType::Subtitle
+                    && (stream.is_text_subtitle_stream || stream.is_external)
+            })
+        })
+        .unwrap_or(-1)
 }

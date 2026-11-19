@@ -3,7 +3,9 @@
 
 use std::time::Duration;
 
-use oxyfin_api::{BaseItemKind, ItemId, MediaSourceInfo, PlaySessionId, Session};
+use oxyfin_api::{
+    BaseItemKind, ItemId, MediaSourceInfo, PlaySessionId, PlaybackOptions, Session, StreamSource,
+};
 use oxyfin_player::MediaSource;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::task::JoinHandle;
@@ -11,11 +13,35 @@ use tokio::task::JoinHandle;
 use super::current::Siblings;
 use super::queue::neighbours;
 use super::segments::{SkippableSegment, skippable};
+use super::tracks::Delivery;
 use super::types::{PlayMode, PlaybackTitle};
 use crate::catalog::Catalog;
 use crate::error::CoreError;
 use crate::models::{Episode, ItemSummary, UserState, artwork};
 use crate::trickplay::Trickplay;
+
+/// What to load.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct LoadRequest {
+    pub(super) item: ItemId,
+    pub(super) mode: PlayMode,
+    /// Bitrate limit and tracks asked of the server.
+    pub(super) options: PlaybackOptions,
+    /// Set when the item loads again, such as for another quality: the state
+    /// to restore instead of the saved position and the default tracks.
+    pub(super) resume: Option<Resume>,
+}
+
+/// State of an item that loads again.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Resume {
+    pub(super) position: Duration,
+    pub(super) audio: Option<i32>,
+    /// Subtitle stream shown, `None` for none.
+    pub(super) subtitle: Option<i32>,
+    pub(super) paused: bool,
+    pub(super) speed: f64,
+}
 
 /// An item ready to be loaded into the player.
 pub(super) struct Prepared {
@@ -23,7 +49,9 @@ pub(super) struct Prepared {
     pub(super) source: MediaSourceInfo,
     pub(super) play_session_id: Option<PlaySessionId>,
     pub(super) media: MediaSource,
+    pub(super) delivery: Delivery,
     pub(super) start: Option<Duration>,
+    pub(super) resume: Option<Resume>,
     pub(super) siblings: Siblings,
     /// Seek bar thumbnails of the source, when the server has some.
     pub(super) trickplay: Option<Trickplay>,
@@ -34,7 +62,7 @@ pub(super) struct Prepared {
 /// Why an item cannot be loaded.
 pub(super) enum LoadFailure {
     Request(CoreError),
-    NoDirectPlaySource,
+    NoPlayableSource,
     NothingToPlay,
 }
 
@@ -82,8 +110,8 @@ impl Loader {
         }
     }
 
-    /// Abandons the running load and starts fetching `item`.
-    pub(super) fn start(&mut self, session: Session, item: ItemId, mode: PlayMode) {
+    /// Abandons the running load and starts fetching the item of `request`.
+    pub(super) fn start(&mut self, session: Session, request: LoadRequest) {
         self.cancel();
         let generation = self.generation;
         let messages = self.messages.clone();
@@ -91,7 +119,7 @@ impl Loader {
             let send = |stage| {
                 let _ = messages.send(LoadMessage { generation, stage });
             };
-            let outcome = fetch(&session, item, mode, &send).await;
+            let outcome = fetch(&session, request, &send).await;
             let prepared = outcome.as_ref().ok().map(|prepared| prepared.item.clone());
             send(LoadStage::Done(Box::new(outcome)));
             if let Some(item) = prepared {
@@ -111,13 +139,16 @@ impl Loader {
 
 async fn fetch(
     session: &Session,
-    item: ItemId,
-    mode: PlayMode,
+    load: LoadRequest,
     send: &impl Fn(LoadStage),
 ) -> Result<Prepared, LoadFailure> {
     let request = |error: oxyfin_api::Error| LoadFailure::Request(error.into());
-    let mut item = item;
-    let mut mode = mode;
+    let LoadRequest {
+        mut item,
+        mut mode,
+        options,
+        resume,
+    } = load;
     let mut dto = session.item(&item).await.map_err(request)?;
     if dto.r#type == BaseItemKind::Series {
         let episode = Catalog::new(session.clone())
@@ -165,22 +196,30 @@ async fn fetch(
             }
         }
     };
-    let (siblings, info) = tokio::join!(episodes, session.playback_info(&item));
+    let (siblings, info) = tokio::join!(episodes, session.playback_info_with(&item, &options));
     let siblings = siblings.map_err(LoadFailure::Request)?;
     let info = info.map_err(request)?;
-    let source = info
-        .media_sources
-        .into_iter()
-        .find(|source| source.supports_direct_play)
-        .ok_or(LoadFailure::NoDirectPlaySource)?;
+    let mut sources = info.media_sources;
+    let chosen = sources
+        .iter()
+        .position(|source| source.supports_direct_play)
+        .or_else(|| {
+            sources
+                .iter()
+                .position(|source| source.transcoding_url.is_some())
+        })
+        .ok_or(LoadFailure::NoPlayableSource)?;
+    let source = sources.swap_remove(chosen);
+    let (stream, delivery) = stream(session, &item, &source, &options)?;
     let trickplay = Trickplay::from_dto(&dto, &source.id);
-    let stream = session.stream_source(&item, &source.id);
     let mut media =
         MediaSource::new(stream.url.as_str()).with_header("Authorization", stream.authorization);
-    let start = match mode {
-        PlayMode::Auto if !saved.is_zero() => Some(saved),
-        _ => None,
-    };
+    let start = match (resume, mode) {
+        (Some(resume), _) => Some(resume.position),
+        (None, PlayMode::Auto) => Some(saved),
+        (None, PlayMode::FromStart) => None,
+    }
+    .filter(|start| !start.is_zero());
     if let Some(start) = start {
         media = media.with_start(start);
     }
@@ -189,11 +228,40 @@ async fn fetch(
         source,
         play_session_id: info.play_session_id,
         media,
+        delivery,
         start,
+        resume,
         siblings,
         trickplay,
         segments: Vec::new(),
     })
+}
+
+/// The stream of `source`: the file itself when the server allows it,
+/// otherwise the server's transcode.
+fn stream(
+    session: &Session,
+    item: &ItemId,
+    source: &MediaSourceInfo,
+    options: &PlaybackOptions,
+) -> Result<(StreamSource, Delivery), LoadFailure> {
+    if source.supports_direct_play {
+        return Ok((session.stream_source(item, &source.id), Delivery::Direct));
+    }
+    let stream = source
+        .transcoding_url
+        .as_deref()
+        .and_then(|url| session.transcode_source(url))
+        .ok_or(LoadFailure::NoPlayableSource)?;
+    log::info!(
+        "the server transcodes the item: {}",
+        source.transcode_reasons().join(", ")
+    );
+    let audio = source
+        .transcoding_audio_stream_index()
+        .or(options.audio_stream_index)
+        .or(source.default_audio_stream_index);
+    Ok((stream, Delivery::Transcoded { audio }))
 }
 
 #[cfg(test)]
