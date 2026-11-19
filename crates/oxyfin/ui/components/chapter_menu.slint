@@ -19,7 +19,7 @@ component ChapterOption inherits Rectangle {
         root.chosen();
     }
 
-    height: layout.preferred-height;
+    height: Theme.chapter-thumb-height + 2 * Theme.space-chip-y;
     background: root.current || touch.has-hover ? Theme.bg-hover : transparent;
 
     touch := TouchArea {
@@ -82,11 +82,24 @@ export component ChapterMenu inherits MenuPanel {
     in property <int> current;
     callback chosen(start: float);
 
+    property <length> row-height: Theme.chapter-thumb-height + 2 * Theme.space-chip-y;
+
     accessible-role: list;
     accessible-label: @tr("Chapters");
     width: Theme.chapter-menu-width;
 
-    MenuHeader {
+    // Opens on the chapter playing, centered when the list scrolls.
+    // Worked out from the row height: the rows are not laid out yet when the menu opens.
+    init => {
+        if root.current >= 0 {
+            let total = header.preferred-height + root.chapters.length * root.row-height;
+            let shown = min(total, root.limit - 2 * Theme.space-sm);
+            let center = header.preferred-height + (root.current + 0.5) * root.row-height;
+            root.scroll-y = -clamp(center - shown / 2, 0, max(0px, total - shown));
+        }
+    }
+
+    header := MenuHeader {
         text: @tr("CHAPTERS");
     }
 

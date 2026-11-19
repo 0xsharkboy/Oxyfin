@@ -254,17 +254,18 @@ pub fn chapter_rows(chapters: &[Chapter]) -> Vec<ChapterRow> {
         .collect()
 }
 
-/// Where the seek bar is cut: the start of each chapter but the first, as a
-/// fraction of `duration`. None without a duration.
-pub fn chapter_marks(chapters: &[Chapter], duration: Option<Duration>) -> Vec<f32> {
+/// Where the seek bar is cut: the start of each chapter but the first, given
+/// the chapter starts in order, as a fraction of `duration`. None without a
+/// duration.
+pub fn chapter_marks(starts: &[Duration], duration: Option<Duration>) -> Vec<f32> {
     let Some(duration) = duration.filter(|duration| !duration.is_zero()) else {
         return Vec::new();
     };
-    chapters
+    starts
         .iter()
         .skip(1)
-        .filter(|chapter| !chapter.start.is_zero() && chapter.start < duration)
-        .map(|chapter| (chapter.start.as_secs_f64() / duration.as_secs_f64()) as f32)
+        .filter(|start| !start.is_zero() && **start < duration)
+        .map(|start| (start.as_secs_f64() / duration.as_secs_f64()) as f32)
         .collect()
 }
 
@@ -783,11 +784,7 @@ mod tests {
 
     #[test]
     fn chapter_marks_skip_the_first_and_out_of_range_chapters() {
-        let at = |seconds| Chapter {
-            start: Duration::from_secs(seconds),
-            name: String::new(),
-            image: None,
-        };
+        let at = Duration::from_secs;
         let chapters = [at(0), at(50), at(100), at(250)];
         let duration = Some(Duration::from_secs(200));
         assert_eq!(chapter_marks(&chapters, duration), [0.25, 0.5]);

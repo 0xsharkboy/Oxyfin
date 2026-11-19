@@ -1,8 +1,8 @@
 import { Theme, SeekPreview, Messages } from "../theme.slint";
-import { BodyStrongText, LabelText } from "text.slint";
+import { BodyStrongText, CaptionText } from "text.slint";
 
-// Popup above the seek bar: the thumbnail of the hovered time, when the item has some, the name of
-// its chapter, when the item has chapters, and the time.
+// Popup above the seek bar: the thumbnail of the hovered time, when the item has some, then a
+// label with the name of its chapter, when the item has chapters, over the time.
 export component SeekPreviewPopup inherits Rectangle {
     in property <SeekPreview> preview;
 
@@ -13,26 +13,17 @@ export component SeekPreviewPopup inherits Rectangle {
     accessible-label: @tr("Seek preview");
 
     // A long chapter name is elided rather than widening the popup past the thumbnail.
-    width: min(column.preferred-width, Theme.seek-preview-width + 2 * Theme.space-xs);
+    width: root.preview.has-image ? root.thumb-width : min(label.preferred-width, root.thumb-width);
     height: column.preferred-height;
-    background: Theme.bg-elevated;
-    border-radius: Theme.radius-md;
-    border-width: Theme.border-thin;
-    border-color: Theme.border-default;
-    drop-shadow-offset-y: 8px;
-    drop-shadow-blur: 12px;
-    drop-shadow-color: Theme.menu-shadow;
 
     column := VerticalLayout {
-        padding: Theme.space-xs;
-        padding-left: root.preview.has-image ? Theme.space-xs : Theme.space-sm;
-        padding-right: self.padding-left;
-        spacing: Theme.space-xs;
+        spacing: Theme.space-sm;
+        alignment: end;
 
         if root.preview.has-image: Rectangle {
             width: root.thumb-width;
             height: root.thumb-height;
-            border-radius: Theme.radius-md - Theme.space-xs;
+            border-radius: Theme.radius-md;
             clip: true;
 
             Image {
@@ -45,19 +36,44 @@ export component SeekPreviewPopup inherits Rectangle {
                 source-clip-height: root.preview.height;
                 image-fit: fill;
             }
+
+            Rectangle {
+                border-radius: Theme.radius-md;
+                border-width: Theme.border-thin;
+                border-color: Theme.border-default;
+            }
         }
 
-        if root.preview.chapter-number > 0: BodyStrongText {
-            accessible-role: text;
-            text: Messages.chapter-title(root.preview.chapter, root.preview.chapter-number);
-            horizontal-alignment: center;
-            overflow: elide;
-        }
+        HorizontalLayout {
+            alignment: center;
 
-        LabelText {
-            accessible-role: text;
-            text: root.preview.time;
-            horizontal-alignment: center;
+            label := Rectangle {
+                width: min(self.preferred-width, root.width);
+                background: Theme.bg-elevated;
+                border-radius: Theme.radius-sm;
+
+                VerticalLayout {
+                    padding-left: Theme.seek-label-padding-x;
+                    padding-right: Theme.seek-label-padding-x;
+                    padding-top: Theme.space-chip-y;
+                    padding-bottom: Theme.space-chip-y;
+                    spacing: Theme.space-2xs;
+
+                    if root.preview.chapter-number > 0: BodyStrongText {
+                        accessible-role: text;
+                        text: Messages.chapter-title(root.preview.chapter, root.preview.chapter-number);
+                        horizontal-alignment: center;
+                        overflow: elide;
+                    }
+
+                    CaptionText {
+                        accessible-role: text;
+                        text: root.preview.time;
+                        color: Theme.text-secondary;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
         }
     }
 }

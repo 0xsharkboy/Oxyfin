@@ -13,7 +13,9 @@ mod segments;
 mod tracks;
 mod types;
 
-pub use chapters::{CHAPTER_RESTART_GRACE, Chapter, chapter_at, next_chapter, previous_chapter};
+pub use chapters::{
+    CHAPTER_RESTART_GRACE, Chapter, chapter_at, next_chapter, previous_chapter, start_at,
+};
 pub use controller::{PlaybackController, PlaybackHandle};
 pub use media_player::{MediaPlayer, PlayerEventSink, PlayerEvents, player_events};
 pub use quality::{QUALITIES, Quality};

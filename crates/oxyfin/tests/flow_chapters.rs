@@ -13,7 +13,7 @@ use oxyfin::{AppWindow, Screen};
 use oxyfin_core::{Chapter, PlaybackCommand, PlaybackEvent};
 use oxyfin_player::SeekTarget;
 use slint::platform::{Key, WindowEvent};
-use slint::{ComponentHandle, LogicalSize};
+use slint::{ComponentHandle, LogicalSize, Model};
 
 fn press(window: &AppWindow, key: Key) {
     let text = slint::SharedString::from(key);
@@ -278,4 +278,142 @@ fn seek_preview_names_the_chapter_above_the_time() {
 
     hover_seek_bar(&window, 0.8);
     assert!(text(&window, "Credits").is_some());
+}
+
+fn at_millis(window: &AppWindow, millis: u64) {
+    player::apply(
+        window,
+        PlaybackEvent::Position(Duration::from_millis(millis)),
+    );
+    player::apply(window, PlaybackEvent::Seeked);
+}
+
+#[test]
+fn page_up_near_the_end_of_the_grace_goes_to_the_previous_chapter() {
+    let (window, sent) = player_window();
+    player::apply(&window, PlaybackEvent::Chapters(chapters()));
+    at_millis(&window, 62_900);
+    press(&window, Key::PageUp);
+    assert_eq!(last_seek(&sent), absolute(0));
+    at_millis(&window, 63_100);
+    press(&window, Key::PageUp);
+    assert_eq!(last_seek(&sent), absolute(60));
+}
+
+#[test]
+fn chapter_keys_seek_to_the_exact_start_of_the_menu_row() {
+    let (window, sent) = player_window();
+    let start = Duration::from_millis(61_337);
+    let mut list = chapters();
+    list[1].start = start;
+    player::apply(&window, PlaybackEvent::Chapters(list));
+    at(&window, 10);
+    press(&window, Key::PageDown);
+    let row = window.get_player_chapters().row_data(1).unwrap();
+    assert_eq!(
+        last_seek(&sent),
+        Some(PlaybackCommand::Seek(SeekTarget::Absolute(
+            Duration::from_secs_f32(row.start)
+        )))
+    );
+    assert_eq!(window.get_player_current_chapter(), 1);
+}
+
+#[test]
+fn marks_follow_a_later_duration() {
+    let (window, _) = player_window();
+    player::apply(&window, PlaybackEvent::Chapters(chapters()));
+    let marks = |window: &AppWindow| {
+        window
+            .get_player_chapter_marks()
+            .iter()
+            .collect::<Vec<f32>>()
+    };
+    assert_eq!(marks(&window), [1. / 3., 2. / 3.]);
+    player::apply(
+        &window,
+        PlaybackEvent::Ready {
+            duration: Some(Duration::from_secs(240)),
+            audio: Vec::new(),
+            subtitles: Vec::new(),
+            has_previous: false,
+            has_next: false,
+        },
+    );
+    assert_eq!(marks(&window), [0.25, 0.5]);
+}
+
+#[test]
+fn a_late_current_chapter_is_scrolled_into_the_menu() {
+    let (window, _) = player_window();
+    let long: Vec<_> = (0..30)
+        .map(|index| Chapter {
+            start: Duration::from_secs(index * 6),
+            name: format!("Part {index}"),
+            image: None,
+        })
+        .collect();
+    player::apply(&window, PlaybackEvent::Chapters(long));
+    at(&window, 27 * 6 + 1);
+    assert_eq!(window.get_player_current_chapter(), 27);
+
+    click(&window, &chapters_button(&window).unwrap());
+    let menu = ElementHandle::find_by_accessible_label(&window, "Chapters")
+        .find(|element| element.accessible_role() == Some(AccessibleRole::List))
+        .unwrap();
+    let (top, bottom) = (
+        menu.absolute_position().y,
+        menu.absolute_position().y + menu.size().height,
+    );
+    let current = rows(&window)
+        .into_iter()
+        .find(|row| row.accessible_item_selected() == Some(true))
+        .unwrap_or_else(|| panic!("the current row is not shown"));
+    let y = current.absolute_position().y;
+    assert!(
+        y >= top && y + current.size().height <= bottom,
+        "row at {y}..{} outside the menu {top}..{bottom}",
+        y + current.size().height
+    );
+    // Rows scrolled out of the menu are not reported at all.
+    let first = rows(&window).into_iter().find(|row| {
+        row.accessible_label()
+            .is_some_and(|label| label.starts_with("Part 0 "))
+    });
+    assert!(
+        first.is_none_or(|row| row.absolute_position().y < top),
+        "the menu scrolled"
+    );
+}
+
+#[test]
+fn hovering_the_seek_bar_shows_a_marker_and_a_label_under_the_thumbnail() {
+    let (window, _) = player_window();
+    player::bind_preview(&window, Rc::new(|_| {}));
+    player::apply(&window, PlaybackEvent::Chapters(chapters()));
+    let markers = || ElementHandle::find_by_element_id(&window, "Scrubber::marker").count();
+    assert_eq!(markers(), 0);
+
+    hover_seek_bar(&window, 0.5);
+    let marker: Vec<_> = ElementHandle::find_by_element_id(&window, "Scrubber::marker").collect();
+    assert_eq!(marker.len(), 1);
+    assert_eq!(marker[0].size().width, 2.);
+    assert_eq!(marker[0].size().height, 12.);
+    let seek = ElementHandle::find_by_accessible_label(&window, "Seek")
+        .find(|element| element.accessible_role() == Some(AccessibleRole::Slider))
+        .unwrap();
+    let center = marker[0].absolute_position().x + 1.;
+    let expected = seek.absolute_position().x + seek.size().width * 0.5;
+    assert!((center - expected).abs() <= 1., "{center} vs {expected}");
+
+    let label = ElementHandle::find_by_element_id(&window, "SeekPreviewPopup::label")
+        .next()
+        .expect("a label pill");
+    let name = text(&window, "Chapter 2").unwrap();
+    let time = text(&window, "1:30").unwrap();
+    for inside in [&name, &time] {
+        let y = inside.absolute_position().y;
+        assert!(y >= label.absolute_position().y);
+        assert!(y + inside.size().height <= label.absolute_position().y + label.size().height);
+    }
 }
