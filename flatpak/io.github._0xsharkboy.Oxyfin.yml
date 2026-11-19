@@ -15,6 +15,8 @@ finish-args:
   - --socket=pulseaudio
   # Access tokens are stored in the Secret Service keyring.
   - --talk-name=org.freedesktop.secrets
+  # Media keys and desktop media controls go through MPRIS.
+  - --own-name=org.mpris.MediaPlayer2.oxyfin
 
 cleanup:
   - /include
