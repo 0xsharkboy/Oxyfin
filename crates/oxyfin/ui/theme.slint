@@ -112,6 +112,12 @@ export struct TrackRow {
     selected: bool,
 }
 
+// A streaming quality of the player menu: `height` and `kbps` are 0 for the original quality.
+export struct QualityRow {
+    height: int,
+    kbps: int,
+}
+
 // The next episode toast of the player.
 // Part of the playing item the player offers to skip, mirroring the core `SegmentKind`.
 export enum SkipKind { none, intro, recap, preview, credits }
@@ -164,7 +170,7 @@ export enum Message {
     storage-error,
     session-expired,
     file-token-warning,
-    no-direct-play,
+    no-playable-source,
     nothing-to-play,
     load-failed,
     command-failed,
@@ -214,8 +220,8 @@ export global Messages {
         if m == Message.file-token-warning {
             return @tr("The system keyring is unavailable, so your sign-in token is stored in a file only you can read.");
         }
-        if m == Message.no-direct-play {
-            return @tr("Oxyfin cannot play this item directly.");
+        if m == Message.no-playable-source {
+            return @tr("The server offers no version of this item that Oxyfin can play.");
         }
         if m == Message.nothing-to-play {
             return @tr("There is nothing left to play in this series.");

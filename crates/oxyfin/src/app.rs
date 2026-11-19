@@ -250,6 +250,7 @@ impl App {
     ) {
         if let Some(window) = self.window() {
             player::reset(&window);
+            player::show_quality(&window, self.manager.quality());
         }
         handle.send(PlaybackCommand::Play { item, mode });
         self.dispatch(Msg::OpenPlayer);
@@ -327,6 +328,7 @@ impl App {
                     handle.send(PlaybackCommand::SetSubtitleStyle(
                         self.manager.subtitle_style(),
                     ));
+                    handle.send(PlaybackCommand::SetQuality(self.manager.quality()));
                     self.pending_stops.set(0);
                     self.relay(id, updates);
                     *self.video.borrow_mut() = Some((id, Arc::clone(&player)));
@@ -512,6 +514,11 @@ impl App {
     /// Sends `command` to the current playback. The `Stopped` that answers a
     /// stop sent here is expected: the screen already left the player.
     fn send_playback(&self, command: PlaybackCommand) {
+        if let PlaybackCommand::SetQuality(quality) = command
+            && let Err(error) = self.manager.set_quality(quality)
+        {
+            log::warn!("cannot save the streaming quality: {error}");
+        }
         if let Some(playback) = self
             .generation
             .borrow()

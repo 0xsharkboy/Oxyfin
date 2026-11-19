@@ -1,5 +1,5 @@
 import { Spinner } from "std-widgets.slint";
-import { Theme, Message, Messages, TrackRow, NextUp, SeekPreview, SkipKind } from "../theme.slint";
+import { Theme, Message, Messages, TrackRow, NextUp, QualityRow, SeekPreview, SkipKind } from "../theme.slint";
 import { SeekPreviewPopup } from "../components/seek_preview.slint";
 import { Icons } from "../icons.slint";
 import { Button, ButtonStyle } from "../components/button.slint";
@@ -30,6 +30,9 @@ export component PlayerScreen inherits Rectangle {
     in property <bool> muted;
     in property <float> speed;
     in property <[float]> speeds;
+    in property <[QualityRow]> qualities;
+    // Index in `qualities` of the chosen quality.
+    in property <int> quality;
     in property <bool> has-next;
     in property <[TrackRow]> audio;
     in property <[TrackRow]> subtitles;
@@ -54,6 +57,7 @@ export component PlayerScreen inherits Rectangle {
     callback command-cancel-next-up();
     callback command-set-speed(speed: float);
     callback command-step-speed(direction: int);
+    callback command-set-quality(index: int);
     callback command-set-volume(volume: float);
     callback command-step-volume(direction: int);
     callback command-set-muted(muted: bool);
@@ -340,6 +344,12 @@ export component PlayerScreen inherits Rectangle {
                 speed: root.speed;
                 select(speed) => {
                     root.command-set-speed(speed);
+                    root.menu = PlayerMenu.none;
+                }
+                qualities: root.qualities;
+                quality: root.quality;
+                select-quality(index) => {
+                    root.command-set-quality(index);
                     root.menu = PlayerMenu.none;
                 }
             }
