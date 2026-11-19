@@ -6,7 +6,7 @@ use std::time::Duration;
 use oxyfin_api::ItemId;
 use oxyfin_player::{PlayerError, SeekTarget};
 
-use super::{AudioOption, SkippableSegment, SubtitleOption};
+use super::{AudioOption, Quality, SkippableSegment, SubtitleOption};
 use crate::SubtitleStyle;
 use crate::error::CoreError;
 use crate::models::{Episode, ImageRef};
@@ -104,6 +104,12 @@ pub enum PlaybackCommand {
     SelectAudio(i32),
     /// Select the subtitle track with this Jellyfin stream index, or none.
     SelectSubtitle(Option<i32>),
+    /// Set the highest streaming quality. The current item, unless it
+    /// reached its end, loads again at its position with its tracks, pause
+    /// and speed, as from a new [`PlaybackEvent::Loading`], and its
+    /// [`PlaybackEvent::Ready`] is followed by its [`PlaybackEvent::Paused`]
+    /// state. The quality stays for the next items.
+    SetQuality(Quality),
     /// Change how subtitles look. Applies at once, even with nothing
     /// playing, and again before each item loads.
     SetSubtitleStyle(SubtitleStyle),
@@ -218,9 +224,9 @@ pub enum PlaybackEvent {
 /// Why playback or a command failed. The UI translates each variant.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum PlaybackError {
-    /// The server offers no source that can be played directly.
-    #[error("no source can be played directly")]
-    NoDirectPlaySource,
+    /// The server offers no source the player can play, as is or transcoded.
+    #[error("no source can be played")]
+    NoPlayableSource,
     /// The series has no episode to watch.
     #[error("the series has no episode to watch")]
     NothingToPlay,

@@ -7,14 +7,26 @@ use oxyfin_player::{Track, TrackId, TrackKind};
 
 use super::{AudioOption, SubtitleOption};
 
+/// How the loaded media relates to the streams of its source.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Delivery {
+    /// The file itself: its tracks are the streams of the source.
+    Direct,
+    /// A server transcode: one audio track, the stream `audio`, and no
+    /// subtitle track.
+    Transcoded { audio: Option<i32> },
+}
+
 /// Correspondence between the streams of a media source and the tracks of the
 /// loaded media.
 ///
 /// Jellyfin lists external streams first, then the file's streams, so an
-/// internal track maps to `stream_index + number of external streams`. mpv
-/// ids are unique only per kind, hence the kind in every key.
+/// internal track of the file maps to `stream_index + number of external
+/// streams`. A transcode carries only the audio stream it was made with.
+/// mpv ids are unique only per kind, hence the kind in every key.
 pub(crate) struct TrackMap {
     streams: Vec<MediaStream>,
+    delivery: Delivery,
     tracks: Vec<Track>,
     to_mpv: HashMap<(TrackKind, i32), TrackId>,
     to_jellyfin: HashMap<(TrackKind, TrackId), i32>,
@@ -40,6 +52,7 @@ impl TrackMap {
         tracks: &[Track],
         externals: &[(i32, TrackId)],
         external_urls: &[(i32, String)],
+        delivery: Delivery,
     ) -> TrackMap {
         let offset = streams.iter().filter(|s| s.is_external).count() as i64;
         let kind_at = |index: i32| streams.iter().find(|s| s.index == index).and_then(kind_of);
@@ -50,7 +63,12 @@ impl TrackMap {
                 continue;
             }
             let index = match (track.stream_index, track.is_external) {
-                (Some(ff), false) => i32::try_from(ff + offset).ok(),
+                (Some(ff), false) => match delivery {
+                    Delivery::Direct => i32::try_from(ff + offset).ok(),
+                    Delivery::Transcoded { audio } => {
+                        audio.filter(|_| track.kind == TrackKind::Audio)
+                    }
+                },
                 _ => externals
                     .iter()
                     .find(|(_, id)| track.kind == TrackKind::Subtitle && *id == track.id)
@@ -71,6 +89,7 @@ impl TrackMap {
         }
         TrackMap {
             streams: streams.to_vec(),
+            delivery,
             tracks: tracks.to_vec(),
             to_mpv,
             to_jellyfin,
@@ -100,12 +119,15 @@ impl TrackMap {
     }
 
     /// The audio tracks of the media source that mpv knows, in server order.
+    /// During a transcode, every audio stream of the source: picking another
+    /// one needs a new transcode.
     pub(crate) fn audio_options(&self) -> Vec<AudioOption> {
+        let transcoded = matches!(self.delivery, Delivery::Transcoded { .. });
         self.streams
             .iter()
             .filter(|s| {
                 s.r#type == MediaStreamType::Audio
-                    && self.to_mpv.contains_key(&(TrackKind::Audio, s.index))
+                    && (transcoded || self.to_mpv.contains_key(&(TrackKind::Audio, s.index)))
             })
             .map(|s| AudioOption {
                 index: s.index,
@@ -197,7 +219,7 @@ mod tests {
             track(1, TrackKind::Audio, Some(1)),
             track(2, TrackKind::Audio, Some(2)),
         ];
-        let map = TrackMap::new(streams, &tracks, &[], &[]);
+        let map = TrackMap::new(streams, &tracks, &[], &[], Delivery::Direct);
         assert_eq!(map.mpv_audio(2), Some(TrackId(1)));
         assert_eq!(map.mpv_audio(3), Some(TrackId(2)));
     }
@@ -212,7 +234,7 @@ mod tests {
             track(1, TrackKind::Video, Some(0)),
             track(1, TrackKind::Audio, Some(1)),
         ];
-        let map = TrackMap::new(&streams, &tracks, &[], &[]);
+        let map = TrackMap::new(&streams, &tracks, &[], &[], Delivery::Direct);
         assert_eq!(map.mpv_audio(1), Some(TrackId(1)));
     }
 
@@ -228,7 +250,7 @@ mod tests {
             track(1, TrackKind::Video, Some(0)),
             track(1, TrackKind::Audio, Some(1)),
         ];
-        let map = TrackMap::new(&streams, &tracks, &[], &[]);
+        let map = TrackMap::new(&streams, &tracks, &[], &[], Delivery::Direct);
         assert_eq!(map.mpv_audio(3), Some(TrackId(1)));
         assert_eq!(map.mpv_audio(1), None);
     }
@@ -240,7 +262,7 @@ mod tests {
             stream(1, MediaStreamType::Subtitle, false),
         ];
         let tracks = [track(1, TrackKind::Audio, Some(1))];
-        let map = TrackMap::new(&streams, &tracks, &[], &[]);
+        let map = TrackMap::new(&streams, &tracks, &[], &[], Delivery::Direct);
         assert_eq!(map.mpv_audio(1), None);
         assert_eq!(map.mpv_subtitle(1), None);
         assert_eq!(map.jellyfin_index(TrackKind::Audio, TrackId(1)), None);
@@ -256,7 +278,7 @@ mod tests {
             track(1, TrackKind::Audio, Some(0)),
             track(1, TrackKind::Subtitle, None),
         ];
-        let map = TrackMap::new(&streams, &tracks, &[(0, TrackId(1))], &[]);
+        let map = TrackMap::new(&streams, &tracks, &[(0, TrackId(1))], &[], Delivery::Direct);
         assert_eq!(map.mpv_subtitle(0), Some(TrackId(1)));
         assert_eq!(map.mpv_audio(1), Some(TrackId(1)));
 
@@ -267,6 +289,7 @@ mod tests {
             &[by_url],
             &[],
             &[(0, "http://x/sub.srt".to_owned())],
+            Delivery::Direct,
         );
         assert_eq!(map.mpv_subtitle(0), Some(TrackId(5)));
     }
@@ -281,7 +304,7 @@ mod tests {
         let mut audio = track(1, TrackKind::Audio, Some(1));
         audio.is_selected = true;
         let tracks = [audio, track(1, TrackKind::Subtitle, None)];
-        let map = TrackMap::new(&streams, &tracks, &[(0, TrackId(1))], &[]);
+        let map = TrackMap::new(&streams, &tracks, &[(0, TrackId(1))], &[], Delivery::Direct);
         assert_eq!(map.jellyfin_index(TrackKind::Audio, TrackId(1)), Some(2));
         assert_eq!(map.jellyfin_index(TrackKind::Subtitle, TrackId(1)), Some(0));
         let audio = map.audio_options();
@@ -289,6 +312,44 @@ mod tests {
         assert!(audio[0].selected);
         let subs = map.subtitle_options();
         assert!(subs[0].external && !subs[0].selected);
+    }
+
+    #[test]
+    fn a_transcode_carries_only_its_audio_stream() {
+        let streams = [
+            stream(0, MediaStreamType::Subtitle, true),
+            stream(1, MediaStreamType::Video, false),
+            stream(2, MediaStreamType::Audio, false),
+            stream(3, MediaStreamType::Audio, false),
+            stream(4, MediaStreamType::Subtitle, false),
+        ];
+        let mut audio = track(1, TrackKind::Audio, Some(1));
+        audio.is_selected = true;
+        let tracks = [
+            track(1, TrackKind::Video, Some(0)),
+            audio,
+            track(1, TrackKind::Subtitle, Some(2)),
+            track(2, TrackKind::Subtitle, None),
+        ];
+        let map = TrackMap::new(
+            &streams,
+            &tracks,
+            &[(0, TrackId(2))],
+            &[],
+            Delivery::Transcoded { audio: Some(3) },
+        );
+        assert_eq!(map.mpv_audio(3), Some(TrackId(1)));
+        assert_eq!(map.mpv_audio(2), None);
+        assert_eq!(map.mpv_subtitle(0), Some(TrackId(2)));
+        assert_eq!(map.mpv_subtitle(4), None);
+        let audio: Vec<_> = map
+            .audio_options()
+            .iter()
+            .map(|o| (o.index, o.selected))
+            .collect();
+        assert_eq!(audio, [(2, false), (3, true)]);
+        let subs: Vec<_> = map.subtitle_options().iter().map(|o| o.index).collect();
+        assert_eq!(subs, [0]);
     }
 
     #[test]
@@ -304,7 +365,7 @@ mod tests {
             track(1, TrackKind::Audio, Some(1)),
             track(1, TrackKind::Subtitle, Some(3)),
         ];
-        let map = TrackMap::new(&streams, &tracks, &[], &[]);
+        let map = TrackMap::new(&streams, &tracks, &[], &[], Delivery::Direct);
         let audio: Vec<_> = map.audio_options().iter().map(|o| o.index).collect();
         let subs: Vec<_> = map.subtitle_options().iter().map(|o| o.index).collect();
         assert_eq!(audio, [1]);
