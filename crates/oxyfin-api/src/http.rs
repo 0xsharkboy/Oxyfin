@@ -47,6 +47,11 @@ impl Http {
         &self.base_url
     }
 
+    /// Device id sent in the `Authorization` header.
+    pub(crate) fn device_id(&self) -> &str {
+        &self.info.device_id
+    }
+
     /// Full `Authorization` header value, with the token when given.
     pub(crate) fn authorization(&self, token: Option<&str>) -> String {
         authorization_header(&self.info, token)

@@ -9,6 +9,7 @@ mod user;
 
 pub use enums::{
     BaseItemKind, ImageType, ItemFields, ItemSortBy, MediaSegmentType, MediaStreamType, SortOrder,
+    SubtitleDeliveryMethod,
 };
 pub use items::{
     BaseItemDto, BaseItemPerson, ItemsQuery, QueryResult, TrickplayInfoDto, UserItemDataDto,

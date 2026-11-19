@@ -43,10 +43,10 @@ pub use images::ImageRequest;
 pub use models::{
     BaseItemDto, BaseItemKind, BaseItemPerson, ImageType, ItemFields, ItemSortBy, ItemsQuery,
     MediaSegmentDto, MediaSegmentType, MediaSourceInfo, MediaStream, MediaStreamType,
-    PlaybackInfoResponse, PublicSystemInfo, QueryResult, SortOrder, TrickplayInfoDto, UserDto,
-    UserItemDataDto,
+    PlaybackInfoResponse, PublicSystemInfo, QueryResult, SortOrder, SubtitleDeliveryMethod,
+    TrickplayInfoDto, UserDto, UserItemDataDto,
 };
-pub use playback::{PlaybackReport, StreamSource};
+pub use playback::{PlayMethod, PlaybackOptions, PlaybackReport, StreamSource};
 pub use quick_connect::{QuickConnectSecret, QuickConnectState};
 pub use server::Server;
 pub use session::Session;

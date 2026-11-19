@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use oxyfin_api::{ItemId, MediaSourceInfo, PlaySessionId, PlaybackReport, Ticks};
+use oxyfin_api::{ItemId, MediaSourceInfo, PlayMethod, PlaySessionId, PlaybackReport, Ticks};
 use oxyfin_player::{Track, TrackId, TrackKind};
 
 use super::segments::{SkippableSegment, active};
@@ -172,6 +172,7 @@ impl Current {
             is_paused: self.paused,
             audio_stream_index: self.audio,
             subtitle_stream_index: self.subtitle,
+            play_method: PlayMethod::DirectPlay,
         }
     }
 
