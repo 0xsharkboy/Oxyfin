@@ -5,8 +5,10 @@ import { BodyText, CaptionText, LabelText } from "text.slint";
 // Floating panel of the player menus; scrolls when its options outgrow `limit`.
 export component MenuPanel inherits Rectangle {
     in property <length> limit: 400px;
+    // The panel grows up to this width to fit its widest option; wider ones are elided.
+    in property <length> widest: Theme.menu-width;
 
-    width: 280px;
+    width: max(Theme.menu-width, min(content.preferred-width, root.widest));
     height: min(content.preferred-height + 2 * Theme.space-sm, root.limit);
     background: Theme.bg-elevated;
     border-radius: Theme.radius-lg;
@@ -73,6 +75,7 @@ export component MenuOption inherits Rectangle {
         root.chosen();
     }
 
+    preferred-width: row.preferred-width;
     height: row.preferred-height;
     background: root.selected || touch.has-hover ? Theme.bg-hover : transparent;
 
@@ -111,7 +114,7 @@ export component MenuOption inherits Rectangle {
             overflow: elide;
         }
 
-        if !root.detail.is-empty: CaptionText {
+        if !root.detail.is-empty: detail-text := CaptionText {
             accessible-role: none;
             text: root.detail;
             vertical-alignment: center;
@@ -144,6 +147,7 @@ export component TrackMenu inherits MenuPanel {
 
     accessible-role: list;
     accessible-label: @tr("Audio and subtitles");
+    widest: Theme.menu-max-width;
 
     MenuHeader {
         text: @tr("AUDIO");
