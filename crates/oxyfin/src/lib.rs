@@ -8,6 +8,8 @@ mod generated {
 pub mod app;
 pub mod generation;
 pub mod images;
+#[cfg(target_os = "linux")]
+pub mod inhibit;
 pub mod launch;
 pub mod locale;
 #[cfg(target_os = "linux")]

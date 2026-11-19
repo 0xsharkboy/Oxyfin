@@ -96,7 +96,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         )?;
     }
     #[cfg(all(target_os = "linux", feature = "mpv"))]
-    app.start_mpris();
+    {
+        app.start_mpris();
+        app.start_inhibitor();
+    }
     if launch::fullscreen_requested(std::env::args_os().skip(1)) || app.start_fullscreen() {
         window.window().set_fullscreen(true);
     }
@@ -109,6 +112,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let pending = app.take_pending_ends();
     runtime.block_on(async {
         let deadline = tokio::time::Instant::now() + EXIT_GRACE;
+        #[cfg(all(target_os = "linux", feature = "mpv"))]
+        if let Some(inhibitor) = app.take_inhibitor()
+            && tokio::time::timeout_at(deadline, inhibitor.release())
+                .await
+                .is_err()
+        {
+            log::warn!("the screen inhibition was not released before exit");
+        }
         for task in pending {
             if tokio::time::timeout_at(deadline, task).await.is_err() {
                 log::warn!("a session did not finish shutting down before exit");
