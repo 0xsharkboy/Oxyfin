@@ -4,6 +4,7 @@
 use oxyfin_api::{
     BaseItemDto, BaseItemKind, ClientInfo, ItemsQuery, MediaSourceInfo, Server, Session,
 };
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Connection settings read from the `OXYFIN_TEST_*` environment variables.
 pub struct Config {
@@ -53,8 +54,17 @@ pub fn require_disposable() {
 }
 
 /// Builds a [`Server`] for the configured URL with the given device name.
+///
+/// Each call gets its own device id: Jellyfin revokes a device's previous token when it
+/// signs in again, which breaks tests running in parallel.
 pub fn server_with_device(config: &Config, device_name: &str) -> Server {
-    let info = ClientInfo::new(device_name, "oxyfin-live-test");
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let device_id = format!(
+        "oxyfin-live-test-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    );
+    let info = ClientInfo::new(device_name, device_id);
     Server::new(&config.url, info).expect("valid server URL")
 }
 
