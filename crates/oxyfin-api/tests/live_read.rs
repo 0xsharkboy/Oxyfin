@@ -82,6 +82,22 @@ async fn playback_info_and_image() {
     let bytes = session.fetch_image(&request).await.expect("fetch image");
     assert!(bytes.len() > 100, "image too small: {} bytes", bytes.len());
 
+    let segments = session
+        .media_segments(&movie.id)
+        .await
+        .expect("media segments");
+    for segment in &segments {
+        assert_eq!(segment.item_id, movie.id);
+        assert!(segment.start_ticks <= segment.end_ticks, "{segment:?}");
+    }
+
+    let unknown = ItemId::from("0000000000000000000000000000000f");
+    let none = session
+        .media_segments(&unknown)
+        .await
+        .expect("media segments of an unknown item");
+    assert!(none.is_empty());
+
     session.logout().await.expect("logout");
 }
 
@@ -139,33 +155,5 @@ async fn device_name_round_trips() {
         .await
         .expect("sign in with the awkward device name");
     session.me().await.expect("me");
-    session.logout().await.expect("logout");
-}
-
-#[tokio::test]
-#[ignore = "needs a Jellyfin server, see CONTRIBUTING.md"]
-async fn media_segments() {
-    let config = config();
-    let session = login(&config).await;
-
-    let movie = first_movie(&session)
-        .await
-        .expect("the server has no movie");
-    let segments = session
-        .media_segments(&movie.id)
-        .await
-        .expect("media segments");
-    for segment in &segments {
-        assert_eq!(segment.item_id, movie.id);
-        assert!(segment.start_ticks <= segment.end_ticks, "{segment:?}");
-    }
-
-    let unknown = ItemId::from("0000000000000000000000000000000f");
-    let none = session
-        .media_segments(&unknown)
-        .await
-        .expect("media segments of an unknown item");
-    assert!(none.is_empty());
-
     session.logout().await.expect("logout");
 }
