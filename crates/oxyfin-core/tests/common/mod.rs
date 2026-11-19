@@ -107,6 +107,8 @@ pub enum Call {
         /// Track language.
         language: Option<String>,
     },
+    /// `add_external_subtitle_later`: the URL of the subtitle file.
+    AddExternalLater(String),
     /// `set_subtitle_appearance`.
     SetSubtitles(SubtitleAppearance),
 }
@@ -264,6 +266,14 @@ impl MediaPlayer for FakePlayer {
         Ok(TrackId(
             self.next_subtitle.fetch_add(1, Ordering::SeqCst) + 1,
         ))
+    }
+    fn add_external_subtitle_later(
+        &self,
+        url: &str,
+        _title: Option<&str>,
+        _language: Option<&str>,
+    ) -> std::result::Result<(), PlayerError> {
+        self.record(Call::AddExternalLater(url.to_owned()))
     }
     fn set_subtitle_appearance(
         &self,

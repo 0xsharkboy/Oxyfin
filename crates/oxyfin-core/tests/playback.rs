@@ -2450,6 +2450,37 @@ fn transcode_tracks() -> Vec<Track> {
     ]
 }
 
+/// URL of the subtitle file the server delivers with [`transcode_info`].
+fn delivered_subtitle_url(h: &Harness) -> String {
+    format!(
+        "{}/Videos/{MOVIE_ID}/{MOVIE_ID}/Subtitles/0/0/Stream.subrip",
+        h.mock.uri()
+    )
+}
+
+impl Harness {
+    /// mpv lists the subtitle file of `url`, added in the background, as
+    /// subtitle track 2 next to the transcode's tracks.
+    async fn subtitle_arrives(&mut self, url: &str, selected: bool) {
+        let mut tracks = transcode_tracks();
+        tracks.push(Track {
+            id: TrackId(2),
+            kind: TrackKind::Subtitle,
+            language: Some("eng".into()),
+            title: None,
+            codec: None,
+            channels: None,
+            is_default: false,
+            is_forced: false,
+            is_external: true,
+            is_selected: selected,
+            stream_index: None,
+            external_url: Some(url.to_owned()),
+        });
+        self.sink.send(PlayerEvent::Tracks(tracks));
+    }
+}
+
 impl Harness {
     /// Waits until the player received `count` loads; returns the last one.
     async fn wait_load(&self, count: usize) -> oxyfin_player::MediaSource {
@@ -2523,17 +2554,17 @@ async fn a_transcode_plays_the_transcoding_url() {
     );
 
     let ready = h.loaded_with(transcode_tracks()).await;
+    let url = delivered_subtitle_url(&h);
     let calls = h.player.calls();
-    let added = calls.iter().find_map(|call| match call {
-        Call::AddExternal { url, .. } => Some(url.clone()),
-        _ => None,
-    });
-    assert_eq!(
-        added,
-        Some(format!(
-            "{}/Videos/{MOVIE_ID}/{MOVIE_ID}/Subtitles/0/0/Stream.subrip",
-            h.mock.uri()
-        ))
+    assert!(
+        calls.contains(&Call::AddExternalLater(url.clone())),
+        "{calls:?}"
+    );
+    assert!(
+        !calls
+            .iter()
+            .any(|call| matches!(call, Call::AddExternal { .. })),
+        "the server's subtitle file was awaited: {calls:?}"
     );
     let PlaybackEvent::Ready {
         audio, subtitles, ..
@@ -2543,7 +2574,22 @@ async fn a_transcode_plays_the_transcoding_url() {
     };
     let audio: Vec<_> = audio.iter().map(|a| (a.index, a.selected)).collect();
     assert_eq!(audio, [(2, true), (3, false)]);
-    assert!(subtitles[0].selected);
+    assert!(subtitles.is_empty(), "{subtitles:?}");
+
+    h.subtitle_arrives(&url, false).await;
+    h.player
+        .wait_call(|call| *call == Call::SelectSubtitle(Some(TrackId(2))))
+        .await;
+    h.subtitle_arrives(&url, true).await;
+    let changed = wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::TracksChanged { .. })
+    })
+    .await;
+    let PlaybackEvent::TracksChanged { subtitles, .. } = changed else {
+        unreachable!();
+    };
+    let subtitles: Vec<_> = subtitles.iter().map(|s| (s.index, s.selected)).collect();
+    assert_eq!(subtitles, [(0, true)]);
 
     let start = wait_requests(&h.mock, START, 1).await;
     assert_eq!(start[0]["PlayMethod"], json!("Transcode"));
@@ -2624,6 +2670,11 @@ async fn a_quality_change_reloads_at_the_position_with_the_tracks() {
 
     let calls_before = h.player.calls().len();
     h.loaded_with(transcode_tracks()).await;
+    let url = delivered_subtitle_url(&h);
+    h.subtitle_arrives(&url, false).await;
+    h.player
+        .wait_call(|call| *call == Call::SelectSubtitle(Some(TrackId(2))))
+        .await;
     let calls = h.player.calls()[calls_before..].to_vec();
     position_of(&calls, &Call::SelectAudio(Some(TrackId(1))));
     let subtitle = calls
@@ -2761,4 +2812,87 @@ async fn a_quality_change_keeps_the_pause_and_the_item_extras() {
     if !seen[ready..].contains(&segment) {
         wait_event(&mut h.events, |e| *e == segment).await;
     }
+}
+
+#[tokio::test]
+async fn subtitles_off_while_the_subtitle_file_loads_stay_off() {
+    let mock = MockServer::start().await;
+    mount_playback_info(&mock, transcode_info()).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.play(PlayMode::FromStart).await;
+    h.loaded_with(transcode_tracks()).await;
+    let url = delivered_subtitle_url(&h);
+    h.player
+        .wait_call(|call| *call == Call::AddExternalLater(url.clone()))
+        .await;
+
+    let offs = |h: &Harness| {
+        h.player
+            .calls()
+            .iter()
+            .filter(|call| **call == Call::SelectSubtitle(None))
+            .count()
+    };
+    let before = offs(&h);
+    h.handle.send(PlaybackCommand::SelectSubtitle(None));
+    let start = tokio::time::Instant::now();
+    while offs(&h) == before {
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "subtitles not turned off"
+        );
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    let calls_before = h.player.calls().len();
+    h.subtitle_arrives(&url, false).await;
+    h.move_to(Duration::from_secs(1)).await;
+    let calls = h.player.calls()[calls_before..].to_vec();
+    assert!(
+        !calls
+            .iter()
+            .any(|call| matches!(call, Call::SelectSubtitle(Some(_)))),
+        "the late subtitle overrode the choice: {calls:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_quality_switch_while_the_subtitle_file_loads_keeps_the_subtitle() {
+    let mock = MockServer::start().await;
+    mount_playback_info(&mock, transcode_info()).await;
+    mount_transcode_for(&mock, 1_500_000).await;
+    mount_status(&mock, "DELETE", ENCODINGS, 204).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.play(PlayMode::FromStart).await;
+    h.loaded_with(transcode_tracks()).await;
+
+    h.handle.send(PlaybackCommand::SetQuality(LOW));
+    h.wait_load(2).await;
+    let infos = wait_requests(&h.mock, PLAYBACK_INFO, 2).await;
+    assert_eq!(infos[1]["SubtitleStreamIndex"], json!(0));
+}
+
+#[tokio::test]
+async fn quality_switch_at_start_keeps_position_zero() {
+    let mock = MockServer::start().await;
+    mount_transcode_for(&mock, 1_500_000).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.play(PlayMode::FromStart).await;
+    h.file_loaded().await;
+
+    h.handle.send(PlaybackCommand::SetQuality(LOW));
+    let reload = h.wait_load(2).await;
+    assert_eq!(reload.start, None);
+}
+
+#[tokio::test]
+async fn quality_switch_near_end_keeps_the_end() {
+    let mock = MockServer::start().await;
+    mount_transcode_for(&mock, 1_500_000).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.move_to(Duration::from_secs(9)).await;
+
+    h.handle.send(PlaybackCommand::SetQuality(LOW));
+    let reload = h.wait_load(2).await;
+    assert_eq!(reload.start, Some(Duration::from_secs(9)));
 }

@@ -460,6 +460,58 @@ fn external_subtitle_is_added_and_selectable() {
 }
 
 #[test]
+fn a_subtitle_added_later_does_not_wait_for_the_server() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/slow.srt", listener.local_addr().unwrap());
+    let held = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        std::thread::sleep(Duration::from_secs(3));
+        drop(stream);
+    });
+    let (events, on_event) = Events::new();
+    let player = headless(on_event);
+    player.load(&sample()).unwrap();
+    loaded_tracks(&events);
+
+    let start = Instant::now();
+    player
+        .add_external_subtitle_later(&url, None, None)
+        .unwrap();
+    assert!(
+        start.elapsed() < Duration::from_secs(1),
+        "waited {:?} for the server",
+        start.elapsed()
+    );
+    held.join().unwrap();
+}
+
+#[test]
+fn a_subtitle_added_later_is_listed_with_its_url() {
+    let server = HttpServer::serve(&[("/sub.srt", fixture("external.srt"))]);
+    let (events, on_event) = Events::new();
+    let player = headless(on_event);
+    player.load(&sample()).unwrap();
+    loaded_tracks(&events);
+
+    let url = server.url("/sub.srt");
+    player
+        .add_external_subtitle_later(&url, Some("External"), Some("fra"))
+        .unwrap();
+    let event = events.wait_for(TIMEOUT, |e| {
+        tracks_of(e).is_some_and(|t| {
+            t.iter()
+                .any(|x| x.kind == TrackKind::Subtitle && x.external_url.as_deref() == Some(&url))
+        })
+    });
+    let track = tracks_of(&event)
+        .unwrap()
+        .iter()
+        .find(|t| t.kind == TrackKind::Subtitle && t.external_url.as_deref() == Some(&url))
+        .unwrap();
+    assert_eq!(track.language.as_deref(), Some("fra"));
+    assert!(!track.is_selected);
+}
+#[test]
 fn selecting_without_media_fails() {
     let (_events, on_event) = Events::new();
     let player = headless(on_event);

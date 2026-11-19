@@ -204,6 +204,32 @@ impl Player {
             })
     }
 
+    /// Adds an external subtitle file like [`Player::add_external_subtitle`],
+    /// without waiting for it: mpv fetches it in the background and lists it
+    /// once loaded, with `url` as its external file name, so a slow server
+    /// never holds the caller.
+    pub fn add_external_subtitle_later(
+        &self,
+        url: &str,
+        title: Option<&str>,
+        language: Option<&str>,
+    ) -> Result<(), PlayerError> {
+        self.require_loaded()?;
+        let args = [
+            "sub-add",
+            url,
+            "auto",
+            title.unwrap_or(""),
+            language.unwrap_or(""),
+        ];
+        self.mpv
+            .command("async", &args)
+            .map_err(|e| PlayerError::Command {
+                name: "sub-add".to_owned(),
+                message: describe(&e),
+            })
+    }
+
     /// Sets how subtitles look, for the current and later media.
     ///
     /// Every option is tried; the first failure is returned. mpv older than
