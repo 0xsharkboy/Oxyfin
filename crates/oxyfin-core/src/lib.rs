@@ -59,6 +59,7 @@ mod playback;
 mod quick_connect;
 mod secrets;
 mod session;
+mod subtitles;
 
 pub use catalog::{BrowseQuery, BrowseSource, Catalog, ContentKind, SortField, WatchFilter};
 pub use config::{Config, SavedSession};
@@ -80,3 +81,6 @@ pub use secrets::{
     FileStore, KeyringStore, MemoryStore, SecretStore, TokenStorage, TokenVault, account_key,
 };
 pub use session::{ServerHandle, SessionManager, SignedIn};
+pub use subtitles::{
+    SubtitleBackground, SubtitleColor, SubtitlePosition, SubtitleSize, SubtitleStyle,
+};

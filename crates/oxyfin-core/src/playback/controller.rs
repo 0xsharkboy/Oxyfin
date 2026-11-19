@@ -6,7 +6,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use oxyfin_api::{ItemId, MediaStreamType, Session, Ticks};
-use oxyfin_player::{PlayerError, PlayerEvent, SeekTarget, Track, TrackKind, UnloadReason};
+use oxyfin_player::{
+    PlayerError, PlayerEvent, SeekTarget, SubtitleAppearance, Track, TrackKind, UnloadReason,
+};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::oneshot;
 use tokio::time::{Instant, sleep_until};
@@ -86,6 +88,8 @@ pub struct PlaybackController {
     /// The latest `Previous` or `Next` sent while `loading`, applied once the
     /// item is ready.
     navigation: Option<PlaybackCommand>,
+    /// How subtitles look, once the binary has said so.
+    subtitles: Option<SubtitleAppearance>,
     /// Set by [`PlaybackHandle::shutdown`]: no new item is loaded.
     closing: Arc<AtomicBool>,
 }
@@ -142,6 +146,7 @@ impl PlaybackController {
             loader,
             loading: false,
             navigation: None,
+            subtitles: None,
             pending: None,
             closing: closing.clone(),
         };
@@ -380,6 +385,11 @@ impl PlaybackController {
                     self.call(self.player.select_subtitle(Some(track)));
                 }
             }
+            PlaybackCommand::SetSubtitleStyle(style) => {
+                let appearance = style.appearance();
+                self.subtitles = Some(appearance);
+                self.call(self.player.set_subtitle_appearance(&appearance));
+            }
             PlaybackCommand::Stop => {
                 self.cancel_countdown();
                 self.cancel_load();
@@ -504,6 +514,12 @@ impl PlaybackController {
         let Some((prepared, _)) = self.pending.take() else {
             return;
         };
+        // Best effort: the style is already set unless something reset it.
+        if let Some(appearance) = &self.subtitles
+            && let Err(error) = self.player.set_subtitle_appearance(appearance)
+        {
+            log::warn!("cannot set the subtitle style: {error}");
+        }
         self.awaiting_unload = false;
         if let Err(error) = self.player.load(&prepared.media) {
             self.load_failed();
