@@ -160,6 +160,8 @@ export component AppWindow inherits Window {
     in property <float> player-skip-end;
     // Set while a seek is on its way; the position is frozen until the player confirms it.
     in property <bool> player-seek-pending;
+    // Last position the player reported, kept while a seek is pending, in seconds.
+    in-out property <float> player-reported-position;
     in-out property <bool> player-scrubbing;
     in property <TrickplayGrid> player-trickplay;
     in property <SeekPreview> player-preview;
