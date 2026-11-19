@@ -23,12 +23,28 @@ export component SignInScreen inherits AuthPage {
     callback sign-in(username: string, password: string);
     callback open-quick-connect();
 
-    property <bool> found: server-status.state == ServerState.found;
-    property <bool> can-sign-in: found && !busy && !username.is-empty;
+    property <ServerState> state: server-status.state;
+    property <bool> found: state == ServerState.found;
+    // A sign-in asked for while the server is being checked, sent once it is found.
+    property <bool> queued;
+    property <bool> locked: busy || queued;
+    property <bool> can-sign-in: (found || state == ServerState.checking) && !locked && !username.is-empty;
 
     function submit() {
-        if can-sign-in {
+        if !can-sign-in {
+            return;
+        }
+        if found {
             sign-in(username, password.text);
+        } else {
+            queued = true;
+        }
+    }
+
+    changed state => {
+        if queued && state != ServerState.checking {
+            queued = false;
+            submit();
         }
     }
 
@@ -43,7 +59,7 @@ export component SignInScreen inherits AuthPage {
         label: @tr("Server address");
         placeholder: @tr("https://jellyfin.example.com");
         text <=> root.server-address;
-        enabled: !root.busy;
+        enabled: !root.locked;
         edited(text) => {
             root.server-changed(text);
         }
@@ -60,7 +76,7 @@ export component SignInScreen inherits AuthPage {
     TextField {
         label: @tr("Username");
         text <=> root.username;
-        enabled: !root.busy;
+        enabled: !root.locked;
         accepted => {
             password.focus();
         }
@@ -69,7 +85,7 @@ export component SignInScreen inherits AuthPage {
     password := TextField {
         label: @tr("Password");
         password: true;
-        enabled: !root.busy;
+        enabled: !root.locked;
         accepted => {
             root.submit();
         }
@@ -140,7 +156,7 @@ export component SignInScreen inherits AuthPage {
     Button {
         label: @tr("Use Quick Connect");
         style: ButtonStyle.ghost;
-        enabled: root.found && !root.busy;
+        enabled: root.found && !root.locked;
         clicked => {
             root.open-quick-connect();
         }

@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-19 03:26+0000\n"
+"POT-Creation-Date: 2026-11-19 03:47+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -741,44 +741,44 @@ msgctxt "SettingsScreen"
 msgid "Version"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/sign_in.slint:36
-#: crates/oxyfin/ui/screens/sign_in.slint:36
-#: crates/oxyfin/ui/screens/sign_in.slint:36
+#: crates/oxyfin/ui/screens/sign_in.slint:52
+#: crates/oxyfin/ui/screens/sign_in.slint:52
+#: crates/oxyfin/ui/screens/sign_in.slint:52
 msgctxt "SignInScreen"
 msgid "Sign in"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/sign_in.slint:43
+#: crates/oxyfin/ui/screens/sign_in.slint:59
 msgctxt "SignInScreen"
 msgid "Server address"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/sign_in.slint:44
+#: crates/oxyfin/ui/screens/sign_in.slint:60
 msgctxt "SignInScreen"
 msgid "https://jellyfin.example.com"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/sign_in.slint:61
+#: crates/oxyfin/ui/screens/sign_in.slint:77
 msgctxt "SignInScreen"
 msgid "Username"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/sign_in.slint:70
+#: crates/oxyfin/ui/screens/sign_in.slint:86
 msgctxt "SignInScreen"
 msgid "Password"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/sign_in.slint:93
+#: crates/oxyfin/ui/screens/sign_in.slint:109
 msgctxt "SignInScreen"
 msgid "Checking the server…"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/sign_in.slint:127
+#: crates/oxyfin/ui/screens/sign_in.slint:143
 msgctxt "SignInScreen"
 msgid "or"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/sign_in.slint:141
+#: crates/oxyfin/ui/screens/sign_in.slint:157
 msgctxt "SignInScreen"
 msgid "Use Quick Connect"
 msgstr ""
