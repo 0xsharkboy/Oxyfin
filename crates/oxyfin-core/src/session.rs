@@ -123,6 +123,16 @@ impl SessionManager {
         self.update(|config| config.quality = quality)
     }
 
+    /// Returns whether the window opens fullscreen, as last saved.
+    pub fn start_fullscreen(&self) -> bool {
+        self.config().start_fullscreen
+    }
+
+    /// Saves whether the window opens fullscreen. The saved choice is unchanged on failure.
+    pub fn set_start_fullscreen(&self, on: bool) -> Result<()> {
+        self.update(|config| config.start_fullscreen = on)
+    }
+
     /// Reaches the server at `url` and checks that its version is supported.
     pub async fn connect(&self, url: &str) -> Result<ServerHandle> {
         let server = Server::new(url, self.client_info())?;

@@ -97,6 +97,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     #[cfg(all(target_os = "linux", feature = "mpv"))]
     app.start_mpris();
+    if launch::fullscreen_requested(std::env::args_os().skip(1)) || app.start_fullscreen() {
+        window.window().set_fullscreen(true);
+    }
     window.show()?;
     slint::run_event_loop_until_quit()?;
     if let Err(error) = window.hide() {
