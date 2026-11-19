@@ -3,7 +3,7 @@
 
 use oxyfin_api::{ClientInfo, Server, Session, UserId};
 use serde_json::{Map, Value};
-use std::path::Path;
+use std::path::PathBuf;
 use wiremock::{MockServer, Request};
 
 /// Server versions the fixtures were captured from.
@@ -15,9 +15,9 @@ pub const TEST_TOKEN: &str = "test-token";
 /// User id used by [`session`].
 pub const TEST_USER_ID: &str = "0123456789abcdef0123456789abcdef";
 
-/// Loads `tests/fixtures/<version>/<name>.json`.
+/// The package directory, read at run time: cargo may reuse a test binary\n/// built from another checkout of the same tree, whose path is gone.\npub fn manifest_dir() -> PathBuf {\n    std::env::var_os("CARGO_MANIFEST_DIR")\n        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)\n}\n\n/// Loads `tests/fixtures/<version>/<name>.json`.
 pub fn fixture(version: &str, name: &str) -> Value {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let path = manifest_dir()
         .join("tests")
         .join("fixtures")
         .join(version)
@@ -117,4 +117,11 @@ pub fn authorization_is(token: Option<&str>) -> impl Fn(&Request) -> bool + Send
             .get("authorization")
             .is_some_and(|value| value.as_bytes() == expected.as_bytes())
     }
+}
+
+/// The package directory, read at run time: cargo may reuse a test binary
+/// built from another checkout of the same tree, whose path is gone.
+pub fn manifest_dir() -> PathBuf {
+    std::env::var_os("CARGO_MANIFEST_DIR")
+        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)
 }

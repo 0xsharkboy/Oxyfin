@@ -68,7 +68,10 @@ fn playing_to_the_end_reports_ended_and_keeps_the_media() {
 fn an_unreadable_file_reports_an_error() {
     let (events, on_event) = Events::new();
     let player = headless(on_event);
-    let manifest = format!("{}/Cargo.toml", env!("CARGO_MANIFEST_DIR"));
+    let manifest = support::manifest_dir()
+        .join("Cargo.toml")
+        .to_string_lossy()
+        .into_owned();
     player.load(&MediaSource::new(manifest)).unwrap();
 
     events.wait_for(TIMEOUT, is_unload_error);

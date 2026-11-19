@@ -1,7 +1,7 @@
 //! Every message of the catalog has a French translation.
 
 use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
 
 /// One `msgid` (and `msgid_plural`) of a catalog with the translations given for it.
 #[derive(Debug)]
@@ -70,7 +70,7 @@ fn parse(text: &str) -> Vec<Entry> {
 }
 
 fn read(relative: &str) -> Vec<Entry> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
+    let path = manifest_dir().join(relative);
     let text = fs::read_to_string(&path).unwrap_or_else(|err| panic!("{}: {err}", path.display()));
     parse(&text)
 }
@@ -134,4 +134,11 @@ fn french_catalog_has_no_fuzzy_entries() {
             entry.id
         );
     }
+}
+
+/// The package directory, read at run time: cargo may reuse a test binary
+/// built from another checkout of the same tree, whose path is gone.
+fn manifest_dir() -> PathBuf {
+    std::env::var_os("CARGO_MANIFEST_DIR")
+        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)
 }

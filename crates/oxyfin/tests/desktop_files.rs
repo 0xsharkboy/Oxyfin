@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 fn data_file(extension: &str) -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    let path = manifest_dir()
         .join("../../data")
         .join(format!("{}.{extension}", oxyfin::APP_ID));
     std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()))
@@ -39,4 +39,11 @@ fn metainfo_matches_the_app_id() {
 #[test]
 fn icon_is_named_after_the_app_id() {
     assert!(data_file("svg").starts_with("<svg"));
+}
+
+/// The package directory, read at run time: cargo may reuse a test binary
+/// built from another checkout of the same tree, whose path is gone.
+fn manifest_dir() -> PathBuf {
+    std::env::var_os("CARGO_MANIFEST_DIR")
+        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)
 }

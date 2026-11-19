@@ -3,7 +3,6 @@
 
 mod common;
 
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -27,7 +26,7 @@ const STOPPED: &str = "/Sessions/Playing/Stopped";
 const LONG: Duration = Duration::from_secs(20);
 
 fn player_fixture(name: &str) -> Vec<u8> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let path = common::manifest_dir()
         .join("../oxyfin-player/tests/fixtures")
         .join(name);
     std::fs::read(&path).unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()))
