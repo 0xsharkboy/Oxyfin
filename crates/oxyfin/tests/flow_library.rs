@@ -189,8 +189,8 @@ fn library_filters_pages_and_recovers() {
 
         press(&window, "Settings", AccessibleRole::Button).await?;
         wait_until("the settings", || window.get_screen() == Screen::Settings).await?;
-        if selected(&window, "Movies", AccessibleRole::Tab) != Some(true) {
-            return Err("Movies is no longer the underlined tab in the settings".into());
+        if selected(&window, "Movies", AccessibleRole::Tab) != Some(false) {
+            return Err("Movies is still the underlined tab in the settings".into());
         }
         app.dispatch(Msg::CloseSettings);
         wait_until("the library", || window.get_screen() == Screen::Library).await?;

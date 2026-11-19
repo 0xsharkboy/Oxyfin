@@ -129,7 +129,6 @@ export component SettingsScreen inherits Rectangle {
     in property <string> user-name;
     in property <TokenStore> token-store;
     in property <string> version;
-    in property <TopBarPage> page: TopBarPage.none;
     in property <SubtitleChoice> subtitles;
     callback open-tab(page: TopBarPage);
     callback back();
@@ -291,7 +290,7 @@ export component SettingsScreen inherits Rectangle {
         top-bar := TopBar {
             y: 0;
             height: self.preferred-height;
-            current: root.page;
+            current: TopBarPage.none;
             settings-active: true;
             home-clicked => {
                 root.open-tab(TopBarPage.home);
