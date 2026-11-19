@@ -30,7 +30,7 @@ pub const SERVER_VERSION: &str = "12.4.0";
 /// Quick Connect code of the fixtures.
 pub const QUICK_CONNECT_CODE: &str = "668908";
 
-/// The package directory, read at run time: cargo may reuse a test binary\n/// built from another checkout of the same tree, whose path is gone.\npub fn manifest_dir() -> PathBuf {\n    std::env::var_os("CARGO_MANIFEST_DIR")\n        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)\n}\n\n/// Text of `tests/fixtures/<name>.json`.
+/// Text of `tests/fixtures/<name>.json`.
 pub fn fixture(name: &str) -> String {
     let file = manifest_dir()
         .join("tests")
