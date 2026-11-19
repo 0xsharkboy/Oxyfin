@@ -27,7 +27,7 @@ This file is the single source of truth for planned work. An item is checked onl
 - [ ] Media keys on Windows (SMTC) and macOS (MPNowPlayingInfoCenter)
 - [ ] Trickplay thumbnails
 - [x] Skip intro (media segments)
-- [ ] Subtitle settings
+- [x] Subtitle settings
 - [ ] Transcoding and quality selection
 - [ ] Multiple servers and users
 - [ ] Windows and macOS packages
