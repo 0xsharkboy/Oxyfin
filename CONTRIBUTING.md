@@ -185,7 +185,7 @@ nix shell --impure --expr 'with import (builtins.getFlake "nixpkgs") {}; python3
 
 - Versions follow [SemVer](https://semver.org) and stay in `0.x` until the first milestone is complete.
 - Each release is a `vX.Y.Z` tag on `main`.
-- `CHANGELOG.md` is generated from commit messages with `git-cliff`.
+- `CHANGELOG.md` is generated from commit messages with `git-cliff` (configured in `cliff.toml`; `nix shell nixpkgs#git-cliff` provides it). Before tagging, run `git cliff --tag vX.Y.Z -o CHANGELOG.md`, commit the result, then tag that commit. Only `feat`, `fix` and `perf` commits are listed, and `spike` commits are left out.
 
 ## Before opening a pull request
 
