@@ -95,6 +95,24 @@ string_enum!(
     }
 );
 
+string_enum!(
+    /// Kind of content a media segment spans.
+    MediaSegmentType {
+        /// A segment of unknown content.
+        Unknown,
+        /// An advertisement.
+        Commercial,
+        /// A preview of the next episode or of the item.
+        Preview,
+        /// A recap of the previous episodes.
+        Recap,
+        /// The end credits.
+        Outro,
+        /// The opening sequence.
+        Intro,
+    }
+);
+
 macro_rules! query_enum {
     ($(#[$meta:meta])* $name:ident { $($(#[$vmeta:meta])* $variant:ident),+ $(,)? }) => {
         $(#[$meta])*

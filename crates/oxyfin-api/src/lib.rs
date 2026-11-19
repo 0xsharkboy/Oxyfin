@@ -28,6 +28,7 @@ mod json;
 mod models;
 mod playback;
 mod quick_connect;
+mod segments;
 mod server;
 mod session;
 mod ticks;
@@ -40,8 +41,8 @@ pub use ids::{ItemId, MediaSourceId, PlaySessionId, UserId};
 pub use images::ImageRequest;
 pub use models::{
     BaseItemDto, BaseItemKind, BaseItemPerson, ImageType, ItemFields, ItemSortBy, ItemsQuery,
-    MediaSourceInfo, MediaStream, MediaStreamType, PlaybackInfoResponse, PublicSystemInfo,
-    QueryResult, SortOrder, UserDto, UserItemDataDto,
+    MediaSegmentDto, MediaSegmentType, MediaSourceInfo, MediaStream, MediaStreamType,
+    PlaybackInfoResponse, PublicSystemInfo, QueryResult, SortOrder, UserDto, UserItemDataDto,
 };
 pub use playback::{PlaybackReport, StreamSource};
 pub use quick_connect::{QuickConnectSecret, QuickConnectState};

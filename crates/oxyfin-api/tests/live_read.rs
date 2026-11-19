@@ -6,7 +6,7 @@
 mod live_common;
 
 use live_common::{config, first_movie, login, server, server_with_device};
-use oxyfin_api::{ImageRequest, ImageType, ItemsQuery, MediaStreamType};
+use oxyfin_api::{ImageRequest, ImageType, ItemId, ItemsQuery, MediaStreamType};
 use serde_json::Value;
 
 const DEVICE_NAME: &str = r#"Bob's "PC", été"#;
@@ -139,5 +139,33 @@ async fn device_name_round_trips() {
         .await
         .expect("sign in with the awkward device name");
     session.me().await.expect("me");
+    session.logout().await.expect("logout");
+}
+
+#[tokio::test]
+#[ignore = "needs a Jellyfin server, see CONTRIBUTING.md"]
+async fn media_segments() {
+    let config = config();
+    let session = login(&config).await;
+
+    let movie = first_movie(&session)
+        .await
+        .expect("the server has no movie");
+    let segments = session
+        .media_segments(&movie.id)
+        .await
+        .expect("media segments");
+    for segment in &segments {
+        assert_eq!(segment.item_id, movie.id);
+        assert!(segment.start_ticks <= segment.end_ticks, "{segment:?}");
+    }
+
+    let unknown = ItemId::from("0000000000000000000000000000000f");
+    let none = session
+        .media_segments(&unknown)
+        .await
+        .expect("media segments of an unknown item");
+    assert!(none.is_empty());
+
     session.logout().await.expect("logout");
 }
