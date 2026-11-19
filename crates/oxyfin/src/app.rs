@@ -323,6 +323,9 @@ impl App {
                         player.clone(),
                         events,
                     );
+                    handle.send(PlaybackCommand::SetSubtitleStyle(
+                        self.manager.subtitle_style(),
+                    ));
                     self.pending_stops.set(0);
                     self.relay(id, updates);
                     *self.video.borrow_mut() = Some((id, Arc::clone(&player)));
@@ -488,6 +491,22 @@ impl App {
         }
     }
 
+    /// Saves the subtitle style the settings picked and applies it to the
+    /// current playback; the settings then show what is saved.
+    fn set_subtitle_style(&self, choice: &crate::SubtitleChoice) {
+        let style = settings::subtitle_style(choice);
+        match self.manager.set_subtitle_style(style) {
+            Ok(()) => self.send_playback(PlaybackCommand::SetSubtitleStyle(style)),
+            Err(error) => {
+                log::error!("cannot save the subtitle style: {error}");
+                self.notify(Message::StorageError);
+            }
+        }
+        if let Some(window) = self.window() {
+            window.set_settings_subtitles(settings::subtitle_choice(self.manager.subtitle_style()));
+        }
+    }
+
     /// Shows `message` in the notice banner, replacing the one shown. Messages
     /// that need no action leave after [`NOTICE_DURATION`]; the others stay
     /// until the user closes them.
@@ -647,6 +666,12 @@ impl App {
         window.on_open_settings(with(|app| app.dispatch(Msg::OpenSettings)));
         window.on_close_settings(with(|app| app.dispatch(Msg::CloseSettings)));
         window.on_sign_out(with(|app| app.dispatch(Msg::SignOut)));
+        let this = self.this.clone();
+        window.on_settings_subtitles_changed(move |choice| {
+            if let Some(app) = this.upgrade() {
+                app.set_subtitle_style(&choice);
+            }
+        });
         window.on_dismiss_notice(with(|app| app.dismiss_notice()));
         window.on_library_retry(with(|app| app.library.retry(app)));
         window.on_search_retry(with(|app| app.search.retry(app)));
@@ -857,6 +882,9 @@ impl App {
                     window.set_top_bar_page(top_bar_page(root.as_ref()));
                     if screen == Screen::Settings {
                         settings::show(&window, self.state.borrow().session());
+                        window.set_settings_subtitles(settings::subtitle_choice(
+                            self.manager.subtitle_style(),
+                        ));
                     }
                     window.set_screen(slint_screen(&screen));
                 }
