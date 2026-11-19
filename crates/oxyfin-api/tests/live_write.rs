@@ -7,7 +7,7 @@
 mod live_common;
 
 use live_common::{config, login, media_source, movie, require_disposable, server};
-use oxyfin_api::{ItemsQuery, MediaStreamType, PlaybackReport, Ticks};
+use oxyfin_api::{ItemsQuery, MediaStreamType, PlayMethod, PlaybackReport, Ticks};
 use std::time::Duration;
 
 #[tokio::test]
@@ -60,6 +60,7 @@ async fn progress_reports_create_a_resume_entry() {
         is_paused: false,
         audio_stream_index: source.default_audio_stream_index,
         subtitle_stream_index: None,
+        play_method: PlayMethod::DirectPlay,
     };
     session.report_playback_start(&report).await.expect("start");
     report.position = Ticks::from_duration(Duration::from_secs(4));

@@ -96,6 +96,22 @@ string_enum!(
 );
 
 string_enum!(
+    /// How a subtitle stream reaches the player.
+    SubtitleDeliveryMethod {
+        /// Burned into the video by the server.
+        Encode,
+        /// Left inside the media container.
+        Embed,
+        /// Fetched as a separate file from its delivery URL.
+        External,
+        /// Listed in the HLS playlist.
+        Hls,
+        /// Dropped.
+        Drop,
+    }
+);
+
+string_enum!(
     /// Kind of content a media segment spans.
     MediaSegmentType {
         /// A segment of unknown content.
