@@ -6,7 +6,7 @@ This file is the single source of truth for planned work. An item is checked onl
 
 - [x] Workspace and Nix dev shell
 - [x] CI on Linux, Windows and macOS
-- [x] Video rendering prototype (Slint + mpv) validated (Wayland, including HiDPI; X11 in copy mode, see the Later section)
+- [x] Video rendering prototype (Slint + mpv) validated (Wayland, including HiDPI; X11 in copy mode, see Milestone 3)
 
 ## Milestone 1: Core experience (movies and shows)
 
@@ -20,17 +20,39 @@ This file is the single source of truth for planned work. An item is checked onl
 - [x] English UI with translation support
 - [x] Linux packages (Flatpak, Nix)
 
-## Later
+## Milestone 2: Everyday comfort
 
-- [ ] Direct VAAPI on X11 (force EGL in the Slint winit backend)
 - [x] Media keys and MPRIS (Linux)
-- [ ] Media keys on Windows (SMTC) and macOS (MPNowPlayingInfoCenter)
 - [x] Trickplay thumbnails
 - [x] Skip intro (media segments)
 - [x] Subtitle settings
 - [x] Transcoding and quality selection
+- [ ] Keep the screen awake during playback
+- [ ] Subtitle and audio delay
+- [ ] Chapters (seek bar markers and menu)
+- [ ] Remember audio and subtitle choices per series
+- [ ] Next episode options (countdown, autoplay, automatic segment skipping)
+- [ ] Subtitle search and download
+- [ ] Playback statistics
+- [ ] "More like this" on detail pages
+- [ ] Cast and crew pages
+- [ ] Collections (box sets)
+- [ ] Server discovery on the local network
+- [ ] Authorize another device (Quick Connect code entry)
+- [ ] Fullscreen launch option
+- [ ] Discord Rich Presence (opt-in, never sends the server address)
+- [ ] AUR package
+
+## Milestone 3: Robustness and reach
+
 - [ ] Multiple servers and users
+- [ ] Remote control from Jellyfin apps
 - [ ] Windows and macOS packages
+- [ ] Media keys on Windows (SMTC) and macOS (MPNowPlayingInfoCenter)
+- [ ] Direct VAAPI on X11 (force EGL in the Slint winit backend)
+
+## Milestone 4: New uses
+
 - [ ] Gamepad and remote navigation, TV mode
 - [ ] Music, then other media types
 - [ ] Offline downloads
