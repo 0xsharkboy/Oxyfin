@@ -4,7 +4,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use oxyfin_core::{
-    PlaybackCommand, PlaybackError, PlaybackEvent, SEEK_STEP, SPEEDS, SegmentKind, SkippableSegment,
+    PlaybackCommand, PlaybackError, PlaybackEvent, SEEK_STEP, SPEEDS, SegmentKind,
+    SkippableSegment, Trickplay, TrickplaySheet,
 };
 use oxyfin_player::SeekTarget;
 use slint::platform::WindowEvent;
@@ -13,7 +14,7 @@ use slint::{ComponentHandle, LogicalPosition, ModelRc, SharedString, VecModel};
 use crate::present::{
     audio_rows, clock, next_up_title, playback_error_message, playback_title, subtitle_rows,
 };
-use crate::{AppWindow, Message, NextUp, SkipKind};
+use crate::{AppWindow, Message, NextUp, SeekPreview, SkipKind, TrickplayGrid};
 
 /// Volume change of one step of the volume keys, in percent.
 pub const VOLUME_STEP: f64 = 5.0;
@@ -127,6 +128,7 @@ pub fn reset(window: &AppWindow) {
     window.set_player_subtitles(ModelRc::default());
     window.set_player_next_up(NextUp::default());
     window.set_player_scrubbing(false);
+    clear_preview(window);
     show_segment(window, None);
     show_progress(window, Duration::ZERO, None);
 }
@@ -146,6 +148,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             let (title, subtitle) = playback_title(&title);
             window.set_player_title(title);
             window.set_player_subtitle(subtitle);
+            clear_preview(window);
             window.set_player_loading(true);
             window.set_player_has_error(false);
             window.set_player_next_up(NextUp::default());
@@ -201,7 +204,8 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             show_segment(window, None);
         }
         PlaybackEvent::Segment(segment) => show_segment(window, segment),
-        PlaybackEvent::Ended | PlaybackEvent::SessionExpired | PlaybackEvent::Trickplay(_) => {}
+        PlaybackEvent::Trickplay(trickplay) => window.set_player_trickplay(grid(&trickplay)),
+        PlaybackEvent::Ended | PlaybackEvent::SessionExpired => {}
         PlaybackEvent::Error(error @ PlaybackError::Command { .. }) => {
             log::warn!("playback command failed: {error}");
             window.set_player_seek_pending(false);
@@ -217,6 +221,107 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
         }
     }
     None
+}
+
+/// Wires the seek bar preview of `window`: `request` is asked for each
+/// trickplay sheet the preview needs and answers with [`show_sheet`], at
+/// once or later. It is the image loader in the application, a recorder in
+/// tests.
+pub fn bind_preview(window: &AppWindow, request: Rc<dyn Fn(TrickplaySheet)>) {
+    let weak = window.as_weak();
+    window.on_player_preview_requested(move |seconds| {
+        if let Some(window) = weak.upgrade() {
+            preview(&window, seconds, &*request);
+        }
+    });
+}
+
+/// Shows the hovered time and its thumbnail, asking for its sheet when the
+/// preview shows another one.
+fn preview(window: &AppWindow, seconds: f32, request: &dyn Fn(TrickplaySheet)) {
+    let time = Duration::from_secs_f32(seconds.max(0.0));
+    let mut preview = window.get_player_preview();
+    preview.time = clock(time);
+    let Some(trickplay) = trickplay(&window.get_player_trickplay()) else {
+        window.set_player_preview(preview);
+        return;
+    };
+    let tile = trickplay.tile_at(time);
+    preview.x = to_int(tile.x);
+    preview.y = to_int(tile.y);
+    preview.width = to_int(tile.width);
+    preview.height = to_int(tile.height);
+    let key = sheet_key(&tile.sheet);
+    let wanted = preview.sheet != key;
+    if wanted {
+        preview.sheet = key;
+        preview.has_image = false;
+        preview.image = slint::Image::default();
+    }
+    // Set first: the answer may come before `request` returns.
+    window.set_player_preview(preview);
+    if wanted {
+        request(tile.sheet);
+    }
+}
+
+/// Shows `image`, the decoded `sheet`, if the preview still wants it.
+pub fn show_sheet(window: &AppWindow, sheet: &TrickplaySheet, image: slint::Image) {
+    let mut preview = window.get_player_preview();
+    if preview.sheet == sheet_key(sheet) {
+        preview.image = image;
+        preview.has_image = true;
+        window.set_player_preview(preview);
+    }
+}
+
+fn clear_preview(window: &AppWindow) {
+    window.set_player_trickplay(TrickplayGrid::default());
+    window.set_player_preview(SeekPreview::default());
+}
+
+fn sheet_key(sheet: &TrickplaySheet) -> SharedString {
+    let (interval, columns, rows) = sheet.layout;
+    format!(
+        "{}/{}/{}/{interval}/{columns}x{rows}/{}",
+        sheet.item, sheet.media_source, sheet.resolution, sheet.index
+    )
+    .into()
+}
+
+fn to_int(value: u32) -> i32 {
+    i32::try_from(value).unwrap_or(i32::MAX)
+}
+
+/// The window's copy of the trickplay of the playing item.
+fn grid(trickplay: &Trickplay) -> TrickplayGrid {
+    TrickplayGrid {
+        item: trickplay.item.as_str().into(),
+        source: trickplay.media_source.as_str().into(),
+        resolution: to_int(trickplay.resolution),
+        width: to_int(trickplay.width),
+        height: to_int(trickplay.height),
+        columns: to_int(trickplay.columns),
+        rows: to_int(trickplay.rows),
+        count: to_int(trickplay.count),
+        interval_ms: i32::try_from(trickplay.interval.as_millis()).unwrap_or(i32::MAX),
+    }
+}
+
+/// The trickplay of the playing item, back from the window; `None` without any.
+fn trickplay(grid: &TrickplayGrid) -> Option<Trickplay> {
+    let positive = |value: i32| u32::try_from(value).ok().filter(|value| *value > 0);
+    Some(Trickplay {
+        item: grid.item.as_str().into(),
+        media_source: grid.source.as_str().into(),
+        resolution: positive(grid.resolution)?,
+        width: positive(grid.width)?,
+        height: positive(grid.height)?,
+        columns: positive(grid.columns)?,
+        rows: positive(grid.rows)?,
+        count: positive(grid.count)?,
+        interval: Duration::from_millis(u64::from(positive(grid.interval_ms)?)),
+    })
 }
 
 fn show_progress(window: &AppWindow, position: Duration, duration: Option<Duration>) {
@@ -320,6 +425,23 @@ mod tests {
         assert_eq!(step_volume(50.0, -1), 45.0);
         assert_eq!(step_volume(98.0, 1), 100.0);
         assert_eq!(step_volume(3.0, -1), 0.0);
+    }
+
+    #[test]
+    fn trickplay_survives_the_trip_through_the_window() {
+        let trickplay = Trickplay {
+            item: "af282b1c408f374beeee50519e9157a4".into(),
+            media_source: "af282b1c408f374beeee50519e9157a4".into(),
+            resolution: 320,
+            width: 320,
+            height: 134,
+            columns: 10,
+            rows: 10,
+            count: 742,
+            interval: Duration::from_millis(10_000),
+        };
+        assert_eq!(super::trickplay(&grid(&trickplay)), Some(trickplay));
+        assert_eq!(super::trickplay(&TrickplayGrid::default()), None);
     }
 
     #[test]

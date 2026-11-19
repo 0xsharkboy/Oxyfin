@@ -1,0 +1,54 @@
+import { Theme, SeekPreview } from "../theme.slint";
+import { LabelText } from "text.slint";
+
+// Popup above the seek bar: the thumbnail of the hovered time, when the item has some, and the time.
+export component SeekPreviewPopup inherits Rectangle {
+    in property <SeekPreview> preview;
+
+    property <length> thumb-width: Theme.seek-preview-width;
+    property <length> thumb-height: root.preview.width > 0 ? root.thumb-width * root.preview.height / root.preview.width : 0;
+
+    accessible-role: groupbox;
+    accessible-label: @tr("Seek preview");
+
+    width: column.preferred-width;
+    height: column.preferred-height;
+    background: Theme.bg-elevated;
+    border-radius: Theme.radius-md;
+    border-width: Theme.border-thin;
+    border-color: Theme.border-default;
+    drop-shadow-offset-y: 8px;
+    drop-shadow-blur: 12px;
+    drop-shadow-color: Theme.menu-shadow;
+
+    column := VerticalLayout {
+        padding: Theme.space-xs;
+        padding-left: root.preview.has-image ? Theme.space-xs : Theme.space-sm;
+        padding-right: self.padding-left;
+        spacing: Theme.space-xs;
+
+        if root.preview.has-image: Rectangle {
+            width: root.thumb-width;
+            height: root.thumb-height;
+            border-radius: Theme.radius-md - Theme.space-xs;
+            clip: true;
+
+            Image {
+                width: parent.width;
+                height: parent.height;
+                source: root.preview.image;
+                source-clip-x: root.preview.x;
+                source-clip-y: root.preview.y;
+                source-clip-width: root.preview.width;
+                source-clip-height: root.preview.height;
+                image-fit: fill;
+            }
+        }
+
+        LabelText {
+            accessible-role: text;
+            text: root.preview.time;
+            horizontal-alignment: center;
+        }
+    }
+}
