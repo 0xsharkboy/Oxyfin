@@ -252,3 +252,81 @@ async fn the_screen_saver_service_is_the_fallback_without_a_portal() {
     assert_eq!(call(&mut calls).await, "uninhibit 7");
     quiet(&mut calls).await;
 }
+
+/// A portal that grants the inhibition only after the app stopped waiting.
+struct SlowPortal {
+    calls: UnboundedSender<String>,
+}
+
+#[interface(name = "org.freedesktop.portal.Inhibit")]
+impl SlowPortal {
+    async fn inhibit(
+        &self,
+        #[zbus(object_server)] server: &ObjectServer,
+        _window: &str,
+        _flags: u32,
+        _options: HashMap<String, OwnedValue>,
+    ) -> zbus::fdo::Result<OwnedObjectPath> {
+        std::thread::sleep(Duration::from_secs(6));
+        let path = "/org/freedesktop/portal/desktop/request/1/late";
+        server
+            .at(
+                path,
+                Request {
+                    calls: self.calls.clone(),
+                },
+            )
+            .await?;
+        let _ = self.calls.send(format!("granted {path}"));
+        Ok(OwnedObjectPath::try_from(path).unwrap())
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "starts a private dbus-daemon: cargo test -p oxyfin --test inhibit_bus -- --ignored"]
+async fn a_portal_grant_after_the_timeout_is_released() {
+    let (_bus, address) = PrivateBus::start();
+    let (sender, mut calls) = unbounded_channel();
+    let _portal = serve(
+        &address,
+        PORTAL_NAME,
+        PORTAL_PATH,
+        SlowPortal {
+            calls: sender.clone(),
+        },
+    )
+    .await;
+    let _screen_saver = serve(
+        &address,
+        SCREEN_SAVER,
+        SCREEN_SAVER_PATH,
+        ScreenSaver { calls: sender },
+    )
+    .await;
+    let inhibitor = Inhibitor::start(
+        &tokio::runtime::Handle::current(),
+        Bus::Address(address.clone()),
+    );
+
+    inhibitor.update(Update::Active(true));
+    inhibitor.update(ready());
+    let mut seen = Vec::new();
+    for _ in 0..3 {
+        seen.push(
+            timeout(Duration::from_secs(10), calls.recv())
+                .await
+                .unwrap()
+                .unwrap(),
+        );
+    }
+    assert_eq!(
+        seen,
+        [
+            format!("inhibit Oxyfin {REASON}"),
+            "granted /org/freedesktop/portal/desktop/request/1/late".to_owned(),
+            "close /org/freedesktop/portal/desktop/request/1/late".to_owned(),
+        ]
+    );
+    timeout(DEADLINE, inhibitor.release()).await.unwrap();
+    assert_eq!(call(&mut calls).await, "uninhibit 7");
+}

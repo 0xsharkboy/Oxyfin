@@ -453,7 +453,9 @@ impl App {
         #[cfg(target_os = "linux")]
         self.show_mpris(&event);
         #[cfg(target_os = "linux")]
-        self.inhibit_update(crate::inhibit::Update::Event(event.clone()));
+        if crate::inhibit::concerns(&event) {
+            self.inhibit_update(crate::inhibit::Update::Event(event.clone()));
+        }
         let chapters = match &event {
             PlaybackEvent::Chapters(chapters) => Some(chapters.clone()),
             _ => None,
