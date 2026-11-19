@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-19 03:26+0000\n"
+"POT-Creation-Date: 2026-11-19 03:47+0000\n"
 "PO-Revision-Date: 2026-11-15 12:00+0000\n"
 "Last-Translator: Oxyfin contributors\n"
 "Language-Team: French\n"
@@ -317,9 +317,7 @@ msgstr "Rien à afficher pour l'instant"
 #: crates/oxyfin/ui/screens/home.slint:191
 msgctxt "HomeScreen"
 msgid "Movies and shows you add or start watching will appear here."
-msgstr ""
-"Les films et séries que vous ajoutez ou commencez à regarder apparaîtront "
-"ici."
+msgstr "Les films et séries que vous ajoutez ou commencez à regarder apparaîtront ici."
 
 #: crates/oxyfin/ui/screens/library.slint:12
 msgctxt "LibraryTitles"
@@ -495,12 +493,8 @@ msgstr "Quick Connect"
 
 #: crates/oxyfin/ui/screens/quick_connect.slint:24
 msgctxt "QuickConnectScreen"
-msgid ""
-"On a device that is already signed in, open Settings › Quick Connect and "
-"enter this code."
-msgstr ""
-"Sur un appareil déjà connecté, ouvrez Paramètres › Quick Connect et "
-"saisissez ce code."
+msgid "On a device that is already signed in, open Settings › Quick Connect and enter this code."
+msgstr "Sur un appareil déjà connecté, ouvrez Paramètres › Quick Connect et saisissez ce code."
 
 #: crates/oxyfin/ui/screens/quick_connect.slint:68
 msgctxt "QuickConnectScreen"
@@ -739,42 +733,42 @@ msgctxt "SettingsScreen"
 msgid "Version"
 msgstr "Version"
 
-#: crates/oxyfin/ui/screens/sign_in.slint:36
+#: crates/oxyfin/ui/screens/sign_in.slint:52
 msgctxt "SignInScreen"
 msgid "Sign in"
 msgstr "Se connecter"
 
-#: crates/oxyfin/ui/screens/sign_in.slint:43
+#: crates/oxyfin/ui/screens/sign_in.slint:59
 msgctxt "SignInScreen"
 msgid "Server address"
 msgstr "Adresse du serveur"
 
-#: crates/oxyfin/ui/screens/sign_in.slint:44
+#: crates/oxyfin/ui/screens/sign_in.slint:60
 msgctxt "SignInScreen"
 msgid "https://jellyfin.example.com"
 msgstr "https://jellyfin.example.com"
 
-#: crates/oxyfin/ui/screens/sign_in.slint:61
+#: crates/oxyfin/ui/screens/sign_in.slint:77
 msgctxt "SignInScreen"
 msgid "Username"
 msgstr "Nom d'utilisateur"
 
-#: crates/oxyfin/ui/screens/sign_in.slint:70
+#: crates/oxyfin/ui/screens/sign_in.slint:86
 msgctxt "SignInScreen"
 msgid "Password"
 msgstr "Mot de passe"
 
-#: crates/oxyfin/ui/screens/sign_in.slint:93
+#: crates/oxyfin/ui/screens/sign_in.slint:109
 msgctxt "SignInScreen"
 msgid "Checking the server…"
 msgstr "Vérification du serveur…"
 
-#: crates/oxyfin/ui/screens/sign_in.slint:127
+#: crates/oxyfin/ui/screens/sign_in.slint:143
 msgctxt "SignInScreen"
 msgid "or"
 msgstr "ou"
 
-#: crates/oxyfin/ui/screens/sign_in.slint:141
+#: crates/oxyfin/ui/screens/sign_in.slint:157
 msgctxt "SignInScreen"
 msgid "Use Quick Connect"
 msgstr "Utiliser Quick Connect"
@@ -797,8 +791,7 @@ msgstr "Serveur trouvé : {} (Jellyfin {})"
 #: crates/oxyfin/ui/theme.slint:185
 msgctxt "Messages"
 msgid "Cannot reach the server. Check the address and your connection."
-msgstr ""
-"Impossible de joindre le serveur. Vérifiez l'adresse et votre connexion."
+msgstr "Impossible de joindre le serveur. Vérifiez l'adresse et votre connexion."
 
 #: crates/oxyfin/ui/theme.slint:188
 msgctxt "Messages"
@@ -808,9 +801,7 @@ msgstr "Cette adresse de serveur n'est pas valide."
 #: crates/oxyfin/ui/theme.slint:191
 msgctxt "Messages"
 msgid "This Jellyfin version is not supported (installed / required: {})."
-msgstr ""
-"Cette version de Jellyfin n'est pas prise en charge (installée / requise : "
-"{})."
+msgstr "Cette version de Jellyfin n'est pas prise en charge (installée / requise : {})."
 
 #: crates/oxyfin/ui/theme.slint:194
 msgctxt "Messages"
@@ -849,12 +840,8 @@ msgstr "Votre session a expiré. Veuillez vous reconnecter."
 
 #: crates/oxyfin/ui/theme.slint:215
 msgctxt "Messages"
-msgid ""
-"The system keyring is unavailable, so your sign-in token is stored in a file "
-"only you can read."
-msgstr ""
-"Le trousseau du système est indisponible : votre jeton de connexion est donc "
-"stocké dans un fichier que vous seul pouvez lire."
+msgid "The system keyring is unavailable, so your sign-in token is stored in a file only you can read."
+msgstr "Le trousseau du système est indisponible : votre jeton de connexion est donc stocké dans un fichier que vous seul pouvez lire."
 
 #: crates/oxyfin/ui/theme.slint:218
 msgctxt "Messages"
