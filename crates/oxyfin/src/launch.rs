@@ -1,4 +1,10 @@
-//! Opt-in launch settings read from the environment, for headless agent runs.
+//! Launch settings: the command-line flags, and opt-in settings read from the
+//! environment for headless agent runs.
+
+use std::ffi::OsStr;
+
+/// Command-line flag that opens the window fullscreen for this launch, whatever the setting.
+pub const FULLSCREEN_FLAG: &str = "--fullscreen";
 
 /// Logical window size, as `WIDTHxHEIGHT`.
 pub const WINDOW_SIZE_VAR: &str = "OXYFIN_WINDOW_SIZE";
@@ -8,6 +14,12 @@ pub const MEMORY_TOKENS_VAR: &str = "OXYFIN_MEMORY_TOKENS";
 
 /// Scale factor of the window, for backends that read none from the system.
 pub const SCALE_FACTOR_VAR: &str = "OXYFIN_SCALE_FACTOR";
+
+/// Whether the command-line arguments, without the program name, ask for fullscreen.
+pub fn fullscreen_requested<A: AsRef<OsStr>>(args: impl IntoIterator<Item = A>) -> bool {
+    args.into_iter()
+        .any(|arg| arg.as_ref() == OsStr::new(FULLSCREEN_FLAG))
+}
 
 /// Parses a positive, finite scale factor.
 pub fn scale_factor(value: &str) -> Option<f32> {
@@ -39,6 +51,18 @@ pub fn enabled(value: Option<&str>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_fullscreen_flag_is_found_among_the_arguments() {
+        assert!(fullscreen_requested(["--fullscreen"]));
+        assert!(fullscreen_requested(["--verbose", "--fullscreen"]));
+        assert!(!fullscreen_requested(Vec::<String>::new()));
+        assert!(!fullscreen_requested([
+            "--fullscreen=no",
+            "fullscreen",
+            "-f"
+        ]));
+    }
 
     #[test]
     fn window_sizes_parse() {

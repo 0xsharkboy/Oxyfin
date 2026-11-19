@@ -200,10 +200,18 @@ fn quality_row(quality: Quality) -> QualityRow {
     }
 }
 
-/// Leaves the player screen: the window does not stay fullscreen behind the other screens.
+/// Opens the player screen: remembers whether the window is fullscreen, for [`leave`].
+pub fn enter(window: &AppWindow) {
+    window.set_player_fullscreen_before(window.window().is_fullscreen());
+}
+
+/// Leaves the player screen: the window gets back the fullscreen state it had when the
+/// player opened, so fullscreen turned on in the player does not stay behind the other
+/// screens, and a window launched fullscreen stays so.
 pub fn leave(window: &AppWindow) {
-    if window.window().is_fullscreen() {
-        window.window().set_fullscreen(false);
+    let before = window.get_player_fullscreen_before();
+    if window.window().is_fullscreen() != before {
+        window.window().set_fullscreen(before);
     }
 }
 

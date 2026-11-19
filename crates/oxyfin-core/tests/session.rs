@@ -568,3 +568,16 @@ async fn quality_is_saved_across_launches() {
     let next = manager(&mock, &dir, memory_vault());
     assert_eq!(next.quality(), QUALITIES[3]);
 }
+
+#[tokio::test]
+async fn start_fullscreen_is_saved_across_launches() {
+    let mock = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let first = manager(&mock, &dir, memory_vault());
+    assert!(!first.start_fullscreen());
+    first.set_start_fullscreen(true).unwrap();
+    assert!(first.start_fullscreen());
+
+    let next = manager(&mock, &dir, memory_vault());
+    assert!(next.start_fullscreen());
+}

@@ -49,6 +49,9 @@ pub struct Config {
     /// back to the original quality.
     #[serde(default, deserialize_with = "lenient")]
     pub quality: Quality,
+    /// Whether the window opens fullscreen.
+    #[serde(default)]
+    pub start_fullscreen: bool,
 }
 
 fn storage<E: std::fmt::Display>(error: E) -> CoreError {
@@ -64,6 +67,7 @@ impl Config {
             file_token_warning_shown: false,
             subtitles: SubtitleStyle::default(),
             quality: Quality::Original,
+            start_fullscreen: false,
         }
     }
 
@@ -202,6 +206,23 @@ mod tests {
         let config = Config::load_or_create(&paths).unwrap();
         assert_eq!(config.device_id, "abc");
         assert_eq!(config.quality, Quality::Original);
+    }
+
+    #[test]
+    fn start_fullscreen_round_trips_and_defaults_to_off() {
+        let (_dir, paths) = temp();
+        let mut config = Config::load_or_create(&paths).unwrap();
+        assert!(!config.start_fullscreen);
+        config.start_fullscreen = true;
+        config.save(&paths).unwrap();
+        assert!(Config::load_or_create(&paths).unwrap().start_fullscreen);
+
+        fs::write(
+            paths.config_dir.join("config.json"),
+            r#"{"device_id":"abc"}"#,
+        )
+        .unwrap();
+        assert!(!Config::load_or_create(&paths).unwrap().start_fullscreen);
     }
 
     #[test]

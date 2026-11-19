@@ -134,6 +134,11 @@ impl App {
         }
     }
 
+    /// Whether the window opens fullscreen, as the settings saved it.
+    pub fn start_fullscreen(&self) -> bool {
+        self.manager.start_fullscreen()
+    }
+
     /// Takes the generation shutdowns still running, for `main` to wait on before exiting.
     pub fn take_pending_ends(&self) -> Vec<JoinHandle<()>> {
         std::mem::take(&mut *self.ending.borrow_mut())
@@ -548,6 +553,18 @@ impl App {
         }
     }
 
+    /// Saves whether the window opens fullscreen, from the next launch on; the
+    /// settings then show what is saved.
+    fn set_start_fullscreen(&self, on: bool) {
+        if let Err(error) = self.manager.set_start_fullscreen(on) {
+            log::error!("cannot save the fullscreen setting: {error}");
+            self.notify(Message::StorageError);
+        }
+        if let Some(window) = self.window() {
+            window.set_settings_start_fullscreen(self.manager.start_fullscreen());
+        }
+    }
+
     /// Shows `message` in the notice banner, replacing the one shown. Messages
     /// that need no action leave after [`NOTICE_DURATION`]; the others stay
     /// until the user closes them.
@@ -711,6 +728,12 @@ impl App {
         window.on_settings_subtitles_changed(move |choice| {
             if let Some(app) = this.upgrade() {
                 app.set_subtitle_style(&choice);
+            }
+        });
+        let this = self.this.clone();
+        window.on_settings_start_fullscreen_changed(move |on| {
+            if let Some(app) = this.upgrade() {
+                app.set_start_fullscreen(on);
             }
         });
         window.on_dismiss_notice(with(|app| app.dismiss_notice()));
@@ -923,7 +946,9 @@ impl App {
                 let previous = self.shown.replace(screen.clone());
                 if let Some(window) = self.window() {
                     self.notice_on(&window, &screen);
-                    if screen != Screen::Player {
+                    if screen == Screen::Player && previous != Screen::Player {
+                        player::enter(&window);
+                    } else if screen != Screen::Player && previous == Screen::Player {
                         player::leave(&window);
                     }
                     #[cfg(all(target_os = "linux", feature = "mpv"))]
@@ -935,6 +960,7 @@ impl App {
                         window.set_settings_subtitles(settings::subtitle_choice(
                             self.manager.subtitle_style(),
                         ));
+                        window.set_settings_start_fullscreen(self.manager.start_fullscreen());
                     }
                     window.set_screen(slint_screen(&screen));
                 }

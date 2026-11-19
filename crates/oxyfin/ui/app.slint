@@ -168,6 +168,8 @@ export component AppWindow inherits Window {
     in property <TrickplayGrid> player-trickplay;
     in property <SeekPreview> player-preview;
     callback player-preview-requested(seconds: float);
+    // Whether the window was fullscreen when the player opened; leaving the player restores it.
+    in-out property <bool> player-fullscreen-before;
     callback player-toggle-fullscreen();
     callback player-cursor-hidden(x: length, y: length);
     callback player-command-stop();
@@ -198,6 +200,8 @@ export component AppWindow inherits Window {
     in property <TokenStore> settings-token-store;
     in property <SubtitleChoice> settings-subtitles;
     callback settings-subtitles-changed(choice: SubtitleChoice);
+    in property <bool> settings-start-fullscreen;
+    callback settings-start-fullscreen-changed(on: bool);
     in property <string> app-version;
     callback close-settings();
     callback sign-out();
@@ -544,6 +548,10 @@ export component AppWindow inherits Window {
         subtitles: root.settings-subtitles;
         subtitles-changed(choice) => {
             root.settings-subtitles-changed(choice);
+        }
+        start-fullscreen: root.settings-start-fullscreen;
+        start-fullscreen-changed(on) => {
+            root.settings-start-fullscreen-changed(on);
         }
         version: root.app-version;
         back => {

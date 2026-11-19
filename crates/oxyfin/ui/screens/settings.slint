@@ -1,7 +1,7 @@
 import { Theme } from "../theme.slint";
 import { Button, ButtonStyle } from "../components/button.slint";
 import { TopBar, TopBarPage } from "../components/top_bar.slint";
-import { BodyText, DisplayText, HeadingText, LabelText } from "../components/text.slint";
+import { BodyText, CaptionText, DisplayText, HeadingText, LabelText } from "../components/text.slint";
 import { Chip } from "../components/chip.slint";
 
 // Where the sign-in token is kept; mirrors the core `TokenStorage`.
@@ -34,30 +34,44 @@ component SettingRow inherits HorizontalLayout {
     }
 }
 
-// A setting picked among a few chips.
+// A setting picked among a few chips, with an optional caption under its label.
 component ChoiceRow inherits HorizontalLayout {
     in property <string> label;
+    in property <string> caption;
     in property <[string]> options;
     in property <int> selected;
     callback chosen(index: int);
 
     spacing: Theme.space-lg;
 
-    LabelText {
+    VerticalLayout {
         width: 160px;
-        text: root.label;
-        vertical-alignment: center;
+        alignment: center;
+        spacing: Theme.space-2xs;
+
+        LabelText {
+            text: root.label;
+            wrap: word-wrap;
+        }
+        if !root.caption.is-empty: CaptionText {
+            text: root.caption;
+            wrap: word-wrap;
+        }
     }
     HorizontalLayout {
         horizontal-stretch: 1;
         alignment: start;
         spacing: Theme.space-sm;
 
-        for option[index] in root.options: Chip {
-            label: option;
-            selected: index == root.selected;
-            clicked => {
-                root.chosen(index);
+        for option[index] in root.options: VerticalLayout {
+            alignment: center;
+
+            Chip {
+                label: option;
+                selected: index == root.selected;
+                clicked => {
+                    root.chosen(index);
+                }
             }
         }
     }
@@ -122,7 +136,8 @@ component SettingSection inherits Rectangle {
     }
 }
 
-// Settings: the signed-in account, the subtitle style, the application version and the sign-out action.
+// Settings: the signed-in account, playback, the subtitle style, the application version and the
+// sign-out action.
 export component SettingsScreen inherits Rectangle {
     in property <string> server-name;
     in property <string> server-address;
@@ -133,7 +148,10 @@ export component SettingsScreen inherits Rectangle {
     callback open-tab(page: TopBarPage);
     callback back();
     callback sign-out();
+    // Whether the window opens fullscreen, from the next launch on.
+    in property <bool> start-fullscreen;
     callback subtitles-changed(choice: SubtitleChoice);
+    callback start-fullscreen-changed(on: bool);
 
     accessible-role: groupbox;
     accessible-label: @tr("Settings");
@@ -210,6 +228,20 @@ export component SettingsScreen inherits Rectangle {
                                 clicked => {
                                     root.sign-out();
                                 }
+                            }
+                        }
+                    }
+
+                    SettingSection {
+                        title: @tr("Playback");
+
+                        ChoiceRow {
+                            label: @tr("Start in fullscreen");
+                            caption: @tr("Also with --fullscreen");
+                            options: [@tr("Off"), @tr("On")];
+                            selected: root.start-fullscreen ? 1 : 0;
+                            chosen(index) => {
+                                root.start-fullscreen-changed(index == 1);
                             }
                         }
                     }
