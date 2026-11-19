@@ -93,6 +93,7 @@ async fn the_desktop_sees_and_controls_the_playback() {
             title: "Pilot".to_owned(),
             series_name: Some("The Show".to_owned()),
             episode_label: Some("S01E01".to_owned()),
+            artwork: None,
         },
     }));
     mpris.update(Update::Artwork(Some("http://localhost/art".to_owned())));

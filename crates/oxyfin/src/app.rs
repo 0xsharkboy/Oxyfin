@@ -440,13 +440,19 @@ impl App {
         use crate::mpris::Update;
 
         self.mpris_update(Update::Event(event.clone()));
-        if let oxyfin_core::PlaybackEvent::Loading { item, .. } = event {
-            let art = self.generation.borrow().as_ref().map(|generation| {
-                let mut request =
-                    oxyfin_api::ImageRequest::new(item.clone(), oxyfin_api::ImageType::Primary);
-                request.max_height = Some(MPRIS_ART_HEIGHT);
-                generation.session.image_url(&request).to_string()
-            });
+        if let oxyfin_core::PlaybackEvent::Loading { title, .. } = event {
+            let generation = self.generation.borrow();
+            let art = generation
+                .as_ref()
+                .zip(title.artwork.as_ref())
+                .map(|(generation, art)| {
+                    let mut request =
+                        oxyfin_api::ImageRequest::new(art.item_id.clone(), art.image_type.clone());
+                    request.tag = Some(art.tag.clone());
+                    request.max_height = Some(MPRIS_ART_HEIGHT);
+                    generation.session.image_url(&request).to_string()
+                });
+            drop(generation);
             self.mpris_update(Update::Artwork(art));
         }
     }

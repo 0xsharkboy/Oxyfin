@@ -730,6 +730,7 @@ mod tests {
                 title: "Pilot".to_owned(),
                 series_name: Some("The Show".to_owned()),
                 episode_label: Some("S01E01".to_owned()),
+                artwork: None,
             },
         }
     }
@@ -795,6 +796,7 @@ mod tests {
                 title: "Film".to_owned(),
                 series_name: None,
                 episode_label: None,
+                artwork: None,
             },
         }));
         let metadata = state.metadata();
@@ -871,6 +873,7 @@ mod tests {
                 title: "Second".to_owned(),
                 series_name: Some("The Show".to_owned()),
                 episode_label: Some("S01E02".to_owned()),
+                artwork: None,
             },
         }));
         assert_eq!(

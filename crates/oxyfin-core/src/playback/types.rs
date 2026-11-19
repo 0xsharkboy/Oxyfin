@@ -9,7 +9,7 @@ use oxyfin_player::{PlayerError, SeekTarget};
 use super::{AudioOption, SkippableSegment, SubtitleOption};
 use crate::SubtitleStyle;
 use crate::error::CoreError;
-use crate::models::Episode;
+use crate::models::{Episode, ImageRef};
 use crate::trickplay::Trickplay;
 
 /// Interval between two progress reports while playing.
@@ -120,6 +120,8 @@ pub struct PlaybackTitle {
     pub series_name: Option<String>,
     /// Label such as `S01E02`, for an episode.
     pub episode_label: Option<String>,
+    /// Image standing for the item, such as its series poster when it has none.
+    pub artwork: Option<ImageRef>,
 }
 
 /// A change reported by the playback controller.
