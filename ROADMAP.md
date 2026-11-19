@@ -25,7 +25,7 @@ This file is the single source of truth for planned work. An item is checked onl
 - [ ] Direct VAAPI on X11 (force EGL in the Slint winit backend)
 - [x] Media keys and MPRIS (Linux)
 - [ ] Media keys on Windows (SMTC) and macOS (MPNowPlayingInfoCenter)
-- [ ] Trickplay thumbnails
+- [x] Trickplay thumbnails
 - [x] Skip intro (media segments)
 - [x] Subtitle settings
 - [ ] Transcoding and quality selection
