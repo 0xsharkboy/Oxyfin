@@ -252,6 +252,8 @@ impl PlayerState {
             PlaybackEvent::Error(oxyfin_core::PlaybackError::Command { .. }) => {}
             PlaybackEvent::Error(_) => self.ready = false,
             PlaybackEvent::Muted(_)
+            | PlaybackEvent::SubtitleDelay(_)
+            | PlaybackEvent::AudioDelay(_)
             | PlaybackEvent::Seeking
             | PlaybackEvent::Segment(_)
             | PlaybackEvent::Trickplay(_)

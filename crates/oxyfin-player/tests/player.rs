@@ -645,3 +645,25 @@ fn a_gated_test_failing_while_held_does_not_hang() {
     gate.hold_at(TIMEOUT, |e| *e == PlayerEvent::Volume(50.0));
     panic!("failure while the event thread is held");
 }
+
+#[test]
+fn delays_are_set_in_milliseconds_and_kept_across_loads() {
+    let (events, on_event) = Events::new();
+    let player = headless(on_event);
+    assert_eq!(player.subtitle_delay().unwrap(), 0);
+    assert_eq!(player.audio_delay().unwrap(), 0);
+
+    player.set_subtitle_delay(300).unwrap();
+    player.set_audio_delay(-1200).unwrap();
+    assert_eq!(player.subtitle_delay().unwrap(), 300);
+    assert_eq!(player.audio_delay().unwrap(), -1200);
+
+    player.load(&sample()).unwrap();
+    events.wait_for(TIMEOUT, is_file_loaded);
+    // mpv keeps both delays from one file to the next: resetting them is up to the caller.
+    assert_eq!(player.subtitle_delay().unwrap(), 300);
+    assert_eq!(player.audio_delay().unwrap(), -1200);
+
+    player.set_subtitle_delay(0).unwrap();
+    assert_eq!(player.subtitle_delay().unwrap(), 0);
+}

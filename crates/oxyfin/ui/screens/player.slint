@@ -4,13 +4,15 @@ import { SeekPreviewPopup } from "../components/seek_preview.slint";
 import { Icons } from "../icons.slint";
 import { Button, ButtonStyle } from "../components/button.slint";
 import { IconButton } from "../components/icon_button.slint";
-import { BodyText, HeadingText, LabelText } from "../components/text.slint";
+import { BodyStrongText, BodyText, HeadingText, LabelText } from "../components/text.slint";
 import { PlayerControls } from "../components/player_controls.slint";
 import { TrackMenu } from "../components/track_menu.slint";
 import { SpeedMenu } from "../components/speed_menu.slint";
 import { NextEpisodeToast } from "../components/next_episode_toast.slint";
 
 export enum PlayerMenu { none, tracks, speed }
+
+enum DelayKind { none, audio, subtitle }
 
 // Video player. The window is transparent here so the video drawn under the interface shows.
 export component PlayerScreen inherits Rectangle {
@@ -36,6 +38,9 @@ export component PlayerScreen inherits Rectangle {
     in property <bool> has-next;
     in property <[TrackRow]> audio;
     in property <[TrackRow]> subtitles;
+    // Delays in milliseconds.
+    in property <int> audio-delay;
+    in property <int> subtitle-delay;
     in property <NextUp> next-up;
     in property <SkipKind> skip-kind;
     in property <float> skip-end;
@@ -63,10 +68,16 @@ export component PlayerScreen inherits Rectangle {
     callback command-set-muted(muted: bool);
     callback command-select-audio(index: int);
     callback command-select-subtitle(index: int);
+    callback command-step-audio-delay(direction: int);
+    callback command-set-audio-delay(ms: int);
+    callback command-step-subtitle-delay(direction: int);
+    callback command-set-subtitle-delay(ms: int);
     // The pointer hovers or drags the seek bar at `seconds`: the preview should show that time.
     callback preview-requested(seconds: float);
 
     property <PlayerMenu> menu: PlayerMenu.none;
+    // The delay a shortcut changed, shown for a moment over the video.
+    property <DelayKind> osd: DelayKind.none;
     // False once the pointer rested for the hide delay while playing.
     property <bool> awake: true;
     // The controls stay up while the pointer rests on them, such as on the seek bar preview.
@@ -80,6 +91,16 @@ export component PlayerScreen inherits Rectangle {
         if hide-timer.running {
             hide-timer.restart();
         }
+    }
+
+    function step-delay(kind: DelayKind, direction: int) {
+        if kind == DelayKind.audio {
+            root.command-step-audio-delay(direction);
+        } else {
+            root.command-step-subtitle-delay(direction);
+        }
+        root.osd = kind;
+        osd-timer.restart();
     }
 
     function toggle-menu(menu: PlayerMenu) {
@@ -125,6 +146,14 @@ export component PlayerScreen inherits Rectangle {
     // Covers the window until the first frame, so the desktop never shows through.
     background: root.loading || root.has-error || !root.video-active ? Theme.video-backdrop : transparent;
 
+    osd-timer := Timer {
+        interval: 1.5s;
+        running: root.osd != DelayKind.none;
+        triggered => {
+            root.osd = DelayKind.none;
+        }
+    }
+
     hide-timer := Timer {
         interval: 3s;
         running: root.awake && !root.paused && root.menu == PlayerMenu.none && !root.scrubbing && !root.loading && !root.has-error && !root.pointer-on-controls;
@@ -160,6 +189,18 @@ export component PlayerScreen inherits Rectangle {
             }
             // Captured before any focused control, so the shortcuts work wherever focus is.
             capture-key-pressed(event) => {
+                // mpv default bindings: Ctrl with plus or minus for the audio delay.
+                if event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta {
+                    if event.text == "+" || event.text == "=" {
+                        root.step-delay(DelayKind.audio, 1);
+                    } else if event.text == "-" {
+                        root.step-delay(DelayKind.audio, -1);
+                    } else {
+                        return reject;
+                    }
+                    root.reveal();
+                    return accept;
+                }
                 if event.modifiers.control || event.modifiers.alt || event.modifiers.meta {
                     return reject;
                 }
@@ -189,6 +230,10 @@ export component PlayerScreen inherits Rectangle {
                     root.command-previous();
                 } else if event.text == "s" || event.text == "S" {
                     root.skip-segment();
+                } else if event.text == "z" {
+                    root.step-delay(DelayKind.subtitle, -1);
+                } else if event.text == "Z" || event.text == "x" {
+                    root.step-delay(DelayKind.subtitle, 1);
                 } else if event.text == Key.Escape {
                     root.escape();
                 } else {
@@ -333,8 +378,22 @@ export component PlayerScreen inherits Rectangle {
                 select-audio(index) => {
                     root.command-select-audio(index);
                 }
+                audio-delay: root.audio-delay;
+                subtitle-delay: root.subtitle-delay;
                 select-subtitle(index) => {
                     root.command-select-subtitle(index);
+                }
+                step-audio-delay(direction) => {
+                    root.command-step-audio-delay(direction);
+                }
+                reset-audio-delay => {
+                    root.command-set-audio-delay(0);
+                }
+                step-subtitle-delay(direction) => {
+                    root.command-step-subtitle-delay(direction);
+                }
+                reset-subtitle-delay => {
+                    root.command-set-subtitle-delay(0);
                 }
             }
 
@@ -382,6 +441,42 @@ export component PlayerScreen inherits Rectangle {
                 }
                 cancel => {
                     root.command-cancel-next-up();
+                }
+            }
+
+            if root.osd != DelayKind.none: osd-pill := Rectangle {
+                property <int> value: root.osd == DelayKind.audio ? root.audio-delay : root.subtitle-delay;
+                property <string> name: root.osd == DelayKind.audio ? @tr("Audio delay") : @tr("Subtitle delay");
+
+                accessible-role: text;
+                accessible-label: @tr("{}: {}", self.name, Messages.delay-text(self.value));
+                x: (parent.width - self.width) / 2;
+                y: 2 * Theme.space-3xl;
+                width: osd-row.preferred-width;
+                height: osd-row.preferred-height;
+                background: Theme.bg-elevated;
+                border-radius: Theme.radius-full;
+                border-width: Theme.border-thin;
+                border-color: Theme.border-default;
+
+                osd-row := HorizontalLayout {
+                    padding-left: Theme.space-lg;
+                    padding-right: Theme.space-lg;
+                    padding-top: Theme.space-pill-y;
+                    padding-bottom: Theme.space-pill-y;
+                    spacing: Theme.space-sm;
+
+                    BodyText {
+                        accessible-role: none;
+                        text: osd-pill.name;
+                        color: Theme.text-secondary;
+                        vertical-alignment: center;
+                    }
+                    BodyStrongText {
+                        accessible-role: none;
+                        text: Messages.delay-text(osd-pill.value);
+                        vertical-alignment: center;
+                    }
                 }
             }
 

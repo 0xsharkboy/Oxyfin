@@ -1,6 +1,6 @@
-import { Theme, TrackRow } from "../theme.slint";
+import { Theme, TrackRow, Messages } from "../theme.slint";
 import { Icons } from "../icons.slint";
-import { BodyText, CaptionText, LabelText } from "text.slint";
+import { BodyStrongText, BodyText, CaptionText, LabelText } from "text.slint";
 
 // Floating panel of the player menus; scrolls when its options outgrow `limit`.
 export component MenuPanel inherits Rectangle {
@@ -124,12 +124,137 @@ export component MenuOption inherits Rectangle {
     }
 }
 
+// Small outlined square button of a delay row. It never takes the focus, so the player
+// shortcuts keep working.
+component StepButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    callback clicked();
+
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => {
+        root.clicked();
+    }
+
+    width: 28px;
+    height: 28px;
+    border-radius: Theme.radius-sm;
+    border-width: Theme.border-thin;
+    border-color: Theme.border-default;
+    background: touch.has-hover ? Theme.bg-hover : transparent;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    Image {
+        source: root.icon;
+        width: 16px;
+        height: 16px;
+        colorize: Theme.text-primary;
+    }
+}
+
+// A delay of the player menu, in milliseconds: its value, a tenth of a second either way and a
+// reset. Its buttons leave the focus on the player, so its shortcuts keep working.
+export component DelayRow inherits HorizontalLayout {
+    in property <int> delay;
+    // Screen reader names of the value and of each button.
+    in property <string> value-label;
+    in property <string> decrease-label;
+    in property <string> increase-label;
+    in property <string> reset-label;
+    callback step(direction: int);
+    callback reset();
+
+    padding-left: Theme.space-lg;
+    padding-right: Theme.space-md;
+    padding-top: Theme.space-xs;
+    padding-bottom: Theme.space-xs;
+    spacing: Theme.space-sm;
+
+    BodyText {
+        accessible-role: none;
+        text: @tr("Delay");
+        color: Theme.text-secondary;
+        vertical-alignment: center;
+        horizontal-stretch: 1;
+    }
+
+    VerticalLayout {
+        alignment: center;
+        StepButton {
+            icon: Icons.minus;
+            label: root.decrease-label;
+            clicked => {
+                root.step(-1);
+            }
+        }
+    }
+
+    BodyStrongText {
+        accessible-role: text;
+        accessible-label: root.value-label;
+        accessible-value: self.text;
+        width: 64px;
+        text: Messages.delay-text(root.delay);
+        color: root.delay != 0 ? Theme.accent : Theme.text-primary;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    VerticalLayout {
+        alignment: center;
+        StepButton {
+            icon: Icons.plus;
+            label: root.increase-label;
+            clicked => {
+                root.step(1);
+            }
+        }
+    }
+
+    reset-text := LabelText {
+        accessible-role: button;
+        accessible-label: root.reset-label;
+        accessible-enabled: root.delay != 0;
+        accessible-action-default => {
+            if root.delay != 0 {
+                root.reset();
+            }
+        }
+        text: @tr("Reset");
+        color: root.delay != 0 ? Theme.text-secondary : Theme.text-muted;
+        opacity: root.delay != 0 ? 1 : Theme.disabled-opacity;
+        vertical-alignment: center;
+
+        TouchArea {
+            enabled: root.delay != 0;
+            mouse-cursor: pointer;
+            clicked => {
+                root.reset();
+            }
+        }
+    }
+}
+
 // Audio and subtitle menu of the player. The subtitle row with index -1 turns subtitles off.
 export component TrackMenu inherits MenuPanel {
     in property <[TrackRow]> audio;
     in property <[TrackRow]> subtitles;
+    // Delays in milliseconds.
+    in property <int> audio-delay;
+    in property <int> subtitle-delay;
     callback select-audio(index: int);
     callback select-subtitle(index: int);
+    callback step-audio-delay(direction: int);
+    callback reset-audio-delay();
+    callback step-subtitle-delay(direction: int);
+    callback reset-subtitle-delay();
 
     pure function join(first: string, second: string) -> string {
         if first.is-empty {
@@ -162,6 +287,20 @@ export component TrackMenu inherits MenuPanel {
         }
     }
 
+    DelayRow {
+        delay: root.audio-delay;
+        value-label: @tr("Audio delay");
+        decrease-label: @tr("Decrease the audio delay");
+        increase-label: @tr("Increase the audio delay");
+        reset-label: @tr("Reset the audio delay");
+        step(direction) => {
+            root.step-audio-delay(direction);
+        }
+        reset => {
+            root.reset-audio-delay();
+        }
+    }
+
     MenuDivider { }
 
     MenuHeader {
@@ -174,6 +313,20 @@ export component TrackMenu inherits MenuPanel {
         selected: row.selected;
         chosen => {
             root.select-subtitle(row.index);
+        }
+    }
+
+    DelayRow {
+        delay: root.subtitle-delay;
+        value-label: @tr("Subtitle delay");
+        decrease-label: @tr("Decrease the subtitle delay");
+        increase-label: @tr("Increase the subtitle delay");
+        reset-label: @tr("Reset the subtitle delay");
+        step(direction) => {
+            root.step-subtitle-delay(direction);
+        }
+        reset => {
+            root.reset-subtitle-delay();
         }
     }
 }

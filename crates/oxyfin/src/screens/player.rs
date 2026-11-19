@@ -19,6 +19,9 @@ use crate::{AppWindow, Message, NextUp, QualityRow, SeekPreview, SkipKind, Trick
 /// Volume change of one step of the volume keys, in percent.
 pub const VOLUME_STEP: f64 = 5.0;
 
+/// Change of one step of the delay keys and buttons, in milliseconds.
+pub const DELAY_STEP_MS: i64 = 100;
+
 /// Wires the player controls of `window` to `send`.
 ///
 /// `send` is the only way out of the screen: the playback controller in the
@@ -103,6 +106,29 @@ pub fn bind(window: &AppWindow, send: Rc<dyn Fn(PlaybackCommand)>) {
             to(PlaybackCommand::SetSpeed(speed));
         }
     });
+    let to = Rc::clone(&send);
+    window
+        .on_player_command_set_audio_delay(move |ms| to(PlaybackCommand::SetAudioDelay(ms.into())));
+    let to = Rc::clone(&send);
+    window.on_player_command_set_subtitle_delay(move |ms| {
+        to(PlaybackCommand::SetSubtitleDelay(ms.into()))
+    });
+    let (to, weak) = (Rc::clone(&send), window.as_weak());
+    window.on_player_command_step_audio_delay(move |direction| {
+        let Some(window) = weak.upgrade() else { return };
+        to(PlaybackCommand::SetAudioDelay(step_delay(
+            window.get_player_audio_delay(),
+            direction,
+        )));
+    });
+    let (to, weak) = (Rc::clone(&send), window.as_weak());
+    window.on_player_command_step_subtitle_delay(move |direction| {
+        let Some(window) = weak.upgrade() else { return };
+        to(PlaybackCommand::SetSubtitleDelay(step_delay(
+            window.get_player_subtitle_delay(),
+            direction,
+        )));
+    });
     let (to, weak) = (send, window.as_weak());
     window.on_player_command_step_volume(move |direction| {
         let Some(window) = weak.upgrade() else { return };
@@ -145,6 +171,8 @@ pub fn reset(window: &AppWindow) {
     window.set_player_has_next(false);
     window.set_player_audio(ModelRc::default());
     window.set_player_subtitles(ModelRc::default());
+    window.set_player_audio_delay(0);
+    window.set_player_subtitle_delay(0);
     window.set_player_next_up(NextUp::default());
     window.set_player_scrubbing(false);
     clear_preview(window);
@@ -219,6 +247,8 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
         PlaybackEvent::Speed(speed) => window.set_player_speed(speed as f32),
         PlaybackEvent::Volume(volume) => window.set_player_volume(volume as f32),
         PlaybackEvent::Muted(muted) => window.set_player_muted(muted),
+        PlaybackEvent::SubtitleDelay(ms) => window.set_player_subtitle_delay(saturate(ms)),
+        PlaybackEvent::AudioDelay(ms) => window.set_player_audio_delay(saturate(ms)),
         PlaybackEvent::Seeking => {}
         PlaybackEvent::Seeked => {
             window.set_player_seek_pending(false);
@@ -437,6 +467,21 @@ fn step_volume(current: f64, direction: i32) -> f64 {
     (current + step).clamp(0.0, 100.0)
 }
 
+/// The delay one step from `current` in `direction`, in milliseconds.
+fn step_delay(current: i32, direction: i32) -> i64 {
+    let step = if direction < 0 {
+        -DELAY_STEP_MS
+    } else {
+        DELAY_STEP_MS
+    };
+    i64::from(current) + step
+}
+
+/// A delay for the window, which keeps it in an `int`.
+fn saturate(ms: i64) -> i32 {
+    i32::try_from(ms).unwrap_or(if ms < 0 { i32::MIN } else { i32::MAX })
+}
+
 /// The subtitle track of a menu row: the "Off" row has a negative index.
 fn subtitle_choice(index: i32) -> Option<i32> {
     (index >= 0).then_some(index)
@@ -473,6 +518,17 @@ mod tests {
         assert_eq!(step_volume(50.0, -1), 45.0);
         assert_eq!(step_volume(98.0, 1), 100.0);
         assert_eq!(step_volume(3.0, -1), 0.0);
+    }
+
+    #[test]
+    fn delay_steps_are_a_tenth_of_a_second() {
+        assert_eq!(step_delay(0, 1), 100);
+        assert_eq!(step_delay(0, -1), -100);
+        assert_eq!(step_delay(-100, 1), 0);
+        assert_eq!(step_delay(i32::MAX, 1), i64::from(i32::MAX) + 100);
+        assert_eq!(saturate(i64::from(i32::MAX) + 100), i32::MAX);
+        assert_eq!(saturate(i64::MIN), i32::MIN);
+        assert_eq!(saturate(-300), -300);
     }
 
     #[test]

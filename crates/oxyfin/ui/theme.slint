@@ -40,6 +40,7 @@ export global Theme {
     out property <length> space-2xs: 2px;
     out property <length> space-xs: 4px;
     out property <length> space-chip-y: 6px;
+    out property <length> space-pill-y: 10px;
     out property <length> space-sm: 8px;
     out property <length> space-md: 12px;
     out property <length> space-lg: 16px;
@@ -58,6 +59,7 @@ export global Theme {
     out property <length> menu-max-width: 420px;
 
     out property <length> radius-indicator: 2px;
+    out property <length> radius-sm: 6px;
     out property <length> radius-md: 8px;
     out property <length> radius-lg: 12px;
     out property <length> radius-full: 999px;
@@ -186,6 +188,11 @@ export global Messages {
             return @tr("Server found (Jellyfin {})", version);
         }
         @tr("Server found: {} (Jellyfin {})", name, version)
+    }
+
+    // An audio or subtitle delay given in milliseconds, in seconds to the tenth, such as "+0.3 s".
+    public pure function delay-text(ms: int) -> string {
+        @tr("{}{}.{} s", ms < 0 ? "-" : "+", floor(abs(ms) / 1000), mod(floor(abs(ms) / 100), 10))
     }
 
     // `detail` is only used by `unsupported-server` and carries "<installed> / <required>" versions.

@@ -154,6 +154,8 @@ export component AppWindow inherits Window {
     in property <bool> player-has-next;
     in property <[TrackRow]> player-audio;
     in property <[TrackRow]> player-subtitles;
+    in property <int> player-audio-delay;
+    in property <int> player-subtitle-delay;
     in property <NextUp> player-next-up;
     in property <SkipKind> player-skip-kind;
     // Where skipping the offered segment seeks to, in seconds.
@@ -184,6 +186,10 @@ export component AppWindow inherits Window {
     callback player-command-set-muted(muted: bool);
     callback player-command-select-audio(index: int);
     callback player-command-select-subtitle(index: int);
+    callback player-command-step-audio-delay(direction: int);
+    callback player-command-set-audio-delay(ms: int);
+    callback player-command-step-subtitle-delay(direction: int);
+    callback player-command-set-subtitle-delay(ms: int);
     callback close-player();
 
     in property <string> settings-server-name;
@@ -447,6 +453,8 @@ export component AppWindow inherits Window {
         has-next: root.player-has-next;
         audio: root.player-audio;
         subtitles: root.player-subtitles;
+        audio-delay: root.player-audio-delay;
+        subtitle-delay: root.player-subtitle-delay;
         next-up: root.player-next-up;
         skip-kind: root.player-skip-kind;
         skip-end: root.player-skip-end;
@@ -510,6 +518,18 @@ export component AppWindow inherits Window {
         }
         command-select-subtitle(index) => {
             root.player-command-select-subtitle(index);
+        }
+        command-step-audio-delay(direction) => {
+            root.player-command-step-audio-delay(direction);
+        }
+        command-set-audio-delay(ms) => {
+            root.player-command-set-audio-delay(ms);
+        }
+        command-step-subtitle-delay(direction) => {
+            root.player-command-step-subtitle-delay(direction);
+        }
+        command-set-subtitle-delay(ms) => {
+            root.player-command-set-subtitle-delay(ms);
         }
     }
 

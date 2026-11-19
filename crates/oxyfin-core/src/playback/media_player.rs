@@ -24,6 +24,10 @@ pub trait MediaPlayer: Send + Sync + 'static {
     fn set_muted(&self, muted: bool) -> Result<(), PlayerError>;
     /// Sets the playback speed.
     fn set_speed(&self, speed: f64) -> Result<(), PlayerError>;
+    /// Delays the subtitles by this many milliseconds, earlier when negative.
+    fn set_subtitle_delay(&self, millis: i64) -> Result<(), PlayerError>;
+    /// Delays the audio by this many milliseconds, earlier when negative.
+    fn set_audio_delay(&self, millis: i64) -> Result<(), PlayerError>;
     /// Selects an audio track, or none.
     fn select_audio(&self, track: Option<TrackId>) -> Result<(), PlayerError>;
     /// Selects a subtitle track, or none.
@@ -69,6 +73,12 @@ impl MediaPlayer for oxyfin_player::Player {
     }
     fn set_speed(&self, speed: f64) -> Result<(), PlayerError> {
         oxyfin_player::Player::set_speed(self, speed)
+    }
+    fn set_subtitle_delay(&self, millis: i64) -> Result<(), PlayerError> {
+        oxyfin_player::Player::set_subtitle_delay(self, millis)
+    }
+    fn set_audio_delay(&self, millis: i64) -> Result<(), PlayerError> {
+        oxyfin_player::Player::set_audio_delay(self, millis)
     }
     fn select_audio(&self, track: Option<TrackId>) -> Result<(), PlayerError> {
         oxyfin_player::Player::select_audio(self, track)
