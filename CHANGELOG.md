@@ -1,0 +1,142 @@
+# Changelog
+
+All notable changes to Oxyfin. Generated from the commit messages with [git-cliff](https://git-cliff.org).
+
+## 0.1.0 (2026-11-19)
+
+### Features
+
+- **api**: add errors, JSON normalization and versions
+- **api**: add client identity and value types
+- **api**: add server connection and sessions
+- **api**: add quick connect
+- **api**: add item models and browsing queries
+- **api**: add played, favorite and image requests
+- **api**: add playback info, stream sources and reports
+- **api**: expose the server id on sessions
+- **api**: expose the authorization header on sessions
+- **player**: create a headless mpv instance behind the mpv feature
+- **player**: add media source, track and event types
+- **player**: load media and report playback lifecycle events
+- **player**: add pause, seek, volume and position events
+- **player**: list and select audio and subtitle tracks
+- **player**: render video through the mpv opengl api
+- **core**: add the core dependencies and error type
+- **player**: add playback speed
+- **core**: persist the device id and saved session
+- **core**: store the access token in the keyring with a file fallback
+- **core**: sign in, restore and sign out
+- **core**: drive the Quick Connect flow
+- **core**: add the domain models
+- **core**: add the catalog service
+- **core**: cache item images in memory and on disk
+- **core**: map Jellyfin streams to mpv tracks
+- **core**: add the playback controller
+- **core**: handle the end of playback and the next episode
+- **core**: flush the last progress report on shutdown
+- **core**: give series details their next episode
+- **core**: bound the image disk cache
+- **api**: recognize video items
+- **core**: show mixed and home video libraries
+- **ui**: open the application window
+- **ui**: add the theme, the Inter font and the base components
+- **core**: play the next episode to watch of a series
+- **ui**: add the application state machine
+- **ui**: convert core models and errors for display
+- **ui**: sign in with a password or Quick Connect
+- **ui**: show the home screen
+- **ui**: play video under the interface
+- **ui**: add the player controls
+- **ui**: add settings, sign out and session expiry
+- **ui**: say so when the home screen has nothing to show
+- **api**: restrict an item query to a list of ids
+- **core**: browse and list genres across all libraries
+- **core**: filter listings by watch state, including in progress
+- **core**: expose community and official ratings on details
+- **core**: remember the server name with the session
+- **ui**: show the server name in the settings
+- **ui**: navigate with a stack of screens
+- **ui**: add the poster grid and dropdown components
+- **ui**: browse movies, shows and favorites
+- **ui**: search movies and shows
+- **ui**: show movie details and open them from every screen
+- **ui**: show series details with seasons and episodes
+- **ui**: bundle translations and add French
+- **ui**: read a window size and memory-only tokens from the env
+- **ui**: read a scale factor from the environment
+- **ui**: advertise the application id to the compositor
+- **nix**: package the app in the flake
+
+### Bug fixes
+
+- **api**: send genres pipe delimited
+- **player**: take a borrowed display and reset vid on load
+- **player**: describe mpv errors in readable text
+- **player**: report the position when playback ends
+- **player**: do not join the event thread when dropped from it
+- **player**: refresh video exactly when a renderer comes back
+- **player**: exit the example when playback fails
+- **player**: make the video refresh seek best effort
+- **player**: document how stream indexes map to Jellyfin
+- **core**: keep the token stores consistent
+- **core**: treat keyring errors as a missing token on load
+- **core**: tighten session clean-up
+- **core**: keep the config unchanged when saving fails
+- **core**: keep episodes without a series name and add image fallbacks
+- **player**: report the position before the seek ends
+- **core**: isolate items and send reports from their own task
+- **core**: pass global player state and report expiry once
+- **core**: keep reporting after a seek back from the end
+- **core**: ignore track lists from before the default selection
+- **core**: unpause each new item on load
+- **core**: move a corrupt token file aside
+- **core**: refetch an image whose cache file is empty
+- **core**: map a 401 on Quick Connect initiate to disabled
+- **core**: keep handling commands while an item loads
+- **core**: never load an item once shutdown is requested
+- **core**: list only movie and show libraries
+- **core**: offer only tracks the player knows
+- **repo**: make the test server script wait longer and find ffmpeg
+- **repo**: validate the scan timeout and clean up on failure
+- **player**: report track selection changes mpv would coalesce
+- **core**: run the first image trim on get outside a runtime
+- **core**: clear the image trim flag when its task is cancelled
+- **core**: apply Previous and Next sent while an item loads
+- **core**: include videos in favorites
+- **ui**: dim disabled nav items and name every message explicitly
+- **ui**: fetch a covering banner image and use the design row title
+- **ui**: keep the live generation and wait on exit after a hide error
+- **ui**: keep the video backdrop and release players off the UI thread
+- **ui**: keep the player shortcuts after a control disappears
+- **core**: forget the session before logging out
+- **ui**: create the player off the UI thread
+- **ui**: tell the user when video cannot be shown
+- **ui**: keep empty text fields one line tall
+- **repo**: scan the test libraries once both exist
+- **ui**: center the volume slider on the player bar
+- **ui**: trigger buttons and cards on the first click
+- **core**: expire only the session that was rejected
+- **ui**: expire the session when an image is rejected
+- **ui**: refresh the origin screen when playback stops late
+- **ui**: recover from library loading failures
+- **ui**: keep searching while the text changes
+- **ui**: clear the search loading state when nothing is sent
+- **ui**: hide more info when the banner item has no detail page
+- **ui**: keep the series page consistent while it reloads
+- **ui**: wrap the detail page actions on narrow windows
+- **ui**: translate the forced track detail in the singular
+- **ui**: refresh search results after playback
+- **ui**: refresh every stacked screen when playback ends by itself
+- **ui**: keep loaded thumbnails across reloads
+- **ui**: start playback only from the screen that asked for it
+- **ui**: go back with the mouse button from the settings
+- **ui**: reload the screens below a detail after a change
+- **ui**: honor LC_ALL=C as English
+- **ui**: keep the detail header readable on bright backdrops
+- **ui**: keep the settings sections at their natural height
+- **ui**: keep search results right below the search field
+- **nix**: drop x86_64-darwin, which nixpkgs no longer supports
+
+### Performance
+
+- **core**: trim the image disk cache only when over budget
