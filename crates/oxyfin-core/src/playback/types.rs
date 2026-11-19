@@ -107,6 +107,12 @@ pub enum PlaybackCommand {
     /// Delay the audio by this many milliseconds, earlier when negative.
     /// Kept and reset like [`PlaybackCommand::SetSubtitleDelay`].
     SetAudioDelay(i64),
+    /// Change the subtitle delay by this many milliseconds, from the delay the
+    /// controller holds, so that steps sent before their event comes back add up.
+    AdjustSubtitleDelay(i64),
+    /// Change the audio delay by this many milliseconds, like
+    /// [`PlaybackCommand::AdjustSubtitleDelay`].
+    AdjustAudioDelay(i64),
     /// Select the audio track with this Jellyfin stream index.
     SelectAudio(i32),
     /// Select the subtitle track with this Jellyfin stream index, or none.

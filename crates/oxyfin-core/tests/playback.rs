@@ -3062,3 +3062,25 @@ async fn single_chapter_sends_empty_list() {
         PlaybackEvent::Chapters(Vec::new())
     );
 }
+
+#[tokio::test]
+async fn delay_steps_sent_in_a_row_add_up() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::AdjustSubtitleDelay(100));
+    h.handle.send(PlaybackCommand::AdjustSubtitleDelay(100));
+    h.handle.send(PlaybackCommand::AdjustAudioDelay(-100));
+    h.handle.send(PlaybackCommand::AdjustAudioDelay(-100));
+    let seen = events_until(&mut h.events, |e| *e == PlaybackEvent::AudioDelay(-200)).await;
+    assert!(
+        seen.contains(&PlaybackEvent::SubtitleDelay(100)),
+        "{seen:?}"
+    );
+    assert!(
+        seen.contains(&PlaybackEvent::SubtitleDelay(200)),
+        "{seen:?}"
+    );
+    let calls = h.player.calls();
+    assert!(calls.contains(&Call::SetSubtitleDelay(200)), "{calls:?}");
+    assert!(calls.contains(&Call::SetAudioDelay(-200)), "{calls:?}");
+}

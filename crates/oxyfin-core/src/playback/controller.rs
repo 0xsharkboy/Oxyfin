@@ -405,6 +405,14 @@ impl PlaybackController {
                     self.emit(PlaybackEvent::SubtitleDelay(millis));
                 }
             }
+            PlaybackCommand::AdjustSubtitleDelay(step) => {
+                let millis = self.subtitle_delay.saturating_add(step);
+                self.on_command(PlaybackCommand::SetSubtitleDelay(millis));
+            }
+            PlaybackCommand::AdjustAudioDelay(step) => {
+                let millis = self.audio_delay.saturating_add(step);
+                self.on_command(PlaybackCommand::SetAudioDelay(millis));
+            }
             PlaybackCommand::SetAudioDelay(millis) => {
                 if self.call(self.player.set_audio_delay(millis)) {
                     self.audio_delay = millis;
