@@ -514,7 +514,6 @@ export component AppWindow inherits Window {
     }
 
     if root.screen == Screen.settings: SettingsScreen {
-        page: root.top-bar-page;
         open-tab(page) => {
             root.open-tab(page);
         }
