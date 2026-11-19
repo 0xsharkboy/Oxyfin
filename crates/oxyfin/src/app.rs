@@ -39,6 +39,10 @@ const NEXT_UP_THUMB_WIDTH: f32 = 160.0;
 #[cfg(feature = "mpv")]
 const NEXT_UP_THUMB_HEIGHT: f32 = 90.0;
 
+/// Height of the artwork shown to the desktop over MPRIS, in pixels.
+#[cfg(all(target_os = "linux", feature = "mpv"))]
+const MPRIS_ART_HEIGHT: u32 = 512;
+
 /// How long a notice that needs no action stays on screen.
 pub const NOTICE_DURATION: Duration = Duration::from_secs(5);
 
@@ -64,6 +68,8 @@ pub struct App {
     video: crate::video::VideoSource,
     #[cfg(feature = "mpv")]
     creating_player: Cell<Option<GenerationId>>,
+    #[cfg(all(target_os = "linux", feature = "mpv"))]
+    mpris: RefCell<Option<crate::mpris::Mpris>>,
     pub(crate) sign_in: SignInController,
     pub(crate) home: HomeController,
     pub(crate) library: LibraryController,
@@ -102,6 +108,8 @@ impl App {
             video: Default::default(),
             #[cfg(feature = "mpv")]
             creating_player: Cell::new(None),
+            #[cfg(all(target_os = "linux", feature = "mpv"))]
+            mpris: RefCell::new(None),
             sign_in: SignInController::default(),
             home: HomeController::default(),
             library: LibraryController::default(),
@@ -165,6 +173,38 @@ impl App {
             .map(|generation| generation.id);
         if current == Some(id) {
             self.notify(Message::LoadFailed);
+        }
+    }
+
+    /// Shows the playback to the desktop over MPRIS and performs the calls
+    /// it receives, until the app is gone.
+    #[cfg(all(target_os = "linux", feature = "mpv"))]
+    pub fn start_mpris(&self) {
+        use crate::mpris::{Bus, Mpris, Update, perform};
+
+        let (mpris, mut requests) = Mpris::start(&self.runtime, Bus::Session);
+        mpris.update(Update::Active(
+            self.state.borrow().screen() == Screen::Player,
+        ));
+        *self.mpris.borrow_mut() = Some(mpris);
+        let this = self.this.clone();
+        let result = slint::spawn_local(async move {
+            while let Some(request) = requests.recv().await {
+                let Some(window) = this.upgrade().and_then(|app| app.window()) else {
+                    break;
+                };
+                perform(&window, request);
+            }
+        });
+        if let Err(error) = result {
+            log::warn!("cannot receive the MPRIS calls: {error}");
+        }
+    }
+
+    #[cfg(all(target_os = "linux", feature = "mpv"))]
+    fn mpris_update(&self, update: crate::mpris::Update) {
+        if let Some(mpris) = &*self.mpris.borrow() {
+            mpris.update(update);
         }
     }
 
@@ -360,6 +400,8 @@ impl App {
         if let PlaybackEvent::NextUpCountdown { episode, .. } = &event {
             self.load_next_up_image(&window, episode);
         }
+        #[cfg(target_os = "linux")]
+        self.show_mpris(&event);
         if let Some(message) = player::apply(&window, event) {
             self.notify(message);
         }
@@ -382,6 +424,23 @@ impl App {
         } else if ended && on_player && !window.get_player_has_next() {
             self.send_playback(PlaybackCommand::Stop);
             self.dispatch(Msg::ClosePlayer);
+        }
+    }
+
+    /// Forwards a playback event to MPRIS, with the artwork of a new item.
+    #[cfg(all(target_os = "linux", feature = "mpv"))]
+    fn show_mpris(&self, event: &oxyfin_core::PlaybackEvent) {
+        use crate::mpris::Update;
+
+        self.mpris_update(Update::Event(event.clone()));
+        if let oxyfin_core::PlaybackEvent::Loading { item, .. } = event {
+            let art = self.generation.borrow().as_ref().map(|generation| {
+                let mut request =
+                    oxyfin_api::ImageRequest::new(item.clone(), oxyfin_api::ImageType::Primary);
+                request.max_height = Some(MPRIS_ART_HEIGHT);
+                generation.session.image_url(&request).to_string()
+            });
+            self.mpris_update(Update::Artwork(art));
         }
     }
 
@@ -792,6 +851,8 @@ impl App {
                     if screen != Screen::Player {
                         player::leave(&window);
                     }
+                    #[cfg(all(target_os = "linux", feature = "mpv"))]
+                    self.mpris_update(crate::mpris::Update::Active(screen == Screen::Player));
                     let root = self.state.borrow().stack().first().cloned();
                     window.set_top_bar_page(top_bar_page(root.as_ref()));
                     if screen == Screen::Settings {

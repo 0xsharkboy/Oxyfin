@@ -35,6 +35,9 @@ sys-locale = "0.3"
 log = "0.4"
 env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = { version = "5", default-features = false, features = ["async-io"] }
+
 [build-dependencies]
 slint-build = "=1.18.1"
 

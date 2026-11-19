@@ -10,6 +10,8 @@ pub mod generation;
 pub mod images;
 pub mod launch;
 pub mod locale;
+#[cfg(target_os = "linux")]
+pub mod mpris;
 pub mod present;
 pub mod screens;
 pub mod state;
