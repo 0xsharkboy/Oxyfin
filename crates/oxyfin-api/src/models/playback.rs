@@ -24,6 +24,8 @@ pub struct MediaStream {
     pub is_default: bool,
     /// Whether the stream is flagged as forced.
     pub is_forced: bool,
+    /// Whether the subtitle stream is flagged for the deaf and hard of hearing (SDH).
+    pub is_hearing_impaired: bool,
     /// Whether the stream lives in a separate file.
     pub is_external: bool,
     /// Whether the stream is a text subtitle, which the server can deliver as a separate file.
@@ -51,6 +53,7 @@ impl Default for MediaStream {
             display_title: None,
             is_default: false,
             is_forced: false,
+            is_hearing_impaired: false,
             is_external: false,
             is_text_subtitle_stream: false,
             channels: None,
@@ -184,6 +187,20 @@ mod tests {
         );
         assert_eq!(strip_credentials("/a?APIKEY=x&b=1"), "/a?b=1");
         assert_eq!(strip_credentials("/a"), "/a");
+    }
+
+    #[test]
+    fn hearing_impaired_flag_is_read() {
+        let stream: MediaStream = serde_json::from_value(serde_json::json!({
+            "Index": 4,
+            "Type": "Subtitle",
+            "IsHearingImpaired": true,
+        }))
+        .unwrap();
+        assert!(stream.is_hearing_impaired);
+        let stream: MediaStream =
+            serde_json::from_value(serde_json::json!({ "Index": 4, "Type": "Subtitle" })).unwrap();
+        assert!(!stream.is_hearing_impaired);
     }
 
     #[test]

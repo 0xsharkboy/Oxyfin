@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use oxyfin_api::{
-    ItemId, MediaSourceInfo, MediaStreamType, PlaybackOptions, Session, SubtitleDeliveryMethod,
-    Ticks,
+    ItemId, MediaSourceInfo, MediaStream, MediaStreamType, PlaybackOptions, Session,
+    SubtitleDeliveryMethod, Ticks,
 };
 use oxyfin_player::{
     PlayerError, PlayerEvent, SeekTarget, SubtitleAppearance, Track, TrackKind, UnloadReason,
@@ -23,6 +23,9 @@ use super::media_player::{MediaPlayer, PlayerEvents};
 use super::quality::Quality;
 use super::reporter::{ReportKind, Reporter};
 use super::segments::SkipMemory;
+use super::track_memory::{
+    AudioPick, SubtitlePick, TrackChoice, TrackMemory, best_audio, best_subtitle,
+};
 use super::tracks::{Delivery, TrackMap, subtitle_format};
 use super::types::{
     PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent, PlaybackPrefs, PlaybackTimings,
@@ -114,6 +117,8 @@ pub struct PlaybackController {
     prefs: PlaybackPrefs,
     /// Segments of the current item already skipped without asking.
     skips: SkipMemory,
+    /// The tracks picked in each series.
+    memory: TrackMemory,
 }
 
 impl PlaybackController {
@@ -128,6 +133,9 @@ impl PlaybackController {
     /// The runtime must be multi-threaded: adding an external subtitle makes
     /// mpv download it on the controller's thread.
     ///
+    /// `memory` holds the tracks picked in each series: the controller applies
+    /// them to the next episodes and saves the user's new picks.
+    ///
     /// A controller is bound to `session` and consumes `events`, so it lives
     /// for one signed-in session. After a sign-out or an expiry, the binary
     /// creates a new player, event sink and controller, and therefore a new
@@ -136,8 +144,9 @@ impl PlaybackController {
         session: Session,
         player: Arc<dyn MediaPlayer>,
         events: PlayerEvents,
+        memory: TrackMemory,
     ) -> (PlaybackHandle, UnboundedReceiver<PlaybackEvent>) {
-        Self::spawn_with_timings(session, player, events, PlaybackTimings::default())
+        Self::spawn_with_timings(session, player, events, PlaybackTimings::default(), memory)
     }
 
     /// Same as [`PlaybackController::spawn`], with custom timings.
@@ -146,6 +155,7 @@ impl PlaybackController {
         player: Arc<dyn MediaPlayer>,
         events: PlayerEvents,
         timings: PlaybackTimings,
+        memory: TrackMemory,
     ) -> (PlaybackHandle, UnboundedReceiver<PlaybackEvent>) {
         let (messages, message_receiver) = unbounded_channel();
         let (event_sender, event_receiver) = unbounded_channel();
@@ -178,6 +188,7 @@ impl PlaybackController {
             closing: closing.clone(),
             prefs: PlaybackPrefs::default(),
             skips: SkipMemory::default(),
+            memory,
         };
         tokio::spawn(controller.run(message_receiver, expired, loads));
         (
@@ -458,6 +469,7 @@ impl PlaybackController {
             }
             PlaybackCommand::SelectAudio(index) => {
                 self.forget_expected(TrackKind::Audio);
+                self.remember_audio(index);
                 let track = self.map().and_then(|map| map.mpv_audio(index));
                 if let Some(track) = track {
                     self.call(self.player.select_audio(Some(track)));
@@ -468,10 +480,12 @@ impl PlaybackController {
             PlaybackCommand::SetQuality(quality) => self.set_quality(quality),
             PlaybackCommand::SelectSubtitle(None) => {
                 self.forget_expected(TrackKind::Subtitle);
+                self.remember_subtitle(None);
                 self.call(self.player.select_subtitle(None));
             }
             PlaybackCommand::SelectSubtitle(Some(index)) => {
                 self.forget_expected(TrackKind::Subtitle);
+                self.remember_subtitle(Some(index));
                 let track = self.map().and_then(|map| map.mpv_subtitle(index));
                 if let Some(track) = track {
                     self.call(self.player.select_subtitle(Some(track)));
@@ -543,6 +557,80 @@ impl PlaybackController {
         if let Some(current) = self.current.as_mut() {
             current.forget_expected(kind);
         }
+    }
+
+    fn stream(&self, index: i32, kind: MediaStreamType) -> Option<&MediaStream> {
+        self.current
+            .as_ref()?
+            .source
+            .media_streams
+            .iter()
+            .find(|stream| stream.index == index && stream.r#type == kind)
+    }
+
+    fn remember_audio(&mut self, index: i32) {
+        if let Some(pick) = self
+            .stream(index, MediaStreamType::Audio)
+            .map(AudioPick::of)
+        {
+            self.remember(|choice| choice.audio = Some(pick));
+        }
+    }
+
+    fn remember_subtitle(&mut self, index: Option<i32>) {
+        let pick = match index {
+            None => Some(SubtitlePick::Off),
+            Some(index) => self
+                .stream(index, MediaStreamType::Subtitle)
+                .map(SubtitlePick::of),
+        };
+        if let Some(pick) = pick {
+            self.remember(|choice| choice.subtitle = pick);
+        }
+    }
+
+    /// Saves a user pick for the next episodes of the current series.
+    fn remember(&mut self, change: impl FnOnce(&mut TrackChoice)) {
+        if !self.prefs.remember_tracks {
+            return;
+        }
+        let Some(series) = self
+            .current
+            .as_ref()
+            .and_then(|current| current.series.clone())
+        else {
+            return;
+        };
+        let mut choice = self.memory.get(&series).unwrap_or_default();
+        change(&mut choice);
+        if let Err(error) = self.memory.set(&series, choice) {
+            log::warn!("cannot save the track choice: {error}");
+        }
+    }
+
+    /// The new request for a transcode made with another audio stream than
+    /// the one remembered for its series.
+    fn remembered_transcode(&self, prepared: &Prepared) -> Option<LoadRequest> {
+        let Delivery::Transcoded { audio } = prepared.delivery else {
+            return None;
+        };
+        let request = self.request.as_ref().filter(|request| {
+            request.resume.is_none() && request.options.audio_stream_index.is_none()
+        })?;
+        let (wanted, _) = remembered(
+            &self.memory,
+            self.prefs,
+            prepared.series.as_ref(),
+            &prepared.source.media_streams,
+        );
+        let wanted = wanted.filter(|wanted| Some(*wanted) != audio)?;
+        let mut request = request.clone();
+        if request.item != prepared.item {
+            request.item = prepared.item.clone();
+            request.mode = PlayMode::Auto;
+        }
+        request.options.audio_stream_index = Some(wanted);
+        Some(request)
     }
 
     fn map(&self) -> Option<&TrackMap> {
@@ -661,6 +749,9 @@ impl PlaybackController {
             }
             LoadStage::Done(outcome) => match *outcome {
                 Ok(prepared) => {
+                    if let Some(request) = self.remembered_transcode(&prepared) {
+                        return self.start_load(request);
+                    }
                     let deadline = Instant::now() + self.timings.unload_grace;
                     self.pending = Some((prepared, deadline));
                     self.load_pending();
@@ -728,6 +819,7 @@ impl PlaybackController {
             prepared.start.unwrap_or_default(),
             prepared.siblings,
         );
+        current.series = prepared.series;
         current.delivery = prepared.delivery;
         current.resume = prepared.resume;
         // mpv keeps `pause` across loads, so a paused reload reports no change.
@@ -892,21 +984,41 @@ impl PlaybackController {
             current.delivery,
         );
         let resume = current.resume.take();
+        let (remembered_audio, remembered_subtitle) = match resume {
+            Some(_) => (None, None),
+            None => remembered(
+                &self.memory,
+                self.prefs,
+                current.series.as_ref(),
+                &current.source.media_streams,
+            ),
+        };
         let default_audio = current.source.default_audio_stream_index;
         let audio = resume
-            .map_or(default_audio, |resume| resume.audio.or(default_audio))
-            .and_then(|index| map.mpv_audio(index));
+            .map_or(remembered_audio, |resume| resume.audio)
+            .and_then(|index| map.mpv_audio(index))
+            .or_else(|| default_audio.and_then(|index| map.mpv_audio(index)));
         if let Some(audio) = audio
             && self.player.select_audio(Some(audio)).is_ok()
         {
             mark_selected(&mut tracks, TrackKind::Audio, Some(audio));
             current.expected_audio = Some(audio);
         }
-        let wanted = resume
-            .map_or(current.source.default_subtitle_stream_index, |resume| {
-                resume.subtitle
-            })
-            .filter(|index| *index >= 0);
+        let default_subtitle = current.source.default_subtitle_stream_index;
+        let deliverable = |index: i32| {
+            map.mpv_subtitle(index).is_some()
+                || current
+                    .external_urls
+                    .iter()
+                    .any(|(added, _)| *added == index)
+        };
+        let wanted = match (resume, remembered_subtitle) {
+            (Some(resume), _) => resume.subtitle,
+            (None, Some(Some(index))) if !deliverable(index) => default_subtitle,
+            (None, Some(remembered)) => remembered,
+            (None, None) => default_subtitle,
+        }
+        .filter(|index| *index >= 0);
         let subtitle = wanted.and_then(|index| map.mpv_subtitle(index));
         current.pending_subtitle = wanted.filter(|index| {
             transcoded
@@ -1033,4 +1145,26 @@ fn text_subtitle(source: &MediaSourceInfo, subtitle: Option<i32>) -> i32 {
             })
         })
         .unwrap_or(-1)
+}
+
+/// The audio and subtitle streams of `streams` matching the choice remembered
+/// for `series`, as [`best_audio`] and [`best_subtitle`] give them; nothing
+/// when remembering is off or the item belongs to no series.
+fn remembered(
+    memory: &TrackMemory,
+    prefs: PlaybackPrefs,
+    series: Option<&ItemId>,
+    streams: &[MediaStream],
+) -> (Option<i32>, Option<Option<i32>>) {
+    let choice = series
+        .filter(|_| prefs.remember_tracks)
+        .and_then(|series| memory.get(series));
+    let Some(choice) = choice else {
+        return (None, None);
+    };
+    let audio = choice
+        .audio
+        .as_ref()
+        .and_then(|pick| best_audio(streams, pick));
+    (audio, best_subtitle(streams, &choice.subtitle))
 }
