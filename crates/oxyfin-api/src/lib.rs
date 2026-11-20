@@ -19,6 +19,7 @@
 //! ```
 
 mod client_info;
+mod discovery;
 mod error;
 mod http;
 mod ids;
@@ -37,6 +38,9 @@ mod user_data;
 mod version;
 
 pub use client_info::ClientInfo;
+pub use discovery::{
+    DISCOVERY_MESSAGE, DISCOVERY_PORT, DiscoveredServer, default_targets, discover,
+};
 pub use error::{Error, Result};
 pub use ids::{ItemId, MediaSourceId, PlaySessionId, UserId};
 pub use images::ImageRequest;

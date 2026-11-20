@@ -3199,6 +3199,7 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+ "memoffset",
 ]
 
 [[package]]
@@ -3750,6 +3751,7 @@ dependencies = [
 name = "oxyfin-api"
 version = "0.1.0"
 dependencies = [
+ "nix 0.31.3",
  "reqwest",
  "serde",
  "serde_json",
