@@ -77,6 +77,7 @@ impl From<ApiError> for CoreError {
             ApiError::Decode { .. } | ApiError::InvalidVersion(_) => {
                 Self::Decode(error.to_string())
             }
+            ApiError::QuickConnectDisabled => Self::QuickConnectDisabled,
         }
     }
 }

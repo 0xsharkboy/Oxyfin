@@ -2,7 +2,7 @@
 
 mod common;
 
-use common::{authorization_is, fixture, server, to_pascal_case, variants};
+use common::{TEST_TOKEN, authorization_is, fixture, server, session, to_pascal_case, variants};
 use oxyfin_api::{Error, QuickConnectSecret};
 use serde_json::{Value, json};
 use wiremock::matchers::{body_json, header, method, path, query_param};
@@ -163,4 +163,105 @@ async fn secret_not_in_errors() {
     let err = dead.quick_connect_poll(&secret).await.unwrap_err();
     let shown = format!("{err} {err:?}");
     assert!(!shown.contains("s3cr3t"), "{shown}");
+}
+
+#[tokio::test]
+async fn authorize_posts_code() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/QuickConnect/Authorize"))
+        .and(query_param("code", "482913"))
+        .and(authorization_is(Some(TEST_TOKEN)))
+        .respond_with(ResponseTemplate::new(200).set_body_json(true))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    assert!(
+        session(&mock)
+            .quick_connect_authorize("482913")
+            .await
+            .unwrap()
+    );
+}
+
+#[tokio::test]
+async fn authorize_wrong_code_false() {
+    for status in [400, 404] {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/QuickConnect/Authorize"))
+            .respond_with(
+                ResponseTemplate::new(status).set_body_string("Error processing request."),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+        assert!(
+            !session(&mock)
+                .quick_connect_authorize("000000")
+                .await
+                .unwrap(),
+            "HTTP {status}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn authorize_when_disabled_is_a_distinct_error() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/QuickConnect/Authorize"))
+        .respond_with(ResponseTemplate::new(401).set_body_json("Quick connect is disabled"))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/QuickConnect/Enabled"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(false))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let err = session(&mock)
+        .quick_connect_authorize("482913")
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::QuickConnectDisabled), "{err:?}");
+    assert!(!err.is_unauthorized());
+}
+
+#[tokio::test]
+async fn authorize_with_a_rejected_token_stays_unauthorized() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/QuickConnect/Authorize"))
+        .respond_with(ResponseTemplate::new(401))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/QuickConnect/Enabled"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(true))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let err = session(&mock)
+        .quick_connect_authorize("482913")
+        .await
+        .unwrap_err();
+    assert!(err.is_unauthorized(), "{err:?}");
+}
+
+#[tokio::test]
+async fn authorize_other_failures_are_errors() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/QuickConnect/Authorize"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&mock)
+        .await;
+    let err = session(&mock)
+        .quick_connect_authorize("482913")
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::Status { status: 500, .. }), "{err:?}");
 }

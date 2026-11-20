@@ -730,6 +730,45 @@ impl App {
         }
     }
 
+    /// Signs another device in with the Quick Connect `code` it shows, then
+    /// tells the outcome in the settings.
+    fn authorize_device(&self, code: &str) {
+        let Some(window) = self.window() else { return };
+        let Some((id, catalog, _)) = self.services() else {
+            return;
+        };
+        if window.get_settings_authorize_state() == crate::AuthorizeState::Busy
+            || !settings::code_ready(code)
+        {
+            return;
+        }
+        window.set_settings_authorize_state(crate::AuthorizeState::Busy);
+        let code = code.to_owned();
+        self.spawn(
+            async move { catalog.authorize_device(&code).await },
+            move |app, result| {
+                let Some(window) = app.window() else { return };
+                if app.services().is_none_or(|(current, ..)| current != id) {
+                    window.set_settings_authorize_state(crate::AuthorizeState::Idle);
+                    return;
+                }
+                if let Err(error) = &result {
+                    log::warn!("cannot authorize the device: {error}");
+                }
+                if result == Err(CoreError::SessionExpired) {
+                    window.set_settings_authorize_state(crate::AuthorizeState::Idle);
+                    app.dispatch(Msg::Expired(id));
+                    return;
+                }
+                let state = settings::authorize_state(&result);
+                if state == crate::AuthorizeState::Done {
+                    window.set_settings_authorize_code("".into());
+                }
+                window.set_settings_authorize_state(state);
+            },
+        );
+    }
+
     /// Shows `message` in the notice banner, replacing the one shown. Messages
     /// that need no action leave after [`NOTICE_DURATION`]; the others stay
     /// until the user closes them.
@@ -907,6 +946,13 @@ impl App {
         window.on_settings_playback_changed(move |choice| {
             if let Some(app) = this.upgrade() {
                 app.set_playback_prefs(&choice);
+            }
+        });
+        window.on_settings_code_ready(|code| settings::code_ready(&code));
+        let this = self.this.clone();
+        window.on_settings_authorize(move |code| {
+            if let Some(app) = this.upgrade() {
+                app.authorize_device(&code);
             }
         });
         window.on_dismiss_notice(with(|app| app.dismiss_notice()));

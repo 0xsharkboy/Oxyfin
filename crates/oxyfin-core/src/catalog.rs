@@ -536,4 +536,17 @@ impl Catalog {
         let data = self.session.set_favorite(id, favorite).await?;
         Ok(UserState::from_dto(Some(&data)))
     }
+
+    /// Signs another device in as this user with the Quick Connect code it shows, typed with
+    /// or without spaces.
+    ///
+    /// Returns `Ok(false)` for an empty, wrong or expired code, and
+    /// [`CoreError::QuickConnectDisabled`] when Quick Connect is turned off on the server.
+    pub async fn authorize_device(&self, code: &str) -> Result<bool> {
+        let code = crate::quick_connect_code(code);
+        if code.is_empty() {
+            return Ok(false);
+        }
+        Ok(self.session.quick_connect_authorize(&code).await?)
+    }
 }

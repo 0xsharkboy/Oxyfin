@@ -89,7 +89,7 @@ pub use playback::{
     TRACK_MEMORY_LIMIT, TrackChoice, TrackMemory, UNLOAD_GRACE, best_audio, best_subtitle,
     chapter_at, next_chapter, player_events, previous_chapter, start_at,
 };
-pub use quick_connect::{QUICK_CONNECT_POLL_INTERVAL, QuickConnect};
+pub use quick_connect::{QUICK_CONNECT_POLL_INTERVAL, QuickConnect, quick_connect_code};
 pub use secrets::{
     FileStore, KeyringStore, MemoryStore, SecretStore, TokenStorage, TokenVault, account_key,
 };

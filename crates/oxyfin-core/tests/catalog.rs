@@ -1260,3 +1260,51 @@ async fn collections_listed_again_after_half_an_hour() {
     tokio::time::resume();
     assert_eq!(catalog.collections_of(&movie).await.unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn authorize_device_sends_the_code_without_spaces() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/QuickConnect/Authorize"))
+        .and(query_param("code", "482913"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(true))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    assert_eq!(catalog(&mock).authorize_device(" 482 913 ").await, Ok(true));
+}
+
+#[tokio::test]
+async fn authorize_device_reports_a_wrong_code_and_a_disabled_server() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/QuickConnect/Authorize"))
+        .and(query_param("code", "000000"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/QuickConnect/Authorize"))
+        .and(query_param("code", "111111"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&mock)
+        .await;
+    mount(&mock, "GET", "/QuickConnect/Enabled", json!(false)).await;
+    assert_eq!(catalog(&mock).authorize_device("000000").await, Ok(false));
+    assert_eq!(
+        catalog(&mock).authorize_device("111111").await,
+        Err(CoreError::QuickConnectDisabled)
+    );
+}
+
+#[tokio::test]
+async fn authorize_device_with_an_empty_code_asks_nothing() {
+    let mock = MockServer::start().await;
+    assert_eq!(catalog(&mock).authorize_device("  ").await, Ok(false));
+    assert!(
+        mock.received_requests()
+            .await
+            .unwrap_or_default()
+            .is_empty()
+    );
+}

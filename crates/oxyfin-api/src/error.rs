@@ -48,6 +48,9 @@ pub enum Error {
         /// Oldest supported version.
         minimum: ServerVersion,
     },
+    /// Quick Connect is turned off on the server.
+    #[error("Quick Connect is disabled on the server")]
+    QuickConnectDisabled,
 }
 
 impl Error {
