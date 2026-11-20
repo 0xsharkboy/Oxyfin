@@ -6,8 +6,8 @@ use std::time::Duration;
 use oxyfin_api::{ClientInfo, Server, Session, UserId};
 
 use crate::{
-    Config, CoreError, Paths, QUICK_CONNECT_POLL_INTERVAL, Quality, Result, SavedSession,
-    SubtitleStyle, TokenStorage, TokenVault, account_key,
+    Config, CoreError, Paths, PlaybackPrefs, QUICK_CONNECT_POLL_INTERVAL, Quality, Result,
+    SavedSession, SubtitleStyle, TokenStorage, TokenVault, account_key,
 };
 
 /// A server that passed the version check.
@@ -131,6 +131,16 @@ impl SessionManager {
     /// Saves whether the window opens fullscreen. The saved choice is unchanged on failure.
     pub fn set_start_fullscreen(&self, on: bool) -> Result<()> {
         self.update(|config| config.start_fullscreen = on)
+    }
+
+    /// Returns the playback choices, as last saved.
+    pub fn playback_prefs(&self) -> PlaybackPrefs {
+        self.config().playback
+    }
+
+    /// Saves the playback choices. The saved choices are unchanged on failure.
+    pub fn set_playback_prefs(&self, prefs: PlaybackPrefs) -> Result<()> {
+        self.update(|config| config.playback = prefs)
     }
 
     /// Reaches the server at `url` and checks that its version is supported.

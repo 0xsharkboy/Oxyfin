@@ -41,7 +41,7 @@ fn the_saved_subtitle_style_is_shown_after_a_restart() {
     );
     flow.window
         .window()
-        .set_size(LogicalSize::new(1280., 1000.));
+        .set_size(LogicalSize::new(1280., 1600.));
     let window = flow.window.as_weak();
 
     run(&flow, async move {

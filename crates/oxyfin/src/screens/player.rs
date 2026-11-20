@@ -4,8 +4,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use oxyfin_core::{
-    Chapter, PlaybackCommand, PlaybackError, PlaybackEvent, QUALITIES, Quality, SEEK_STEP, SPEEDS,
-    SegmentKind, SkippableSegment, Trickplay, TrickplaySheet, TrickplayTile, next_chapter,
+    Chapter, Episode, PlaybackCommand, PlaybackError, PlaybackEvent, QUALITIES, Quality, SEEK_STEP,
+    SPEEDS, SegmentKind, SkippableSegment, Trickplay, TrickplaySheet, TrickplayTile, next_chapter,
     previous_chapter, start_at,
 };
 use oxyfin_player::SeekTarget;
@@ -17,8 +17,8 @@ use crate::present::{
     playback_error_message, playback_title, stat_sections, subtitle_rows,
 };
 use crate::{
-    AppWindow, ChapterRow, Message, NextUp, QualityRow, SeekPreview, SkipKind, StatsTitles,
-    TrickplayGrid,
+    AppWindow, ChapterRow, Message, NextUp, QualityRow, SeekPreview, SkipKind, Skipped,
+    StatsTitles, TrickplayGrid,
 };
 
 /// Volume change of one step of the volume keys, in percent.
@@ -56,6 +56,7 @@ pub fn bind(window: &AppWindow, send: Rc<dyn Fn(PlaybackCommand)>) {
     window.on_player_command_next(command(PlaybackCommand::Next));
     window.on_player_command_play_next_now(command(PlaybackCommand::PlayNextNow));
     window.on_player_command_cancel_next_up(command(PlaybackCommand::CancelNextUp));
+    window.on_player_command_undo_skip(command(PlaybackCommand::UndoSkip));
     window.on_player_command_stats(command(PlaybackCommand::RequestStats));
 
     let to = Rc::clone(&send);
@@ -194,6 +195,7 @@ pub fn reset(window: &AppWindow) {
     window.set_player_stats_visible(false);
     clear_preview(window);
     show_segment(window, None);
+    hide_skipped(window);
     show_progress(window, Duration::ZERO, None);
 }
 
@@ -248,6 +250,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             clear_chapters(window);
             window.set_player_stats(ModelRc::default());
             show_segment(window, None);
+            hide_skipped(window);
             show_progress(window, Duration::ZERO, None);
         }
         PlaybackEvent::Ready {
@@ -296,24 +299,34 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
         PlaybackEvent::TracksChanged { audio, subtitles } => {
             show_tracks(window, &audio, &subtitles);
         }
-        PlaybackEvent::NextUpCountdown { episode, remaining } => {
-            let mut next = window.get_player_next_up();
-            let id = SharedString::from(episode.id.as_str());
-            if next.id != id {
-                next = NextUp {
-                    id,
-                    title: next_up_title(&episode),
-                    ..NextUp::default()
-                };
-            }
-            next.visible = true;
-            next.remaining = i32::try_from(remaining).unwrap_or(i32::MAX);
+        PlaybackEvent::NextUpCountdown {
+            episode,
+            remaining,
+            total,
+        } => {
+            let mut next = next_up(window, &episode);
+            next.remaining = to_int(remaining);
+            next.ask = false;
+            next.total = to_int(total);
             window.set_player_next_up(next);
+        }
+        PlaybackEvent::NextUpReady { episode } => {
+            let mut next = next_up(window, &episode);
+            next.ask = true;
+            window.set_player_next_up(next);
+        }
+        PlaybackEvent::SegmentSkipped { kind, .. } => {
+            let serial = window.get_player_skipped().serial.wrapping_add(1);
+            window.set_player_skipped(Skipped {
+                kind: skip_kind(kind),
+                serial,
+            });
         }
         PlaybackEvent::NextUpCancelled => window.set_player_next_up(NextUp::default()),
         PlaybackEvent::Stopped => {
             window.set_player_next_up(NextUp::default());
             show_segment(window, None);
+            hide_skipped(window);
         }
         PlaybackEvent::Segment(segment) => show_segment(window, segment),
         PlaybackEvent::Trickplay(trickplay) => window.set_player_trickplay(grid(&trickplay)),
@@ -538,6 +551,32 @@ fn show_progress(window: &AppWindow, position: Duration, duration: Option<Durati
     window.set_player_elapsed(clock(position));
     window.set_player_duration(duration.map_or(0.0, |duration| duration.as_secs_f32()));
     window.set_player_total(clock(duration.unwrap_or_default()));
+}
+
+/// Takes away the notice of the last automatic skip, if shown.
+fn hide_skipped(window: &AppWindow) {
+    let serial = window.get_player_skipped().serial;
+    window.set_player_skipped(Skipped {
+        kind: SkipKind::None,
+        serial,
+    });
+}
+
+/// The next episode toast for `episode`, keeping its thumbnail when it already shows it.
+fn next_up(window: &AppWindow, episode: &Episode) -> NextUp {
+    let next = window.get_player_next_up();
+    let id = SharedString::from(episode.id.as_str());
+    let mut next = if next.id == id {
+        next
+    } else {
+        NextUp {
+            id,
+            title: next_up_title(episode),
+            ..NextUp::default()
+        }
+    };
+    next.visible = true;
+    next
 }
 
 /// Offers to skip `segment`, or hides the offer.

@@ -74,6 +74,8 @@ export global Theme {
     out property <length> seek-marker-height: 12px;
     // Side padding of the seek preview label.
     out property <length> seek-label-padding-x: 10px;
+    // Countdown line along the bottom edge of the next episode toast.
+    out property <length> countdown-height: 3px;
 
     out property <length> radius-indicator: 2px;
     out property <length> radius-xs: 4px;
@@ -165,9 +167,14 @@ export struct StatSection {
     rows: [StatRow],
 }
 
-// The next episode toast of the player.
 // Part of the playing item the player offers to skip, mirroring the core `SegmentKind`.
 export enum SkipKind { none, intro, recap, preview, credits }
+
+// A segment skipped without asking: `kind` is none when nothing was; each skip has a new `serial`.
+export struct Skipped {
+    kind: SkipKind,
+    serial: int,
+}
 
 // Seek bar thumbnails of the playing item, mirroring the core `Trickplay`; `count` is 0 without any.
 export struct TrickplayGrid {
@@ -198,11 +205,15 @@ export struct SeekPreview {
     height: int,
 }
 
+// The next episode offered at the end of an episode. `ask` waits for the user; otherwise it starts
+// once `remaining` of `total` seconds have passed.
 export struct NextUp {
     visible: bool,
     id: string,
     title: string,
     remaining: int,
+    total: int,
+    ask: bool,
     image: image,
     has-image: bool,
 }

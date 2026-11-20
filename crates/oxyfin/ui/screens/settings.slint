@@ -15,6 +15,15 @@ export struct SubtitleChoice {
     position: int,
 }
 
+// Playback choices, as indexes into the choices of each row (see `oxyfin_core::PlaybackPrefs`).
+export struct PlaybackChoice {
+    autoplay: int,
+    countdown: int,
+    intros: int,
+    recaps: int,
+    tracks: int,
+}
+
 component SettingRow inherits HorizontalLayout {
     in property <string> label;
     in property <string> value;
@@ -40,6 +49,7 @@ component ChoiceRow inherits HorizontalLayout {
     in property <string> caption;
     in property <[string]> options;
     in property <int> selected;
+    in property <bool> enabled: true;
     callback chosen(index: int);
 
     spacing: Theme.space-lg;
@@ -69,6 +79,7 @@ component ChoiceRow inherits HorizontalLayout {
             Chip {
                 label: option;
                 selected: index == root.selected;
+                enabled: root.enabled;
                 clicked => {
                     root.chosen(index);
                 }
@@ -152,6 +163,8 @@ export component SettingsScreen inherits Rectangle {
     in property <bool> start-fullscreen;
     callback subtitles-changed(choice: SubtitleChoice);
     callback start-fullscreen-changed(on: bool);
+    in property <PlaybackChoice> playback;
+    callback playback-changed(choice: PlaybackChoice);
 
     accessible-role: groupbox;
     accessible-label: @tr("Settings");
@@ -242,6 +255,79 @@ export component SettingsScreen inherits Rectangle {
                             selected: root.start-fullscreen ? 1 : 0;
                             chosen(index) => {
                                 root.start-fullscreen-changed(index == 1);
+                            }
+                        }
+                        ChoiceRow {
+                            label: @tr("Play the next episode");
+                            options: [@tr("Ask"), @tr("Automatically")];
+                            selected: root.playback.autoplay;
+                            chosen(index) => {
+                                root.playback-changed({
+                                    autoplay: index,
+                                    countdown: root.playback.countdown,
+                                    intros: root.playback.intros,
+                                    recaps: root.playback.recaps,
+                                    tracks: root.playback.tracks,
+                                });
+                            }
+                        }
+                        ChoiceRow {
+                            label: @tr("Countdown");
+                            caption: @tr("Before the next episode starts");
+                            options: [@tr("{} s", 5), @tr("{} s", 10), @tr("{} s", 15), @tr("{} s", 30)];
+                            selected: root.playback.countdown;
+                            enabled: root.playback.autoplay == 1;
+                            chosen(index) => {
+                                root.playback-changed({
+                                    autoplay: root.playback.autoplay,
+                                    countdown: index,
+                                    intros: root.playback.intros,
+                                    recaps: root.playback.recaps,
+                                    tracks: root.playback.tracks,
+                                });
+                            }
+                        }
+                        ChoiceRow {
+                            label: @tr("Intros");
+                            options: [@tr("Show a skip button"), @tr("Skip automatically")];
+                            selected: root.playback.intros;
+                            chosen(index) => {
+                                root.playback-changed({
+                                    autoplay: root.playback.autoplay,
+                                    countdown: root.playback.countdown,
+                                    intros: index,
+                                    recaps: root.playback.recaps,
+                                    tracks: root.playback.tracks,
+                                });
+                            }
+                        }
+                        ChoiceRow {
+                            label: @tr("Recaps and previews");
+                            options: [@tr("Show a skip button"), @tr("Skip automatically")];
+                            selected: root.playback.recaps;
+                            chosen(index) => {
+                                root.playback-changed({
+                                    autoplay: root.playback.autoplay,
+                                    countdown: root.playback.countdown,
+                                    intros: root.playback.intros,
+                                    recaps: index,
+                                    tracks: root.playback.tracks,
+                                });
+                            }
+                        }
+                        ChoiceRow {
+                            label: @tr("Audio and subtitles");
+                            caption: @tr("Keeps the language you pick for the rest of the series");
+                            options: [@tr("Server defaults"), @tr("Remember per series")];
+                            selected: root.playback.tracks;
+                            chosen(index) => {
+                                root.playback-changed({
+                                    autoplay: root.playback.autoplay,
+                                    countdown: root.playback.countdown,
+                                    intros: root.playback.intros,
+                                    recaps: root.playback.recaps,
+                                    tracks: index,
+                                });
                             }
                         }
                     }

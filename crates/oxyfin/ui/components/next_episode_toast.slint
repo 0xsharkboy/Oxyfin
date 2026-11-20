@@ -3,11 +3,15 @@ import { Icons } from "../icons.slint";
 import { Button, ButtonStyle } from "button.slint";
 import { BodyStrongText, LabelText } from "text.slint";
 
-// End of episode toast: the next episode starts when the countdown ends, unless cancelled.
+// End of episode toast: the next episode starts when the countdown ends, unless cancelled, or
+// waits for the user when they asked so.
 export component NextEpisodeToast inherits Rectangle {
     in property <NextUp> next-up;
     callback play-now();
     callback cancel();
+
+    // Part of the countdown already elapsed, from 0 to 1.
+    property <float> elapsed: root.next-up.total > 0 ? 1 - root.next-up.remaining / root.next-up.total : 0;
 
     accessible-role: groupbox;
     accessible-label: @tr("Next episode");
@@ -49,7 +53,7 @@ export component NextEpisodeToast inherits Rectangle {
 
             LabelText {
                 accessible-role: text;
-                text: @tr("Next episode in {} s", root.next-up.remaining);
+                text: root.next-up.ask ? @tr("Up next") : @tr("Next episode in {} s", root.next-up.remaining);
                 color: Theme.accent;
             }
 
@@ -78,12 +82,39 @@ export component NextEpisodeToast inherits Rectangle {
                 Button {
 
                     focus-on-click: false;
-                    label: @tr("Cancel");
+                    label: root.next-up.ask ? @tr("Close") : @tr("Cancel");
                     style: ButtonStyle.ghost;
                     clicked => {
                         root.cancel();
                     }
                 }
+            }
+        }
+    }
+
+    // Clipped apart from the toast, so its drop shadow stays.
+    if !root.next-up.ask: Rectangle {
+        accessible-role: progress-indicator;
+        accessible-label: @tr("Countdown");
+        accessible-value: root.next-up.remaining;
+        accessible-value-minimum: 0;
+        accessible-value-maximum: root.next-up.total;
+        width: 100%;
+        height: 100%;
+        border-radius: root.border-radius;
+        clip: true;
+
+        Rectangle {
+            y: parent.height - self.height;
+            width: 100%;
+            height: Theme.countdown-height;
+            background: Theme.progress-track;
+
+            Rectangle {
+                x: 0;
+                width: parent.width * root.elapsed;
+                background: Theme.accent;
+                animate width { duration: 1s; }
             }
         }
     }

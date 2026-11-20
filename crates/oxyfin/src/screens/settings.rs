@@ -1,12 +1,13 @@
-//! Settings screen: the signed-in account, the subtitle style and the
-//! application version.
+//! Settings screen: the signed-in account, the playback choices, the subtitle
+//! style and the application version.
 
 use oxyfin_core::{
-    SubtitleBackground, SubtitleColor, SubtitlePosition, SubtitleSize, SubtitleStyle, TokenStorage,
+    COUNTDOWNS, PlaybackPrefs, SubtitleBackground, SubtitleColor, SubtitlePosition, SubtitleSize,
+    SubtitleStyle, TokenStorage,
 };
 
 use crate::state::SessionInfo;
-use crate::{AppWindow, SubtitleChoice, TokenStore};
+use crate::{AppWindow, PlaybackChoice, SubtitleChoice, TokenStore};
 
 /// Version of the application, shown on the settings screen.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -56,6 +57,35 @@ pub fn subtitle_style(choice: &SubtitleChoice) -> SubtitleStyle {
         color: pick(&SubtitleColor::ALL, choice.color),
         background: pick(&SubtitleBackground::ALL, choice.background),
         position: pick(&SubtitlePosition::ALL, choice.position),
+    }
+}
+
+/// The chips selected for `prefs`. A countdown the chips do not offer selects none.
+pub fn playback_choice(prefs: PlaybackPrefs) -> PlaybackChoice {
+    PlaybackChoice {
+        autoplay: i32::from(prefs.autoplay_next),
+        countdown: COUNTDOWNS
+            .iter()
+            .position(|countdown| *countdown == prefs.countdown)
+            .and_then(|index| i32::try_from(index).ok())
+            .unwrap_or(-1),
+        intros: i32::from(prefs.skip_intros),
+        recaps: i32::from(prefs.skip_recaps),
+        tracks: i32::from(prefs.remember_tracks),
+    }
+}
+
+/// The choices the chips select; a countdown index out of range keeps the one of `previous`.
+pub fn playback_prefs(choice: &PlaybackChoice, previous: PlaybackPrefs) -> PlaybackPrefs {
+    PlaybackPrefs {
+        autoplay_next: choice.autoplay == 1,
+        countdown: usize::try_from(choice.countdown)
+            .ok()
+            .and_then(|index| COUNTDOWNS.get(index).copied())
+            .unwrap_or(previous.countdown),
+        skip_intros: choice.intros == 1,
+        skip_recaps: choice.recaps == 1,
+        remember_tracks: choice.tracks == 1,
     }
 }
 
@@ -149,6 +179,40 @@ mod tests {
                 ..SubtitleChoice::default()
             }
         );
+    }
+
+    #[test]
+    fn playback_choices_follow_the_order_of_the_chips() {
+        let defaults = playback_choice(PlaybackPrefs::default());
+        assert_eq!(
+            defaults,
+            PlaybackChoice {
+                autoplay: 1,
+                countdown: 1,
+                intros: 0,
+                recaps: 0,
+                tracks: 1,
+            }
+        );
+        assert_eq!(
+            playback_prefs(&defaults, PlaybackPrefs::default()),
+            PlaybackPrefs::default()
+        );
+        let prefs = PlaybackPrefs {
+            autoplay_next: false,
+            countdown: std::time::Duration::from_secs(30),
+            skip_intros: true,
+            skip_recaps: true,
+            remember_tracks: false,
+        };
+        let choice = playback_choice(prefs);
+        assert_eq!(choice.countdown, 3);
+        assert_eq!(playback_prefs(&choice, PlaybackPrefs::default()), prefs);
+        let odd = PlaybackChoice {
+            countdown: 7,
+            ..choice
+        };
+        assert_eq!(playback_prefs(&odd, prefs).countdown, prefs.countdown);
     }
 
     #[test]

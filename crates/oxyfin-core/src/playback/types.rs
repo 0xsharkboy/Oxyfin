@@ -5,8 +5,9 @@ use std::time::Duration;
 
 use oxyfin_api::{ItemId, PlayMethod};
 use oxyfin_player::{PlaybackStats, PlayerError, SeekTarget};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use super::{AudioOption, Chapter, Quality, SkippableSegment, SubtitleOption};
+use super::{AudioOption, Chapter, Quality, SegmentKind, SkippableSegment, SubtitleOption};
 use crate::SubtitleStyle;
 use crate::error::CoreError;
 use crate::models::{Episode, ImageRef};
@@ -16,8 +17,13 @@ use crate::trickplay::Trickplay;
 pub const PROGRESS_INTERVAL: Duration = Duration::from_secs(10);
 /// Step of the skip backward and skip forward buttons.
 pub const SEEK_STEP: Duration = Duration::from_secs(10);
-/// Length of the countdown before the next episode starts.
-pub const NEXT_UP_COUNTDOWN: Duration = Duration::from_secs(10);
+/// Lengths of the countdown before the next episode starts, offered to the user.
+pub const COUNTDOWNS: [Duration; 4] = [
+    Duration::from_secs(5),
+    Duration::from_secs(10),
+    Duration::from_secs(15),
+    Duration::from_secs(30),
+];
 /// Longest wait for the last report when shutting down.
 pub const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 /// Playback speeds offered to the user.
@@ -51,6 +57,70 @@ impl Default for PlaybackTimings {
             unload_grace: UNLOAD_GRACE,
         }
     }
+}
+
+/// What the user chose for the end of an episode and for skippable segments.
+///
+/// Stored as is in the configuration: a countdown that is not one of
+/// [`COUNTDOWNS`] reads as the default one, and a missing field as its default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlaybackPrefs {
+    /// Whether the next episode starts by itself after the countdown, rather
+    /// than waiting for the user.
+    pub autoplay_next: bool,
+    /// Length of the countdown before the next episode starts.
+    #[serde(
+        serialize_with = "countdown_to_secs",
+        deserialize_with = "countdown_from_secs"
+    )]
+    pub countdown: Duration,
+    /// Whether intros are skipped without asking.
+    pub skip_intros: bool,
+    /// Whether recaps and previews are skipped without asking.
+    pub skip_recaps: bool,
+    /// Whether the audio and subtitle choices are kept for the rest of a series.
+    pub remember_tracks: bool,
+}
+
+impl Default for PlaybackPrefs {
+    fn default() -> Self {
+        Self {
+            autoplay_next: true,
+            countdown: Duration::from_secs(10),
+            skip_intros: false,
+            skip_recaps: false,
+            remember_tracks: true,
+        }
+    }
+}
+
+impl PlaybackPrefs {
+    /// Whether segments of `kind` are skipped without asking. Credits never
+    /// are: they lead to the next episode.
+    pub fn skips(&self, kind: SegmentKind) -> bool {
+        match kind {
+            SegmentKind::Intro => self.skip_intros,
+            SegmentKind::Recap | SegmentKind::Preview => self.skip_recaps,
+            SegmentKind::Credits => false,
+        }
+    }
+}
+
+fn countdown_to_secs<S: Serializer>(
+    countdown: &Duration,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.serialize_u64(countdown.as_secs())
+}
+
+fn countdown_from_secs<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Duration, D::Error> {
+    let countdown = Duration::from_secs(u64::deserialize(deserializer)?);
+    Ok(if COUNTDOWNS.contains(&countdown) {
+        countdown
+    } else {
+        PlaybackPrefs::default().countdown
+    })
 }
 
 /// Where playback of an item starts.
@@ -90,10 +160,17 @@ pub enum PlaybackCommand {
     ///
     /// Sent while an item loads, it waits like [`PlaybackCommand::Previous`].
     Next,
-    /// Start the next episode without waiting for the countdown.
+    /// Start the next episode offered at the end, without waiting for the
+    /// countdown.
     PlayNextNow,
-    /// Cancel the next episode countdown.
+    /// Cancel the next episode countdown, or the offer of the next episode.
     CancelNextUp,
+    /// Apply the user's playback choices, from the next end of an episode
+    /// and the next segment on.
+    SetPrefs(PlaybackPrefs),
+    /// Go back to where the last automatic skip of the current item
+    /// happened. The segment is then only offered, never skipped again.
+    UndoSkip,
     /// Set the playback speed.
     SetSpeed(f64),
     /// Set the volume, in percent.
@@ -193,7 +270,9 @@ pub enum PlaybackEvent {
     /// Segments come from the server after the item starts; without them,
     /// or when fetching them fails, this event never comes. Skipping is a
     /// [`PlaybackCommand::Seek`] to [`SkippableSegment::end`]. The real end
-    /// of the item always leaves the segment.
+    /// of the item always leaves the segment. A segment the
+    /// [`PlaybackPrefs`] skip is not offered when entered:
+    /// [`PlaybackEvent::SegmentSkipped`] comes instead, once per segment.
     Segment(Option<SkippableSegment>),
     /// The paused state changed.
     Paused(bool),
@@ -222,15 +301,32 @@ pub enum PlaybackEvent {
     /// duration or past 95 % of it, or the duration is unknown. An earlier
     /// end is reported as [`PlaybackEvent::Stopped`].
     Ended,
-    /// The next episode starts in `remaining` seconds.
+    /// The next episode starts in `remaining` seconds, unless cancelled.
     NextUpCountdown {
         /// Episode about to start.
         episode: Box<Episode>,
         /// Seconds left.
         remaining: u32,
+        /// Seconds of the whole countdown.
+        total: u32,
     },
-    /// The next episode countdown was cancelled.
+    /// The item played to its end and the next episode waits for
+    /// [`PlaybackCommand::PlayNextNow`]: the user asked not to start it by
+    /// itself.
+    NextUpReady {
+        /// Episode offered.
+        episode: Box<Episode>,
+    },
+    /// The next episode countdown, or its offer, was cancelled.
     NextUpCancelled,
+    /// A segment was skipped without asking, from `from` to its end.
+    /// [`PlaybackCommand::UndoSkip`] goes back to `from`.
+    SegmentSkipped {
+        /// What the segment held.
+        kind: SegmentKind,
+        /// Where the skip happened.
+        from: Duration,
+    },
     /// Playback stopped.
     Stopped,
     /// Playback or a command failed.

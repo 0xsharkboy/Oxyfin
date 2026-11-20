@@ -48,7 +48,7 @@ fn start() -> (common::Flow, Shared) {
     );
     flow.window
         .window()
-        .set_size(LogicalSize::new(1280., 1000.));
+        .set_size(LogicalSize::new(1280., 1600.));
     (flow, shared)
 }
 
