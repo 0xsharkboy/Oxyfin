@@ -16,8 +16,10 @@ pub(super) struct Countdown {
     remaining: u32,
     total: u32,
     tick: Duration,
-    /// When the next step happens; `None` while waiting for the user.
+    /// When the next step happens; `None` while waiting for the user or held.
     pub(super) deadline: Option<Instant>,
+    /// Time left before the next step while playback is paused.
+    held: Option<Duration>,
 }
 
 impl Countdown {
@@ -34,6 +36,7 @@ impl Countdown {
             total,
             tick,
             deadline: Some(Instant::now() + tick),
+            held: None,
         };
         let event = countdown.event();
         (countdown, event)
@@ -50,6 +53,7 @@ impl Countdown {
             total: 0,
             tick: Duration::ZERO,
             deadline: None,
+            held: None,
         };
         (countdown, event)
     }
@@ -63,6 +67,20 @@ impl Countdown {
         }
         self.deadline = self.deadline.map(|deadline| deadline + self.tick);
         Some(self.event())
+    }
+
+    /// Stops counting until [`Countdown::resume`], keeping the time left.
+    pub(super) fn hold(&mut self) {
+        if let Some(deadline) = self.deadline.take() {
+            self.held = Some(deadline.saturating_duration_since(Instant::now()));
+        }
+    }
+
+    /// Counts again from where [`Countdown::hold`] stopped.
+    pub(super) fn resume(&mut self) {
+        if let Some(left) = self.held.take() {
+            self.deadline = Some(Instant::now() + left);
+        }
     }
 
     /// The episode offered.
