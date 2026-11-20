@@ -3459,3 +3459,39 @@ async fn skip_button_mode_never_seeks() {
     assert!(skipped(&seen).is_empty(), "{seen:?}");
     assert!(!h.player.calls().iter().any(|c| matches!(c, Call::Seek(_))));
 }
+
+#[tokio::test]
+async fn a_quality_reload_keeps_the_skips() {
+    let mut h = segmented(
+        vec![segment_json("Intro", secs(5), secs(9))],
+        prefs(|p| p.skip_intros = true),
+    )
+    .await;
+    h.sink.send(PlayerEvent::Position(secs(5)));
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::SegmentSkipped { .. })
+    })
+    .await;
+    land(&h, secs(9));
+    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Seeked)).await;
+    h.handle.send(PlaybackCommand::UndoSkip);
+    h.player
+        .wait_call(|c| *c == Call::Seek(SeekTarget::Absolute(secs(5))))
+        .await;
+    land(&h, secs(5));
+    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Seeked)).await;
+
+    h.handle.send(PlaybackCommand::SetQuality(QUALITIES[3]));
+    h.player.wait_call(|c| *c == Call::Stop).await;
+    h.sink.send(PlayerEvent::Unloaded(UnloadReason::Stopped));
+    wait_loads(&h, 2).await;
+    h.file_loaded_events().await;
+    h.sink.send(PlayerEvent::Position(secs(6)));
+    let seen = h.stop().await;
+    assert!(skipped(&seen).is_empty(), "{seen:?}");
+    assert!(
+        segment_events(&seen).contains(&Some(intro(5, 9))),
+        "{seen:?}"
+    );
+    assert_eq!(seeks_to(&h, secs(9)), 1);
+}
