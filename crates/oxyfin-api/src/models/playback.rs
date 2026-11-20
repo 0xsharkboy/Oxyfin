@@ -120,6 +120,16 @@ impl MediaSourceInfo {
         self.transcoding_parameter("AudioStreamIndex")?.parse().ok()
     }
 
+    /// The subtitle stream the transcode carries in its picture or its
+    /// playlist, as listed in the transcoding URL. `None` when it carries
+    /// none, or without a transcode.
+    pub fn transcoding_subtitle_stream_index(&self) -> Option<i32> {
+        self.transcoding_parameter("SubtitleStreamIndex")?
+            .parse()
+            .ok()
+            .filter(|index: &i32| *index >= 0)
+    }
+
     fn transcoding_parameter(&self, name: &str) -> Option<String> {
         let url = self.transcoding_url.as_deref()?;
         let query = url.split_once('?').map_or("", |(_, query)| query);

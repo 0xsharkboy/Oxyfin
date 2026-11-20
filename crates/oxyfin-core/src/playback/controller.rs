@@ -629,6 +629,7 @@ impl PlaybackController {
             request.item = prepared.item.clone();
             request.mode = PlayMode::Auto;
         }
+        request.options.media_source_id = Some(prepared.source.id.clone());
         request.options.audio_stream_index = Some(wanted);
         Some(request)
     }
@@ -689,6 +690,7 @@ impl PlaybackController {
             mode: PlayMode::FromStart,
             options: PlaybackOptions {
                 max_streaming_bitrate: self.quality.max_bitrate(),
+                media_source_id: Some(current.source.id.clone()),
                 audio_stream_index: resume.audio,
                 subtitle_stream_index: Some(text_subtitle(&current.source, resume.subtitle)),
                 max_height: self.quality.max_height(),

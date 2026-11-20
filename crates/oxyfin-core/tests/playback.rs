@@ -2677,6 +2677,8 @@ async fn a_quality_change_reloads_at_the_position_with_the_tracks() {
         infos[1]["DeviceProfile"]["CodecProfiles"][0]["Conditions"][0]["Value"],
         json!("480")
     );
+    assert!(infos[0].get("MediaSourceId").is_none(), "{:?}", infos[0]);
+    assert_eq!(infos[1]["MediaSourceId"], json!(MOVIE_ID));
     assert_eq!(infos[1]["AudioStreamIndex"], json!(2));
     assert_eq!(infos[1]["SubtitleStreamIndex"], json!(0));
     let stopped = wait_requests(&h.mock, STOPPED, 1).await;
@@ -2730,6 +2732,7 @@ async fn an_audio_change_during_a_transcode_reloads_with_that_audio() {
     let reload = h.wait_load(2).await;
     assert_eq!(reload.start, Some(Duration::from_secs(4)));
     let infos = wait_requests(&h.mock, PLAYBACK_INFO, 2).await;
+    assert_eq!(infos[1]["MediaSourceId"], json!(MOVIE_ID));
     assert_eq!(infos[1]["AudioStreamIndex"], json!(3));
     assert!(
         !h.player
@@ -3834,6 +3837,7 @@ async fn remembered_audio_is_asked_of_a_transcode() {
     );
     let infos = bodies(&h.mock, &route).await;
     assert_eq!(infos.len(), 2);
+    assert_eq!(infos[1]["MediaSourceId"], json!(MOVIE_ID));
     assert_eq!(infos[1]["AudioStreamIndex"], json!(3));
     let ready = h.loaded_with(transcode_tracks()).await;
     let PlaybackEvent::Ready { audio, .. } = ready else {

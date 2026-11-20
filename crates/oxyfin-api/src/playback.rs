@@ -45,6 +45,9 @@ pub struct PlaybackOptions {
     /// Highest bitrate the player accepts, in bits per second: a file above it
     /// is transcoded. `None` accepts any bitrate.
     pub max_streaming_bitrate: Option<u64>,
+    /// Media source the stream indexes belong to: the server ignores them
+    /// without it.
+    pub media_source_id: Option<MediaSourceId>,
     /// Audio stream a transcode carries; the server's default when `None`.
     pub audio_stream_index: Option<i32>,
     /// Subtitle stream to deliver, `-1` for none; the server's default when `None`.
@@ -113,6 +116,8 @@ struct PlaybackInfoBody<'a> {
     user_id: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_streaming_bitrate: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    media_source_id: Option<&'a MediaSourceId>,
     #[serde(skip_serializing_if = "Option::is_none")]
     audio_stream_index: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -193,6 +198,7 @@ impl Session {
         let body = PlaybackInfoBody {
             user_id: self.user_id().as_str(),
             max_streaming_bitrate: options.max_streaming_bitrate,
+            media_source_id: options.media_source_id.as_ref(),
             audio_stream_index: options.audio_stream_index,
             subtitle_stream_index: options.subtitle_stream_index,
             enable_direct_play: true,
