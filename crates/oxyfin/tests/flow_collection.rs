@@ -16,6 +16,16 @@ fn movie_shows_collection_link() {
     run(&flow, async move {
         let window = window.upgrade().ok_or("window dropped")?;
         open_collection(&window).await?;
+        let watched = wait_role(&window, "Mark as watched", AccessibleRole::Button).await?;
+        let heart = wait_role(&window, "Add to favorites", AccessibleRole::Button).await?;
+        let middle = |element: &i_slint_backend_testing::ElementHandle| {
+            element.absolute_position().y + element.size().height / 2.
+        };
+        if (middle(&watched) - middle(&heart)).abs() > 1.
+            || heart.absolute_position().x < watched.absolute_position().x
+        {
+            return Err("the favorite button is not on the line of the buttons".into());
+        }
         wait_visible(&window, "Northbound Collection").await?;
         wait_visible(&window, CAPTION).await?;
         let row = wait_role(&window, ROW, AccessibleRole::List).await?;

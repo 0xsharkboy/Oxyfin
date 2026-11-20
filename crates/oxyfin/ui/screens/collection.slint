@@ -121,6 +121,7 @@ export component CollectionScreen inherits Rectangle {
 
                     if root.collection.play-title != "": Button {
                         label: @tr("Play {}", root.collection.play-title);
+                        max-width: Theme.titled-button-width;
                         icon: Icons.play;
                         clicked => {
                             root.play();
