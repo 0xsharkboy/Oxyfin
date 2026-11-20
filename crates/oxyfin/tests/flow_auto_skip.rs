@@ -228,3 +228,53 @@ fn toast_ask_mode_has_no_countdown() {
     assert_eq!(line.absolute_position(), toast.absolute_position());
     assert_eq!(line.size(), toast.size());
 }
+
+fn countdown(remaining: u32) -> PlaybackEvent {
+    PlaybackEvent::NextUpCountdown {
+        episode: Box::new(episode()),
+        remaining,
+        total: 10,
+    }
+}
+
+/// Width of the countdown fill against the width of its line.
+fn fill_ratio(window: &AppWindow) -> f32 {
+    let line =
+        visible(window, "Countdown", AccessibleRole::ProgressIndicator).expect("no countdown line");
+    let fill = ElementHandle::find_by_element_id(window, "NextEpisodeToast::fill")
+        .next()
+        .expect("no countdown fill");
+    fill.size().width / line.size().width
+}
+
+#[test]
+fn countdown_line_fills_by_the_last_step() {
+    let (window, _sent) = playing();
+    player::apply(&window, PlaybackEvent::Ended);
+    player::apply(&window, countdown(10));
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1_000));
+    assert!(
+        (fill_ratio(&window) - 0.1).abs() < 0.01,
+        "{}",
+        fill_ratio(&window)
+    );
+
+    player::apply(&window, countdown(5));
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1_000));
+    assert!(
+        (fill_ratio(&window) - 0.6).abs() < 0.01,
+        "{}",
+        fill_ratio(&window)
+    );
+
+    player::apply(&window, countdown(1));
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(500));
+    let halfway = fill_ratio(&window);
+    assert!(halfway > 0.6 && halfway < 1., "{halfway}");
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(500));
+    assert!(
+        (fill_ratio(&window) - 1.).abs() < 0.01,
+        "{}",
+        fill_ratio(&window)
+    );
+}
