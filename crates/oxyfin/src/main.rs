@@ -12,6 +12,8 @@ use slint::{BackendSelector, ComponentHandle, LogicalSize, PhysicalSize};
 
 /// How long the exit waits for the sessions still shutting down.
 const EXIT_GRACE: Duration = Duration::from_secs(3);
+/// How long the exit waits for the Discord activity to clear.
+const DISCORD_GRACE: Duration = Duration::from_secs(1);
 
 fn main() -> ExitCode {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
@@ -100,6 +102,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         app.start_mpris();
         app.start_inhibitor();
     }
+    app.start_discord();
     let fullscreen =
         launch::fullscreen_requested(std::env::args_os().skip(1)) || app.start_fullscreen();
     window.window().set_fullscreen(fullscreen);
@@ -118,6 +121,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         log::warn!("cannot hide the window: {error}");
     }
 
+    if let Some(discord) = app.take_discord() {
+        discord.shutdown(DISCORD_GRACE);
+    }
     let pending = app.take_pending_ends();
     runtime.block_on(async {
         let deadline = tokio::time::Instant::now() + EXIT_GRACE;

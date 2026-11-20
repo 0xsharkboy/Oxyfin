@@ -19,6 +19,9 @@ finish-args:
   - --own-name=org.mpris.MediaPlayer2.oxyfin
   # The screen is kept awake through the portal, or this service without one.
   - --talk-name=org.freedesktop.ScreenSaver
+  # Discord shows what plays, when the user turns it on: its IPC socket, native or Flatpak.
+  - --filesystem=xdg-run/discord-ipc-0
+  - --filesystem=xdg-run/app/com.discordapp.Discord:create
 
 cleanup:
   - /include

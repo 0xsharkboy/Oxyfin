@@ -431,6 +431,7 @@ mod tests {
                 title: "A".into(),
                 series_name: None,
                 episode_label: None,
+                year: None,
                 artwork: None,
             },
         })

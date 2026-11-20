@@ -40,7 +40,7 @@ This file is the single source of truth for planned work. An item is checked onl
 - [x] Server discovery on the local network
 - [x] Authorize another device (Quick Connect code entry)
 - [x] Fullscreen launch option
-- [ ] Discord Rich Presence (opt-in, never sends the server address)
+- [x] Discord Rich Presence (opt-in, never sends the server address)
 - [ ] AUR package
 
 ## Milestone 3: Robustness and reach

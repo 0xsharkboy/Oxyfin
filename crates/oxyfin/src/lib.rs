@@ -7,6 +7,7 @@ mod generated {
 
 pub mod app;
 mod back_cache;
+pub mod discord;
 pub mod generation;
 pub mod images;
 #[cfg(target_os = "linux")]

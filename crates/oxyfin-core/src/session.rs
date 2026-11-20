@@ -170,6 +170,16 @@ impl SessionManager {
         self.update(|config| config.start_fullscreen = on)
     }
 
+    /// Returns whether Discord shows what plays, as last saved.
+    pub fn discord(&self) -> bool {
+        self.config().discord
+    }
+
+    /// Saves whether Discord shows what plays. The saved choice is unchanged on failure.
+    pub fn set_discord(&self, on: bool) -> Result<()> {
+        self.update(|config| config.discord = on)
+    }
+
     /// Returns the playback choices, as last saved.
     pub fn playback_prefs(&self) -> PlaybackPrefs {
         self.config().playback

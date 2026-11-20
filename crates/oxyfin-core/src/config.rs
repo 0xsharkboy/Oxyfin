@@ -56,6 +56,9 @@ pub struct Config {
     /// segments. Unreadable content falls back to the defaults.
     #[serde(default, deserialize_with = "lenient")]
     pub playback: PlaybackPrefs,
+    /// Whether Discord shows what plays.
+    #[serde(default)]
+    pub discord: bool,
 }
 
 fn storage<E: std::fmt::Display>(error: E) -> CoreError {
@@ -73,6 +76,7 @@ impl Config {
             quality: Quality::Original,
             start_fullscreen: false,
             playback: PlaybackPrefs::default(),
+            discord: false,
         }
     }
 
@@ -211,6 +215,23 @@ mod tests {
         let config = Config::load_or_create(&paths).unwrap();
         assert_eq!(config.device_id, "abc");
         assert_eq!(config.quality, Quality::Original);
+    }
+
+    #[test]
+    fn discord_round_trips_and_defaults_to_off() {
+        let (_dir, paths) = temp();
+        let mut config = Config::load_or_create(&paths).unwrap();
+        assert!(!config.discord);
+        config.discord = true;
+        config.save(&paths).unwrap();
+        assert!(Config::load_or_create(&paths).unwrap().discord);
+
+        fs::write(
+            paths.config_dir.join("config.json"),
+            r#"{"device_id":"abc"}"#,
+        )
+        .unwrap();
+        assert!(!Config::load_or_create(&paths).unwrap().discord);
     }
 
     #[test]

@@ -61,6 +61,7 @@ mod images;
 mod models;
 mod paths;
 mod playback;
+mod presence;
 mod quick_connect;
 mod secrets;
 mod session;
@@ -89,6 +90,7 @@ pub use playback::{
     TRACK_MEMORY_LIMIT, TrackChoice, TrackMemory, UNLOAD_GRACE, best_audio, best_subtitle,
     chapter_at, next_chapter, player_events, previous_chapter, start_at,
 };
+pub use presence::{PRESENCE_ASSET, PRESENCE_TEXT_LIMIT, Presence, TMDB_IMAGES, presence_for};
 pub use quick_connect::{QUICK_CONNECT_POLL_INTERVAL, QuickConnect, quick_connect_code};
 pub use secrets::{
     FileStore, KeyringStore, MemoryStore, SecretStore, TokenStorage, TokenVault, account_key,

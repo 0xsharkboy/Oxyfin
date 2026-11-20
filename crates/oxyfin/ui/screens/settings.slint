@@ -167,6 +167,9 @@ export component SettingsScreen inherits Rectangle {
     in property <bool> start-fullscreen;
     callback subtitles-changed(choice: SubtitleChoice);
     callback start-fullscreen-changed(on: bool);
+    // Whether Discord shows what plays.
+    in property <bool> discord;
+    callback discord-changed(on: bool);
     in property <PlaybackChoice> playback;
     callback playback-changed(choice: PlaybackChoice);
     // The Quick Connect code typed to sign another device in.
@@ -406,6 +409,21 @@ export component SettingsScreen inherits Rectangle {
                                     background: root.subtitles.background,
                                     position: index,
                                 });
+                            }
+                        }
+                    }
+
+                    SettingSection {
+                        title: @tr("Integrations");
+
+                        ChoiceRow {
+                            // Brand name, not translated.
+                            label: "Discord";
+                            caption: @tr("Shows what you watch on your Discord profile. Your server address is never shared.");
+                            options: [@tr("Off"), @tr("On")];
+                            selected: root.discord ? 1 : 0;
+                            chosen(index) => {
+                                root.discord-changed(index == 1);
                             }
                         }
                     }

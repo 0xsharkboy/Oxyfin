@@ -225,6 +225,7 @@ fn seek_bar_has_one_gap_per_inner_chapter() {
                 title: "Other".into(),
                 series_name: None,
                 episode_label: None,
+                year: None,
                 artwork: None,
             },
         },

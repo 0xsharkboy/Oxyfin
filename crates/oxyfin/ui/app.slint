@@ -264,6 +264,8 @@ export component AppWindow inherits Window {
     callback settings-subtitles-changed(choice: SubtitleChoice);
     in property <bool> settings-start-fullscreen;
     callback settings-start-fullscreen-changed(on: bool);
+    in property <bool> settings-discord;
+    callback settings-discord-changed(on: bool);
     in property <PlaybackChoice> settings-playback;
     callback settings-playback-changed(choice: PlaybackChoice);
     in-out property <string> settings-authorize-code;
@@ -756,6 +758,10 @@ export component AppWindow inherits Window {
             start-fullscreen: root.settings-start-fullscreen;
             start-fullscreen-changed(on) => {
                 root.settings-start-fullscreen-changed(on);
+            }
+            discord: root.settings-discord;
+            discord-changed(on) => {
+                root.settings-discord-changed(on);
             }
             playback: root.settings-playback;
             playback-changed(choice) => {
