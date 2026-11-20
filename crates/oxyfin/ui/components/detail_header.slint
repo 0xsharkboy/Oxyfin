@@ -91,8 +91,8 @@ export component DetailHeader inherits Rectangle {
     // Metadata line replacing the year, duration and ratings, for a box set.
     in property <string> caption;
     in property <[string]> genres;
-    // Name of the box set the movie belongs to; empty when it belongs to none.
-    in property <string> collection;
+    // Names of the box sets the movie belongs to; empty when it belongs to none.
+    in property <[string]> collections;
     in property <string> overview;
     in property <bool> watched;
     in property <bool> favorite;
@@ -103,7 +103,7 @@ export component DetailHeader inherits Rectangle {
     callback back();
     callback toggle-watched();
     callback toggle-favorite();
-    callback open-collection();
+    callback open-collection(index: int);
 
     pure function duration(total: int) -> string {
         total >= 60 ? @tr("{}h {}m", floor(total / 60), mod(total, 60)) : @tr("{}m", total)
@@ -237,13 +237,17 @@ export component DetailHeader inherits Rectangle {
                     }
                 }
 
-                if root.collection != "": HorizontalLayout {
-                    alignment: start;
+                if root.collections.length > 0: VerticalLayout {
+                    spacing: Theme.space-sm;
 
-                    CollectionLink {
-                        label: @tr("Part of the {}", root.collection);
-                        clicked => {
-                            root.open-collection();
+                    for name[index] in root.collections: HorizontalLayout {
+                        alignment: start;
+
+                        CollectionLink {
+                            label: @tr("Part of the {}", name);
+                            clicked => {
+                                root.open-collection(index);
+                            }
                         }
                     }
                 }

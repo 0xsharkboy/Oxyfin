@@ -8,6 +8,7 @@ use oxyfin_core::{CoreError, ItemSummary, Page};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
 use crate::app::App;
+use crate::images::PageLoads;
 use crate::present::core_error_message;
 use crate::screens::library::{
     PAGE_SIZE, cards_with_posters, load_posters, open_detail, should_load_more, target_of,
@@ -39,6 +40,7 @@ pub(crate) struct SearchController {
     in_flight: Cell<bool>,
     ready: Cell<bool>,
     more_failed: Cell<bool>,
+    loads: PageLoads,
     timer: Timer,
 }
 
@@ -184,6 +186,7 @@ impl SearchController {
         self.ready.set(false);
         self.more_failed.set(false);
         self.total.set(0);
+        self.loads.abort();
         self.items.borrow_mut().clear();
         self.cards.set_vec(Vec::new());
         if let Some(window) = app.window() {
@@ -211,6 +214,7 @@ impl SearchController {
             *self.query.borrow_mut() = text.clone();
             self.ready.set(false);
             self.total.set(0);
+            self.loads.abort();
             self.items.borrow_mut().clear();
             self.cards.set_vec(Vec::new());
             if let Some(window) = app.window() {
@@ -280,7 +284,7 @@ impl SearchController {
         for data in new_cards {
             self.cards.push(data);
         }
-        load_posters(app, id, &window, &self.cards, &missing);
+        load_posters(app, id, &window, &self.cards, &missing, &self.loads);
     }
 }
 

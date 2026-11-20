@@ -109,6 +109,7 @@ export component AppWindow inherits Window {
     callback search-retry-more();
 
     in property <bool> movie-loaded;
+    in-out property <length> movie-viewport-y;
     in property <bool> movie-loading;
     in property <string> movie-error;
     in property <MovieData> movie-data;
@@ -117,16 +118,17 @@ export component AppWindow inherits Window {
     in property <bool> movie-busy;
     in property <[PersonCardData]> movie-people;
     in property <[CardData]> movie-similar;
-    in property <string> movie-collection;
+    in property <[string]> movie-collections;
     callback movie-play(from-start: bool);
     callback movie-toggle-watched();
     callback movie-toggle-favorite();
     callback movie-retry();
     callback movie-open-similar(id: string);
     callback movie-open-person(id: string);
-    callback movie-open-collection();
+    callback movie-open-collection(index: int);
 
     in property <bool> series-loaded;
+    in-out property <length> series-viewport-y;
     in property <bool> series-loading;
     in property <string> series-error;
     in property <SeriesData> series-data;
@@ -166,6 +168,7 @@ export component AppWindow inherits Window {
     callback person-retry();
 
     in property <bool> collection-loaded;
+    in-out property <length> collection-viewport-y;
     in property <bool> collection-loading;
     in property <string> collection-error;
     in property <CollectionData> collection-data;
@@ -437,6 +440,7 @@ export component AppWindow inherits Window {
 
         if root.screen == Screen.movie: MovieScreen {
             active: root.screen == Screen.movie;
+            viewport-y <=> root.movie-viewport-y;
             page: root.top-bar-page;
             loaded: root.movie-loaded;
             loading: root.movie-loading;
@@ -447,7 +451,7 @@ export component AppWindow inherits Window {
             busy: root.movie-busy;
             people: root.movie-people;
             similar: root.movie-similar;
-            collection: root.movie-collection;
+            collections: root.movie-collections;
             play(from-start) => {
                 root.movie-play(from-start);
             }
@@ -466,8 +470,8 @@ export component AppWindow inherits Window {
             open-person(id) => {
                 root.movie-open-person(id);
             }
-            open-collection => {
-                root.movie-open-collection();
+            open-collection(index) => {
+                root.movie-open-collection(index);
             }
             back => {
                 root.back();
@@ -482,6 +486,7 @@ export component AppWindow inherits Window {
 
         if root.screen == Screen.series: SeriesScreen {
             active: root.screen == Screen.series;
+            viewport-y <=> root.series-viewport-y;
             page: root.top-bar-page;
             loaded: root.series-loaded;
             loading: root.series-loading;
@@ -570,6 +575,7 @@ export component AppWindow inherits Window {
 
         if root.screen == Screen.collection: CollectionScreen {
             active: root.screen == Screen.collection;
+            viewport-y <=> root.collection-viewport-y;
             page: root.top-bar-page;
             loaded: root.collection-loaded;
             loading: root.collection-loading;

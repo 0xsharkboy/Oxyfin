@@ -51,13 +51,20 @@ fn children() -> String {
 struct Items {
     log: QueryLog,
     in_collection: bool,
+    two_sets: bool,
 }
 
 impl Respond for Items {
     fn respond(&self, request: &Request) -> ResponseTemplate {
         let query = request.url.query().unwrap_or("").to_owned();
         self.log.lock().map(|mut log| log.push(query.clone())).ok();
-        if has_param(&query, "includeItemTypes", "BoxSet") {
+        if has_param(&query, "includeItemTypes", "BoxSet") && self.two_sets {
+            listing(&format!(
+                "{},{}",
+                box_set(BOX_SET, "Northbound Collection"),
+                box_set(OTHER_BOX_SET, "Other Collection")
+            ))
+        } else if has_param(&query, "includeItemTypes", "BoxSet") {
             let (id, name) = if self.in_collection {
                 (BOX_SET, "Northbound Collection")
             } else {
@@ -66,6 +73,10 @@ impl Respond for Items {
             listing(&box_set(id, name))
         } else if has_param(&query, "parentId", BOX_SET) {
             listing(&children())
+        } else if has_param(&query, "parentId", OTHER_BOX_SET) && self.two_sets {
+            listing(&format!(
+                r#"{{"Id":"{MOVIE}","Name":"Test Movie (2020)","Type":"Movie"}}"#
+            ))
         } else if has_param(&query, "parentId", OTHER_BOX_SET) {
             listing(
                 r#"{"Id":"c0000000000000000000000000000009","Name":"Elsewhere","Type":"Movie"}"#,
@@ -79,6 +90,11 @@ impl Respond for Items {
 }
 
 pub fn start(in_collection: bool) -> (Flow, QueryLog) {
+    start_sets(in_collection, false)
+}
+
+/// Like [`start`]; with `two_sets`, the movie belongs to the Other Collection too.
+pub fn start_sets(in_collection: bool, two_sets: bool) -> (Flow, QueryLog) {
     let log: QueryLog = Arc::new(Mutex::new(Vec::new()));
     let served = Arc::clone(&log);
     let flow = start_with(
@@ -89,6 +105,7 @@ pub fn start(in_collection: bool) -> (Flow, QueryLog) {
                 .respond_with(Items {
                     log: served,
                     in_collection,
+                    two_sets,
                 })
                 .mount(&mock)
                 .await;
@@ -101,6 +118,12 @@ pub fn start(in_collection: bool) -> (Flow, QueryLog) {
                 (format!("/Items/{MOVIE}"), fixture("item_movie")),
                 (format!("/Items/{MOVIE}/Similar"), EMPTY.to_owned()),
                 (format!("/Items/{BOX_SET}"), box_set),
+                (
+                    format!("/Items/{OTHER_BOX_SET}"),
+                    format!(
+                        r#"{{"Id":"{OTHER_BOX_SET}","Name":"Other Collection","Type":"BoxSet"}}"#
+                    ),
+                ),
             ];
             for (route, body) in routes {
                 Mock::given(method("GET"))

@@ -10,7 +10,7 @@ use oxyfin_core::{
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::app::App;
-use crate::images::load_into;
+use crate::images::{PageLoads, load_into};
 use crate::present::{card, core_error_message, detail_target, image_size};
 use crate::state::{GenerationId, LibraryTab, Msg, Screen};
 use crate::{AppWindow, CardData, LibraryTitles, Messages};
@@ -119,6 +119,7 @@ pub(crate) struct LibraryController {
     in_flight: Cell<bool>,
     ready: Cell<bool>,
     more_failed: Cell<bool>,
+    loads: PageLoads,
 }
 
 impl LibraryController {
@@ -294,6 +295,7 @@ impl LibraryController {
         self.more_failed.set(false);
         self.ready.set(false);
         self.total.set(0);
+        self.loads.abort();
         self.items.borrow_mut().clear();
         self.cards.set_vec(Vec::new());
         self.genres.borrow_mut().clear();
@@ -350,6 +352,7 @@ impl LibraryController {
         if start == 0 && clear {
             self.ready.set(false);
             self.total.set(0);
+            self.loads.abort();
             self.items.borrow_mut().clear();
             self.cards.set_vec(Vec::new());
         }
@@ -428,7 +431,7 @@ impl LibraryController {
         for data in new_cards {
             self.cards.push(data);
         }
-        load_posters(app, id, &window, &self.cards, &missing);
+        load_posters(app, id, &window, &self.cards, &missing, &self.loads);
     }
 }
 
@@ -474,13 +477,14 @@ pub(crate) fn cards_with_posters(
     (cards, missing)
 }
 
-/// Loads the posters of `items` into the matching cards of `cards`.
+/// Loads the posters of `items` into the matching cards of `cards`, as loads of the page `loads`.
 pub(crate) fn load_posters(
     app: &Rc<App>,
     id: GenerationId,
     window: &AppWindow,
     cards: &Rc<VecModel<CardData>>,
     items: &[ItemSummary],
+    loads: &PageLoads,
 ) {
     let Some((_, _, images)) = app.services() else {
         return;
@@ -496,7 +500,7 @@ pub(crate) fn load_posters(
         };
         let cards = Rc::clone(cards);
         let item_id: SharedString = item.id.as_str().into();
-        load_into(app, id, &images, poster, size, move |image| {
+        loads.track(load_into(app, id, &images, poster, size, move |image| {
             let Some(index) = cards.iter().position(|card| card.id == item_id) else {
                 return;
             };
@@ -505,7 +509,7 @@ pub(crate) fn load_posters(
                 data.has_image = true;
                 cards.set_row_data(index, data);
             }
-        });
+        }));
     }
 }
 

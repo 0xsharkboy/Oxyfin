@@ -7,10 +7,11 @@ use std::rc::Rc;
 
 use oxyfin_api::ItemId;
 use oxyfin_core::{CoreError, ItemKind, PersonDetails, PersonTitle};
-use slint::{ComponentHandle, FilterModel, Model, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, FilterModel, Image, Model, ModelRc, SharedString, VecModel};
 
 use crate::app::App;
-use crate::images::load_into;
+use crate::back_cache::Parked;
+use crate::images::{PageLoads, load_into};
 use crate::present::{core_error_message, date_parts, image_size, initials, person_title_card};
 use crate::screens::library::{load_posters, open_detail, target_of};
 use crate::state::{GenerationId, Msg, Screen};
@@ -71,31 +72,94 @@ pub(crate) struct PersonController {
     instance: Rc<Cell<u64>>,
     load: Cell<u64>,
     current: RefCell<Option<String>>,
+    depth: Cell<usize>,
     loaded: RefCell<Option<Loaded>>,
     filter: Rc<Cell<PersonFilter>>,
     kinds: Rc<RefCell<HashMap<SharedString, ItemKind>>>,
     cards: Rc<VecModel<CardData>>,
     shown_cards: RefCell<Option<Rc<Shown>>>,
+    loads: PageLoads,
+}
+
+/// A person page kept for Back.
+pub(crate) struct ParkedPerson {
+    loaded: Loaded,
+    filter: PersonFilter,
+    cards: Vec<CardData>,
+    expanded: bool,
+    photo: Option<Image>,
+    viewport_y: f32,
 }
 
 impl PersonController {
-    /// A screen was shown: a person page loads when it is not the person already shown.
+    /// A screen was shown: a person page loads when it is not the page already shown, or comes
+    /// back as it was left when Back returns to it.
     pub(crate) fn shown(&self, app: &Rc<App>, screen: &Screen) {
         let Screen::Person(id) = screen else { return };
-        if self.current.borrow().as_deref() == Some(id.as_str()) {
+        let depth = app.top_depth();
+        if self.current.borrow().as_deref() == Some(id.as_str()) && self.depth.get() == depth {
             return;
         }
+        self.park(app);
         self.clear(app);
         *self.current.borrow_mut() = Some(id.clone());
-        self.request(app);
+        self.depth.set(depth);
+        match app.unpark(screen) {
+            Some(Parked::Person(page)) => self.restore(app, *page),
+            _ => self.request(app),
+        }
     }
 
     /// A screen left the stack: the person page frees its content.
     pub(crate) fn discard(&self, app: &App, screen: &Screen) {
-        if matches!(screen, Screen::Person(id) if self.current.borrow().as_deref() == Some(id.as_str()))
-        {
+        let current = matches!(screen, Screen::Person(id) if self.current.borrow().as_deref() == Some(id.as_str()));
+        if current && !app.holds(self.depth.get(), screen) {
             self.clear(app);
         }
+    }
+
+    /// Keeps the loaded page shown for Back, before another person replaces it.
+    fn park(&self, app: &App) {
+        let Some(person) = self.current.borrow().clone() else {
+            return;
+        };
+        let (Some(loaded), Some(window)) = (self.loaded.borrow_mut().take(), app.window()) else {
+            return;
+        };
+        let page = ParkedPerson {
+            loaded,
+            filter: self.filter.get(),
+            cards: self.cards.iter().collect(),
+            expanded: window.get_person_expanded(),
+            photo: window
+                .get_person_has_photo()
+                .then(|| window.get_person_photo()),
+            viewport_y: window.get_person_viewport_y(),
+        };
+        app.park(
+            self.depth.get(),
+            Screen::Person(person),
+            Parked::Person(Box::new(page)),
+        );
+    }
+
+    /// Shows a kept page again without asking the server, loading only what it still misses.
+    fn restore(&self, app: &Rc<App>, page: ParkedPerson) {
+        let (Some((id, ..)), Some(window)) = (app.services(), app.window()) else {
+            return;
+        };
+        self.filter.set(page.filter);
+        window.set_person_filter(page.filter);
+        self.cards.set_vec(page.cards);
+        let first = page.photo.is_none();
+        if let Some(photo) = page.photo {
+            window.set_person_photo(photo);
+            window.set_person_has_photo(true);
+        }
+        self.publish(app, id, &window, &page.loaded, first);
+        *self.loaded.borrow_mut() = Some(page.loaded);
+        window.set_person_expanded(page.expanded);
+        window.set_person_viewport_y(page.viewport_y);
     }
 
     /// A title changed below: the watched badges may be stale.
@@ -133,6 +197,7 @@ impl PersonController {
     }
 
     fn clear(&self, app: &App) {
+        self.loads.abort();
         self.instance.set(self.instance.get() + 1);
         self.load.set(self.load.get() + 1);
         self.current.borrow_mut().take();
@@ -255,7 +320,7 @@ impl PersonController {
         shown.reset();
         window.set_person_titles(ModelRc::from(shown));
         window.set_person_loaded(true);
-        load_posters(app, id, window, &self.cards, &missing);
+        load_posters(app, id, window, &self.cards, &missing, &self.loads);
         if !first {
             return;
         }
@@ -269,12 +334,13 @@ impl PersonController {
                 Rc::clone(&self.instance),
                 self.instance.get(),
             );
-            load_into(app, id, &images, photo, size, move |image| {
-                if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
-                    window.set_person_photo(image);
-                    window.set_person_has_photo(true);
-                }
-            });
+            self.loads
+                .track(load_into(app, id, &images, photo, size, move |image| {
+                    if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
+                        window.set_person_photo(image);
+                        window.set_person_has_photo(true);
+                    }
+                }));
         }
     }
 }

@@ -6,19 +6,20 @@ use std::rc::Rc;
 
 use oxyfin_api::ItemId;
 use oxyfin_core::{CoreError, Episode, PlayMode, SeriesDetails, UserState};
-use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 
 use crate::app::App;
-use crate::images::load_into;
+use crate::back_cache::Parked;
+use crate::images::{PageLoads, load_into};
 use crate::present::{
     SeriesPlay, core_error_message, episode_row, image_size, initial_season, kept_thumbnails,
     series_play, thumbnail_tags,
 };
-use crate::screens::cast::cast_cards;
+use crate::screens::cast::{cast_cards, load_photos};
 use crate::screens::home::{banner_artwork, banner_box};
-use crate::screens::similar::SimilarRow;
+use crate::screens::similar::{ParkedRow, SimilarRow};
 use crate::state::{GenerationId, Msg, Screen};
-use crate::{AppWindow, EpisodeData, Messages, SeriesData, SeriesPlayKind};
+use crate::{AppWindow, EpisodeData, Messages, PersonCardData, SeriesData, SeriesPlayKind};
 
 // Logical sizes of the poster and of an episode thumbnail, as drawn by the page.
 const POSTER_ARTWORK: (f32, f32) = (240.0, 360.0);
@@ -37,6 +38,7 @@ pub(crate) struct SeriesController {
     load: Cell<u64>,
     episodes_load: Rc<Cell<u64>>,
     current: RefCell<Option<String>>,
+    depth: Cell<usize>,
     details: RefCell<Option<SeriesDetails>>,
     season: Cell<Option<usize>>,
     rows_season: RefCell<Option<Option<String>>>,
@@ -44,42 +46,143 @@ pub(crate) struct SeriesController {
     episodes: Rc<VecModel<EpisodeData>>,
     thumbnail_tags: RefCell<HashMap<String, String>>,
     images_requested: Cell<bool>,
+    people: RefCell<Rc<VecModel<PersonCardData>>>,
     similar: SimilarRow,
+    loads: PageLoads,
+}
+
+/// A series page kept for Back.
+pub(crate) struct ParkedSeries {
+    details: SeriesDetails,
+    season: Option<usize>,
+    rows_season: Option<Option<String>>,
+    episodes: Vec<EpisodeData>,
+    thumbnail_tags: HashMap<String, String>,
+    people: Rc<VecModel<PersonCardData>>,
+    similar: ParkedRow,
+    poster: Image,
+    backdrop: Image,
+    viewport_y: f32,
+}
+
+fn has_pixels(image: &Image) -> bool {
+    image.size().width > 0
 }
 
 impl SeriesController {
-    /// A screen was shown: a series page loads when it is not the series already shown.
+    /// A screen was shown: a series page loads when it is not the page already shown, or comes
+    /// back as it was left when Back returns to it.
     pub(crate) fn shown(&self, app: &Rc<App>, screen: &Screen) {
         let Screen::Series(id) = screen else { return };
-        if self.current.borrow().as_deref() == Some(id.as_str()) {
+        let depth = app.top_depth();
+        if self.current.borrow().as_deref() == Some(id.as_str()) && self.depth.get() == depth {
             return;
         }
+        self.park(app);
         self.clear(app);
         *self.current.borrow_mut() = Some(id.clone());
+        self.depth.set(depth);
         if let Some(window) = app.window() {
             window.set_series_episodes(ModelRc::from(Rc::clone(&self.episodes)));
         }
-        self.request(app);
+        match app.unpark(screen) {
+            Some(Parked::Series(page)) => self.restore(app, *page),
+            _ => self.request(app),
+        }
     }
 
     /// A screen left the stack: the series page frees its content.
     pub(crate) fn discard(&self, app: &App, screen: &Screen) {
-        if matches!(screen, Screen::Series(id) if self.current.borrow().as_deref() == Some(id.as_str()))
-        {
+        let current = matches!(screen, Screen::Series(id) if self.current.borrow().as_deref() == Some(id.as_str()));
+        if current && !app.holds(self.depth.get(), screen) {
             self.clear(app);
         }
     }
 
-    /// The page came back from the player: the progress may have changed.
+    /// Keeps the loaded page shown for Back, before another series replaces it.
+    fn park(&self, app: &App) {
+        let Some(series) = self.current.borrow().clone() else {
+            return;
+        };
+        let (Some(details), Some(window)) = (self.details.borrow().clone(), app.window()) else {
+            return;
+        };
+        let page = ParkedSeries {
+            details,
+            season: self.season.get(),
+            rows_season: self.rows_season.borrow().clone(),
+            episodes: self.episodes.iter().collect(),
+            thumbnail_tags: self.thumbnail_tags.take(),
+            people: Rc::clone(&self.people.borrow()),
+            similar: self.similar.park(),
+            poster: window.get_series_poster(),
+            backdrop: window.get_series_backdrop(),
+            viewport_y: window.get_series_viewport_y(),
+        };
+        app.park(
+            self.depth.get(),
+            Screen::Series(series),
+            Parked::Series(Box::new(page)),
+        );
+    }
+
+    /// Shows a kept page again without asking the server, loading only what it still misses.
+    fn restore(&self, app: &Rc<App>, page: ParkedSeries) {
+        let (Some((id, ..)), Some(window)) = (app.services(), app.window()) else {
+            return;
+        };
+        let series = page.details.summary.id.as_str().to_owned();
+        let answered = page.rows_season.is_some();
+        *self.details.borrow_mut() = Some(page.details);
+        self.season.set(page.season);
+        *self.rows_season.borrow_mut() = page.rows_season;
+        self.episodes.set_vec(page.episodes);
+        *self.thumbnail_tags.borrow_mut() = page.thumbnail_tags;
+        *self.people.borrow_mut() = Rc::clone(&page.people);
+        window.set_series_people(ModelRc::from(page.people));
+        window.set_series_poster(page.poster.clone());
+        window.set_series_backdrop(page.backdrop.clone());
+        self.images_requested.set(true);
+        self.publish(app, id, &window);
+        if let Some(details) = self.details.borrow().as_ref() {
+            let people = Rc::clone(&self.people.borrow());
+            load_photos(app, id, &window, &people, &details.cast, &self.loads);
+        }
+        self.load_images(
+            app,
+            id,
+            &window,
+            !has_pixels(&page.poster),
+            !has_pixels(&page.backdrop),
+        );
+        self.similar.restore(
+            app,
+            id,
+            &window,
+            page.similar,
+            AppWindow::set_series_similar,
+        );
+        self.similar
+            .request(app, &series, AppWindow::set_series_similar);
+        if !answered {
+            self.request_episodes(app);
+        }
+        window.set_series_viewport_y(page.viewport_y);
+    }
+
+    /// The page came back from the player or holds stale data: the progress may have changed.
     pub(crate) fn refresh(&self, app: &Rc<App>) {
         if self.current.borrow().is_some() {
+            self.similar.reload();
             self.request(app);
         }
     }
 
     /// Asks again after the series failed to load.
     pub(crate) fn retry(&self, app: &Rc<App>) {
-        self.refresh(app);
+        if self.current.borrow().is_some() {
+            self.request(app);
+        }
     }
 
     /// Asks again after the episodes failed to load.
@@ -137,6 +240,7 @@ impl SeriesController {
     }
 
     fn clear(&self, app: &App) {
+        self.loads.abort();
         self.instance.set(self.instance.get() + 1);
         self.load.set(self.load.get() + 1);
         self.episodes_load.set(self.episodes_load.get() + 1);
@@ -148,6 +252,7 @@ impl SeriesController {
         self.episodes.set_vec(Vec::new());
         self.thumbnail_tags.borrow_mut().clear();
         self.images_requested.set(false);
+        *self.people.borrow_mut() = Rc::default();
         self.similar.clear(app, AppWindow::set_series_similar);
         if let Some(window) = app.window() {
             window.set_series_people(ModelRc::default());
@@ -163,6 +268,7 @@ impl SeriesController {
             window.set_series_episodes_loading(false);
             window.set_series_episodes_stale(false);
             window.set_series_episodes_error(SharedString::default());
+            window.set_series_viewport_y(0.0);
         }
     }
 
@@ -331,24 +437,25 @@ impl SeriesController {
             };
             let (target, current) = (window.as_weak(), Rc::clone(&self.episodes_load));
             let episode_id = episode.id.as_str().to_owned();
-            load_into(app, id, &images, thumb, size, move |image| {
-                let Some(window) = target.upgrade() else {
-                    return;
-                };
-                if current.get() != load {
-                    return;
-                }
-                let rows = window.get_series_episodes();
-                for index in 0..rows.row_count() {
-                    if let Some(mut row) = rows.row_data(index)
-                        && row.id == episode_id
-                    {
-                        row.image = image;
-                        rows.set_row_data(index, row);
-                        break;
+            self.loads
+                .track(load_into(app, id, &images, thumb, size, move |image| {
+                    let Some(window) = target.upgrade() else {
+                        return;
+                    };
+                    if current.get() != load {
+                        return;
                     }
-                }
-            });
+                    let rows = window.get_series_episodes();
+                    for index in 0..rows.row_count() {
+                        if let Some(mut row) = rows.row_data(index)
+                            && row.id == episode_id
+                        {
+                            row.image = image;
+                            rows.set_row_data(index, row);
+                            break;
+                        }
+                    }
+                }));
         }
     }
 
@@ -370,31 +477,49 @@ impl SeriesController {
         if self.images_requested.replace(true) {
             return;
         }
-        window.set_series_people(cast_cards(app, id, window, &details.cast));
-        let Some((_, _, images)) = app.services() else {
+        let people = cast_cards(&details.cast);
+        *self.people.borrow_mut() = Rc::clone(&people);
+        window.set_series_people(ModelRc::from(Rc::clone(&people)));
+        load_photos(app, id, window, &people, &details.cast, &self.loads);
+        self.load_images(app, id, window, true, true);
+    }
+
+    /// Loads the poster and the backdrop of the series, as asked.
+    fn load_images(
+        &self,
+        app: &Rc<App>,
+        id: GenerationId,
+        window: &AppWindow,
+        want_poster: bool,
+        want_backdrop: bool,
+    ) {
+        let details = self.details.borrow();
+        let (Some(details), Some((_, _, images))) = (details.as_ref(), app.services()) else {
             return;
         };
         let scale = window.window().scale_factor();
         let instance = self.instance.get();
-        if let Some(poster) = details.summary.poster.clone() {
+        if let Some(poster) = details.summary.poster.clone().filter(|_| want_poster) {
             let size = image_size(POSTER_ARTWORK.0, POSTER_ARTWORK.1, scale);
             let (target, current) = (window.as_weak(), Rc::clone(&self.instance));
-            load_into(app, id, &images, poster, size, move |image| {
-                if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
-                    window.set_series_poster(image);
-                }
-            });
+            self.loads
+                .track(load_into(app, id, &images, poster, size, move |image| {
+                    if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
+                        window.set_series_poster(image);
+                    }
+                }));
         }
-        if let Some(backdrop) = banner_artwork(&details.summary) {
+        if let Some(backdrop) = banner_artwork(&details.summary).filter(|_| want_backdrop) {
             let width = window.window().size().width as f32 / scale;
             let (width, height) = banner_box(width);
             let size = image_size(width, height, scale);
             let (target, current) = (window.as_weak(), Rc::clone(&self.instance));
-            load_into(app, id, &images, backdrop, size, move |image| {
-                if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
-                    window.set_series_backdrop(image);
-                }
-            });
+            self.loads
+                .track(load_into(app, id, &images, backdrop, size, move |image| {
+                    if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
+                        window.set_series_backdrop(image);
+                    }
+                }));
         }
     }
 
