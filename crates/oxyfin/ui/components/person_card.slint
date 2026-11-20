@@ -1,0 +1,194 @@
+import { Theme } from "../theme.slint";
+import { BodyStrongText, CaptionText, DisplayText, HeadingText } from "text.slint";
+
+// Credit shown under a person when no role is known.
+export enum PersonJob { actor, director, writer, composer, producer, other }
+
+// A person of the cast and crew; Rust fills it from the core.
+export struct PersonCardData {
+    // Empty when the server gave no identifier: the card then opens nothing.
+    id: string,
+    name: string,
+    initials: string,
+    role: string,
+    job: PersonJob,
+    image: image,
+    has-image: bool,
+}
+
+// Round portrait of a person, with the initials of the name until a photo is loaded.
+export component PersonPhoto inherits Rectangle {
+    in property <image> image;
+    in property <bool> has-image;
+    in property <string> initials;
+    in property <bool> large;
+
+    width: self.height;
+    border-radius: self.height / 2;
+    background: Theme.bg-elevated;
+    border-width: Theme.border-thin;
+    border-color: Theme.border-default;
+    clip: true;
+
+    if !root.has-image && root.large: DisplayText {
+        text: root.initials;
+        color: Theme.text-secondary;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    if !root.has-image && !root.large: HeadingText {
+        text: root.initials;
+        color: Theme.text-secondary;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    if root.has-image: Image {
+        width: 100%;
+        height: 100%;
+        source: root.image;
+        image-fit: cover;
+    }
+}
+
+// Cast or crew member: round photo, name and role or job.
+export component PersonCard {
+    in property <string> name;
+    in property <string> role;
+    in property <string> initials;
+    in property <image> image;
+    in property <bool> has-image;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    accessible-role: button;
+    accessible-label: name;
+    accessible-description: role;
+    accessible-enabled: enabled;
+    accessible-action-default => {
+        activate();
+    }
+    forward-focus: focus;
+    width: 128px;
+
+    function activate() {
+        if enabled {
+            clicked();
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            focus.focus();
+            root.activate();
+        }
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        // Clicks go to the TouchArea: a focusing FocusScope on top would swallow the first one.
+        focus-on-click: false;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.activate();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    VerticalLayout {
+        spacing: Theme.space-sm;
+
+        HorizontalLayout {
+            alignment: center;
+
+            photo := PersonPhoto {
+                height: 112px;
+                image: root.image;
+                has-image: root.has-image;
+                initials: root.initials;
+                border-width: root.enabled && (touch.has-hover || focus.has-focus) ? Theme.border-focus : Theme.border-thin;
+                border-color: root.enabled && (touch.has-hover || focus.has-focus) ? Theme.accent : Theme.border-default;
+            }
+        }
+
+        VerticalLayout {
+            spacing: Theme.space-2xs;
+
+            BodyStrongText {
+                accessible-role: none;
+                text: root.name;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+            if root.role != "": CaptionText {
+                accessible-role: none;
+                text: root.role;
+                color: Theme.text-secondary;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+}
+
+// The titled "Cast and crew" row of a detail page, scrolling sideways to the right edge.
+export component CastRow inherits Rectangle {
+    in property <[PersonCardData]> people;
+    callback clicked(id: string);
+
+    pure function job-text(job: PersonJob) -> string {
+        if job == PersonJob.director {
+            return @tr("Director");
+        }
+        if job == PersonJob.writer {
+            return @tr("Writer");
+        }
+        if job == PersonJob.composer {
+            return @tr("Composer");
+        }
+        if job == PersonJob.producer {
+            return @tr("Producer");
+        }
+        ""
+    }
+
+    accessible-role: list;
+    accessible-label: @tr("Cast and crew");
+
+    VerticalLayout {
+        padding-left: Theme.space-3xl;
+        spacing: Theme.space-lg;
+
+        HeadingText {
+            text: @tr("Cast and crew");
+            overflow: elide;
+        }
+
+        Flickable {
+            height: cards.preferred-height;
+            content-width: cards.preferred-width;
+            content-height: self.height;
+
+            cards := HorizontalLayout {
+                padding-right: Theme.space-3xl;
+                spacing: Theme.space-xl;
+                alignment: start;
+
+                for person in root.people: PersonCard {
+                    name: person.name;
+                    role: person.role != "" ? person.role : root.job-text(person.job);
+                    initials: person.initials;
+                    image: person.image;
+                    has-image: person.has-image;
+                    enabled: person.id != "";
+                    clicked => {
+                        root.clicked(person.id);
+                    }
+                }
+            }
+        }
+    }
+}

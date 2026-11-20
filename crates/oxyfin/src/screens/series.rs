@@ -11,9 +11,10 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use crate::app::App;
 use crate::images::load_into;
 use crate::present::{
-    SeriesPlay, cast_line, core_error_message, episode_row, image_size, initial_season,
-    kept_thumbnails, series_play, thumbnail_tags,
+    SeriesPlay, core_error_message, episode_row, image_size, initial_season, kept_thumbnails,
+    series_play, thumbnail_tags,
 };
+use crate::screens::cast::cast_cards;
 use crate::screens::home::{banner_artwork, banner_box};
 use crate::screens::similar::SimilarRow;
 use crate::state::{GenerationId, Msg, Screen};
@@ -149,6 +150,7 @@ impl SeriesController {
         self.images_requested.set(false);
         self.similar.clear(app, AppWindow::set_series_similar);
         if let Some(window) = app.window() {
+            window.set_series_people(ModelRc::default());
             window.set_series_loaded(false);
             window.set_series_loading(false);
             window.set_series_error(SharedString::default());
@@ -368,6 +370,7 @@ impl SeriesController {
         if self.images_requested.replace(true) {
             return;
         }
+        window.set_series_people(cast_cards(app, id, window, &details.cast));
         let Some((_, _, images)) = app.services() else {
             return;
         };
@@ -494,7 +497,6 @@ fn series_data(details: &SeriesDetails) -> SeriesData {
         season_count: i32::try_from(details.seasons.len()).unwrap_or(i32::MAX),
         genres: ModelRc::new(VecModel::from(genres)),
         overview: details.overview.clone().unwrap_or_default().into(),
-        cast: cast_line(&details.cast).into(),
         watched: summary.user.played,
         favorite: summary.user.favorite,
         play_kind,

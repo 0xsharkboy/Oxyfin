@@ -115,6 +115,9 @@ pub struct BaseItemDto {
     pub series_primary_image_tag: Option<String>,
     /// Cast and crew.
     pub people: Vec<BaseItemPerson>,
+    /// Places, such as the birthplace of a person.
+    #[serde(deserialize_with = "nullable_list")]
+    pub production_locations: Vec<String>,
     /// Trickplay tile sheets, by media source, then by thumbnail width in
     /// pixels. Empty when the server generated none; look a source up with
     /// [`BaseItemDto::trickplay_for`].
@@ -234,6 +237,7 @@ impl Default for BaseItemDto {
             parent_backdrop_image_tags: Vec::new(),
             series_primary_image_tag: None,
             people: Vec::new(),
+            production_locations: Vec::new(),
             trickplay: HashMap::new(),
             chapters: Vec::new(),
             parent_id: None,
@@ -270,6 +274,8 @@ pub struct ItemsQuery {
     pub fields: Vec<ItemFields>,
     /// Only these items, sent comma delimited.
     pub ids: Vec<ItemId>,
+    /// Only items crediting one of these people, sent comma delimited.
+    pub person_ids: Vec<ItemId>,
 }
 
 fn join<'a>(values: impl Iterator<Item = &'a str>) -> String {
@@ -300,6 +306,12 @@ impl ItemsQuery {
         }
         if !self.ids.is_empty() {
             params.push(("ids", join(self.ids.iter().map(ItemId::as_str))));
+        }
+        if !self.person_ids.is_empty() {
+            params.push((
+                "personIds",
+                join(self.person_ids.iter().map(ItemId::as_str)),
+            ));
         }
         if let Some(played) = self.is_played {
             params.push(("isPlayed", played.to_string()));

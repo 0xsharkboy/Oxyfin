@@ -1,6 +1,7 @@
 //! Helpers shared by the flow tests: a simulated Jellyfin 12.4 server and the app setup.
 #![allow(dead_code)]
 
+pub mod person;
 pub mod playback_settings;
 
 use std::cell::RefCell;

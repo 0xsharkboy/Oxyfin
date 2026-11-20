@@ -14,6 +14,8 @@ import { LibraryScreen, LibraryTitles } from "screens/library.slint";
 import { SearchScreen, SearchTitles } from "screens/search.slint";
 import { MovieScreen, MovieData } from "screens/movie.slint";
 import { SeriesScreen, SeriesData, SeriesPlayKind, EpisodeData } from "screens/series.slint";
+import { PersonScreen, PersonData, PersonFilter } from "screens/person.slint";
+import { PersonCardData, PersonJob } from "components/person_card.slint";
 import { TopBarPage } from "components/top_bar.slint";
 import { NoticeBanner, NoticeData } from "components/notice_banner.slint";
 
@@ -26,11 +28,12 @@ export { LibraryTitles }
 export { SearchTitles }
 export { MovieData }
 export { SeriesData, SeriesPlayKind, EpisodeData }
+export { PersonData, PersonFilter, PersonCardData, PersonJob }
 export { TopBarPage }
 export { PlaybackChoice, SubtitleChoice, TokenStore }
 
 // Mirrors the Rust `state::Screen` one to one.
-export enum Screen { starting, sign-in, quick-connect, home, library, search, movie, series, player, settings }
+export enum Screen { starting, sign-in, quick-connect, home, library, search, movie, series, person, player, settings }
 
 export component AppWindow inherits Window {
     in property <Screen> screen: Screen.starting;
@@ -110,12 +113,14 @@ export component AppWindow inherits Window {
     in property <image> movie-poster;
     in property <image> movie-backdrop;
     in property <bool> movie-busy;
+    in property <[PersonCardData]> movie-people;
     in property <[CardData]> movie-similar;
     callback movie-play(from-start: bool);
     callback movie-toggle-watched();
     callback movie-toggle-favorite();
     callback movie-retry();
     callback movie-open-similar(id: string);
+    callback movie-open-person(id: string);
 
     in property <bool> series-loaded;
     in property <bool> series-loading;
@@ -130,6 +135,7 @@ export component AppWindow inherits Window {
     in property <bool> series-episodes-loading;
     in property <bool> series-episodes-stale;
     in property <string> series-episodes-error;
+    in property <[PersonCardData]> series-people;
     in property <[CardData]> series-similar;
     callback series-play();
     callback series-play-episode(id: string);
@@ -139,6 +145,21 @@ export component AppWindow inherits Window {
     callback series-retry();
     callback series-retry-episodes();
     callback series-open-similar(id: string);
+    callback series-open-person(id: string);
+
+    in property <bool> person-loaded;
+    in property <bool> person-loading;
+    in property <string> person-error;
+    in property <PersonData> person-data;
+    in property <image> person-photo;
+    in property <bool> person-has-photo;
+    in property <[CardData]> person-titles;
+    in property <PersonFilter> person-filter;
+    in-out property <bool> person-expanded;
+    in-out property <length> person-viewport-y;
+    callback person-select-filter(filter: PersonFilter);
+    callback person-open(id: string);
+    callback person-retry();
 
     in property <string> player-title;
     in property <string> player-subtitle;
@@ -397,6 +418,7 @@ export component AppWindow inherits Window {
         }
 
         if root.screen == Screen.movie: MovieScreen {
+            active: root.screen == Screen.movie;
             page: root.top-bar-page;
             loaded: root.movie-loaded;
             loading: root.movie-loading;
@@ -405,6 +427,7 @@ export component AppWindow inherits Window {
             poster: root.movie-poster;
             backdrop: root.movie-backdrop;
             busy: root.movie-busy;
+            people: root.movie-people;
             similar: root.movie-similar;
             play(from-start) => {
                 root.movie-play(from-start);
@@ -421,6 +444,9 @@ export component AppWindow inherits Window {
             open-item(id) => {
                 root.movie-open-similar(id);
             }
+            open-person(id) => {
+                root.movie-open-person(id);
+            }
             back => {
                 root.back();
             }
@@ -433,6 +459,7 @@ export component AppWindow inherits Window {
         }
 
         if root.screen == Screen.series: SeriesScreen {
+            active: root.screen == Screen.series;
             page: root.top-bar-page;
             loaded: root.series-loaded;
             loading: root.series-loading;
@@ -447,6 +474,7 @@ export component AppWindow inherits Window {
             episodes-loading: root.series-episodes-loading;
             episodes-stale: root.series-episodes-stale;
             episodes-error: root.series-episodes-error;
+            people: root.series-people;
             similar: root.series-similar;
             play => {
                 root.series-play();
@@ -471,6 +499,41 @@ export component AppWindow inherits Window {
             }
             open-item(id) => {
                 root.series-open-similar(id);
+            }
+            open-person(id) => {
+                root.series-open-person(id);
+            }
+            back => {
+                root.back();
+            }
+            open-tab(page) => {
+                root.open-tab(page);
+            }
+            open-settings => {
+                root.open-settings();
+            }
+        }
+
+        if root.screen == Screen.person: PersonScreen {
+            page: root.top-bar-page;
+            loaded: root.person-loaded;
+            loading: root.person-loading;
+            error: root.person-error;
+            person: root.person-data;
+            photo: root.person-photo;
+            has-photo: root.person-has-photo;
+            titles: root.person-titles;
+            filter: root.person-filter;
+            expanded <=> root.person-expanded;
+            viewport-y <=> root.person-viewport-y;
+            select-filter(filter) => {
+                root.person-select-filter(filter);
+            }
+            open-item(id) => {
+                root.person-open(id);
+            }
+            retry => {
+                root.person-retry();
             }
             back => {
                 root.back();
@@ -634,7 +697,7 @@ export component AppWindow inherits Window {
 
         // Below the top bar of the screens that have one.
         if root.notice.visible: NoticeBanner {
-            y: root.screen == Screen.home || root.screen == Screen.library || root.screen == Screen.search || root.screen == Screen.movie || root.screen == Screen.series || root.screen == Screen.settings ? Theme.space-3xl + Theme.space-lg : Theme.space-lg;
+            y: root.screen == Screen.home || root.screen == Screen.library || root.screen == Screen.search || root.screen == Screen.movie || root.screen == Screen.series || root.screen == Screen.person || root.screen == Screen.settings ? Theme.space-3xl + Theme.space-lg : Theme.space-lg;
             x: (parent.width - self.width) / 2;
             width: min(parent.width - 2 * Theme.space-lg, 560px);
             notice: root.notice;

@@ -6,7 +6,7 @@ use common::{TEST_USER_ID, fixture, session};
 use oxyfin_api::ItemId;
 use oxyfin_core::{
     BrowseQuery, BrowseSource, Catalog, ContentKind, CoreError, ItemKind, ItemSummary, LibraryKind,
-    SortField, WatchFilter,
+    MovieDetails, PersonKind, SortField, WatchFilter,
 };
 use serde_json::{Value, json};
 use wiremock::matchers::{method, path, query_param};
@@ -745,4 +745,165 @@ async fn similar_maps_summaries() {
     let titles: Vec<_> = items.iter().map(|item| item.title.as_str()).collect();
     assert_eq!(titles, ["Test Movie (2020)"]);
     assert_eq!(items[0].kind, ItemKind::Movie);
+}
+
+fn people_movie(people: Value) -> oxyfin_api::BaseItemDto {
+    serde_json::from_value(json!({"Id": "m", "Name": "M", "Type": "Movie", "People": people}))
+        .unwrap_or_else(|err| panic!("bad item: {err}"))
+}
+
+#[test]
+fn cast_order_actors_first() {
+    let dto = people_movie(json!([
+        {"Name": "Writer One", "Id": "w1", "Type": "Writer"},
+        {"Name": "Director One", "Id": "d1", "Type": "Director", "PrimaryImageTag": "t"},
+        {"Name": "Actor One", "Id": "a1", "Role": "Hero", "Type": "Actor"},
+        {"Name": "Grip One", "Type": "Grip"},
+        {"Name": "Composer One", "Id": "c1", "Type": "Composer"},
+        {"Name": "Actor Two", "Id": "a2", "Role": "", "Type": "GuestStar"},
+        {"Name": "Producer One", "Id": "p1", "Type": "Producer"},
+        {"Name": "Actor Three", "Id": "a3", "Role": "Sidekick", "Type": "Actor"}
+    ]));
+    let details = MovieDetails::from_dto(&dto).unwrap_or_else(|| panic!("not a movie"));
+    let names: Vec<_> = details.cast.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "Actor One",
+            "Actor Two",
+            "Actor Three",
+            "Director One",
+            "Writer One",
+            "Composer One",
+            "Producer One",
+            "Grip One"
+        ]
+    );
+    let kinds: Vec<_> = details.cast.iter().map(|p| p.kind).collect();
+    assert_eq!(
+        kinds,
+        [
+            PersonKind::Actor,
+            PersonKind::Actor,
+            PersonKind::Actor,
+            PersonKind::Director,
+            PersonKind::Writer,
+            PersonKind::Composer,
+            PersonKind::Producer,
+            PersonKind::Other
+        ]
+    );
+    assert_eq!(details.cast[0].id, Some(ItemId::from("a1")));
+    assert_eq!(details.cast[0].role.as_deref(), Some("Hero"));
+    assert_eq!(details.cast[1].role, None);
+    assert_eq!(details.cast[7].id, None);
+    let photo = details.cast[3]
+        .image
+        .as_ref()
+        .unwrap_or_else(|| panic!("no photo"));
+    assert_eq!(photo.item_id, ItemId::from("d1"));
+    assert_eq!(photo.index, None);
+}
+
+#[test]
+fn cast_limited_to_20() {
+    let mut people: Vec<Value> = (0..30)
+        .map(|n| json!({"Name": format!("Actor {n}"), "Id": format!("a{n}"), "Type": "Actor"}))
+        .collect();
+    people.push(json!({"Name": "The Director", "Id": "d", "Type": "Director"}));
+    let details = MovieDetails::from_dto(&people_movie(Value::Array(people)))
+        .unwrap_or_else(|| panic!("not a movie"));
+    assert_eq!(details.cast.len(), 20);
+    assert_eq!(details.cast[19].name, "Actor 19");
+}
+
+const PERSON_ID: &str = "8db589eea9a68887bf01dfcc4020e817";
+
+#[tokio::test]
+async fn person_details_optional_fields() {
+    let mock = MockServer::start().await;
+    mount(
+        &mock,
+        "GET",
+        &format!("/Items/{PERSON_ID}"),
+        json!({
+            "Id": PERSON_ID, "Name": "Song Kang-ho", "Type": "Person",
+            "Overview": "A South Korean actor.",
+            "PremiereDate": "1967-01-17T00:00:00.0000000Z",
+            "ProductionLocations": ["Gimhae, South Korea"],
+            "ImageTags": {"Primary": "tag"}
+        }),
+    )
+    .await;
+    mount(
+        &mock,
+        "GET",
+        "/Items/bare",
+        json!({"Id": "bare", "Name": "Nobody", "Type": "Person", "Overview": "", "ProductionLocations": [""]}),
+    )
+    .await;
+    let catalog = catalog(&mock);
+    let person = catalog.person(&ItemId::from(PERSON_ID)).await.unwrap();
+    assert_eq!(person.id, ItemId::from(PERSON_ID));
+    assert_eq!(person.name, "Song Kang-ho");
+    assert_eq!(person.overview.as_deref(), Some("A South Korean actor."));
+    assert_eq!(person.birth.as_deref(), Some("1967-01-17"));
+    assert_eq!(person.birth_place.as_deref(), Some("Gimhae, South Korea"));
+    let image = person.image.unwrap_or_else(|| panic!("no image"));
+    assert_eq!(image.item_id, ItemId::from(PERSON_ID));
+    assert_eq!(image.index, None);
+
+    let bare = catalog.person(&ItemId::from("bare")).await.unwrap();
+    assert_eq!(bare.name, "Nobody");
+    assert_eq!(bare.overview, None);
+    assert_eq!(bare.birth, None);
+    assert_eq!(bare.birth_place, None);
+    assert_eq!(bare.image, None);
+}
+
+#[tokio::test]
+async fn person_titles_role_from_people() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .and(query_param("personIds", PERSON_ID))
+        .and(query_param("recursive", "true"))
+        .and(query_param("includeItemTypes", "Movie,Series"))
+        .and(query_param("sortBy", "PremiereDate"))
+        .and(query_param("sortOrder", "Descending"))
+        .and(query_param("fields", "People"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Items": [
+                {"Id": "s1", "Name": "A Show", "Type": "Series", "ProductionYear": 2021, "People": [
+                    {"Name": "Someone", "Id": "x", "Role": "Other", "Type": "Actor"},
+                    {"Name": "Song Kang-ho", "Id": PERSON_ID, "Role": "Detective", "Type": "Actor"}
+                ]},
+                {"Id": "m1", "Name": "A Movie", "Type": "Movie", "ProductionYear": 2003, "People": [
+                    {"Name": "Song Kang-ho", "Id": PERSON_ID, "Role": "", "Type": "Director"}
+                ]},
+                {"Id": "m2", "Name": "No People", "Type": "Movie"},
+                {"Id": "b1", "Name": "A Box Set", "Type": "BoxSet"}
+            ],
+            "TotalRecordCount": 4
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let titles = catalog(&mock)
+        .person_titles(&ItemId::from(PERSON_ID))
+        .await
+        .unwrap();
+    let found: Vec<_> = titles
+        .iter()
+        .map(|title| (title.summary.title.as_str(), title.role.as_deref()))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            ("A Show", Some("Detective")),
+            ("A Movie", None),
+            ("No People", None)
+        ]
+    );
+    assert_eq!(titles[0].summary.kind, ItemKind::Series);
 }

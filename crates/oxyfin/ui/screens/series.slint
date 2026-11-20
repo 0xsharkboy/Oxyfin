@@ -8,6 +8,7 @@ import { Chip } from "../components/chip.slint";
 import { CardStatus } from "../components/card.slint";
 import { EpisodeRow } from "../components/episode_row.slint";
 import { PosterRow } from "../components/poster_row.slint";
+import { CastRow, PersonCardData } from "../components/person_card.slint";
 import { BodyText } from "../components/text.slint";
 
 // What the main button of the series page does.
@@ -22,7 +23,6 @@ export struct SeriesData {
     season-count: int,
     genres: [string],
     overview: string,
-    cast: string,
     watched: bool,
     favorite: bool,
     play-kind: SeriesPlayKind,
@@ -61,6 +61,8 @@ export component SeriesScreen inherits Rectangle {
     // True while the episodes belong to another season than the chosen one.
     in property <bool> episodes-stale;
     in property <string> episodes-error;
+    // Cast and crew; the row is hidden while empty.
+    in property <[PersonCardData]> people;
     // Items like this one; the row is hidden while empty.
     in property <[CardData]> similar;
     callback play();
@@ -69,6 +71,7 @@ export component SeriesScreen inherits Rectangle {
     callback toggle-watched();
     callback toggle-favorite();
     callback open-item(id: string);
+    callback open-person(id: string);
     callback retry();
     callback retry-episodes();
     callback back();
@@ -81,9 +84,12 @@ export component SeriesScreen inherits Rectangle {
     background: Theme.bg-base;
     forward-focus: keys;
 
+    // False once another screen is shown: the page being left must not take the focus back.
+    in property <bool> active: true;
+
     // Another series may replace this one without a new page, and the clicked card took the focus.
     changed loaded => {
-        if !self.loaded {
+        if !self.loaded && self.active {
             flick.content-y = 0;
             keys.focus();
         }
@@ -130,7 +136,6 @@ export component SeriesScreen inherits Rectangle {
                     season-count: root.series.season-count;
                     genres: root.series.genres;
                     overview: root.series.overview;
-                    cast: root.series.cast;
                     watched: root.series.watched;
                     favorite: root.series.favorite;
                     busy: root.busy;
@@ -213,6 +218,17 @@ export component SeriesScreen inherits Rectangle {
                             clicked => {
                                 root.retry-episodes();
                             }
+                        }
+                    }
+                }
+
+                if root.loaded && root.people.length > 0: VerticalLayout {
+                    padding-bottom: Theme.space-2xl + Theme.space-sm;
+
+                    CastRow {
+                        people: root.people;
+                        clicked(id) => {
+                            root.open-person(id);
                         }
                     }
                 }

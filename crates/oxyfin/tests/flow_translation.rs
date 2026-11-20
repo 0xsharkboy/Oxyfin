@@ -61,7 +61,7 @@ fn the_interface_follows_the_selected_language() {
         click(&window, &card);
 
         wait_until("the movie", || window.get_screen() == Screen::Movie).await?;
-        wait_visible(&window, "Avec Ada Actor, Ben Bit, Cleo Code, Dan Data").await?;
+        wait_role(&window, "Distribution et équipe", AccessibleRole::List).await?;
         wait_role(&window, "Retirer des favoris", AccessibleRole::Button).await?;
         for width in [900., 760.] {
             window.window().set_size(LogicalSize::new(width, 700.));

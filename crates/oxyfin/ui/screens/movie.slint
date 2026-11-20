@@ -5,6 +5,7 @@ import { DetailHeader } from "../components/detail_header.slint";
 import { Button, ButtonStyle } from "../components/button.slint";
 import { IconButton } from "../components/icon_button.slint";
 import { PosterRow } from "../components/poster_row.slint";
+import { CastRow, PersonCardData } from "../components/person_card.slint";
 import { BodyText } from "../components/text.slint";
 
 // What the movie page shows about its movie; Rust fills it from the core.
@@ -16,7 +17,6 @@ export struct MovieData {
     official-rating: string,
     genres: [string],
     overview: string,
-    cast: string,
     watched: bool,
     favorite: bool,
     // True when playback can resume from `resume-from`.
@@ -35,6 +35,8 @@ export component MovieScreen inherits Rectangle {
     in property <image> poster;
     in property <image> backdrop;
     in property <bool> busy;
+    // Cast and crew; the row is hidden while empty.
+    in property <[PersonCardData]> people;
     // Items like this one; the row is hidden while empty.
     in property <[CardData]> similar;
     // `from-start` is false to resume where the movie was left.
@@ -42,6 +44,7 @@ export component MovieScreen inherits Rectangle {
     callback toggle-watched();
     callback toggle-favorite();
     callback open-item(id: string);
+    callback open-person(id: string);
     callback retry();
     callback back();
     callback open-tab(page: TopBarPage);
@@ -53,9 +56,12 @@ export component MovieScreen inherits Rectangle {
     background: Theme.bg-base;
     forward-focus: keys;
 
+    // False once another screen is shown: the page being left must not take the focus back.
+    in property <bool> active: true;
+
     // Another movie may replace this one without a new page, and the clicked card took the focus.
     changed loaded => {
-        if !self.loaded {
+        if !self.loaded && self.active {
             flick.content-y = 0;
             keys.focus();
         }
@@ -102,7 +108,6 @@ export component MovieScreen inherits Rectangle {
                     official-rating: root.movie.official-rating;
                     genres: root.movie.genres;
                     overview: root.movie.overview;
-                    cast: root.movie.cast;
                     watched: root.movie.watched;
                     favorite: root.movie.favorite;
                     busy: root.busy;
@@ -130,6 +135,18 @@ export component MovieScreen inherits Rectangle {
                         style: root.movie.can-resume ? ButtonStyle.secondary : ButtonStyle.primary;
                         clicked => {
                             root.play(true);
+                        }
+                    }
+                }
+
+                if root.loaded && root.people.length > 0: VerticalLayout {
+                    padding-top: Theme.space-sm;
+                    padding-bottom: Theme.space-2xl;
+
+                    CastRow {
+                        people: root.people;
+                        clicked(id) => {
+                            root.open-person(id);
                         }
                     }
                 }

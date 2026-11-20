@@ -1,0 +1,344 @@
+import { Theme, CardData } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { TopBar, TopBarPage } from "../components/top_bar.slint";
+import { Button, ButtonStyle } from "../components/button.slint";
+import { IconButton } from "../components/icon_button.slint";
+import { Chip } from "../components/chip.slint";
+import { CardStatus } from "../components/card.slint";
+import { PosterCard } from "../components/poster_card.slint";
+import { PersonPhoto } from "../components/person_card.slint";
+import { BodyText, DisplayText, LabelText } from "../components/text.slint";
+
+// Kind of titles the person page lists.
+export enum PersonFilter { all, movies, shows }
+
+// What the person page shows about its person; Rust fills it from the core.
+export struct PersonData {
+    name: string,
+    initials: string,
+    overview: string,
+    // Date of birth, 0 when unknown; the month counts from 1.
+    birth-year: int,
+    birth-month: int,
+    birth-day: int,
+    birth-place: string,
+    title-count: int,
+    movie-count: int,
+    show-count: int,
+}
+
+// Person page: portrait, birth, biography, then the titles of the person in the library.
+export component PersonScreen inherits Rectangle {
+    in property <TopBarPage> page: TopBarPage.none;
+    // True once the person is known; before that only the back arrow and the loading state show.
+    in property <bool> loaded;
+    in property <bool> loading;
+    in property <string> error;
+    in property <PersonData> person;
+    in property <image> photo;
+    in property <bool> has-photo;
+    in property <[CardData]> titles;
+    in property <PersonFilter> filter;
+    in-out property <bool> expanded;
+    in-out property <length> viewport-y <=> flick.content-y;
+    callback select-filter(filter: PersonFilter);
+    callback open-item(id: string);
+    callback retry();
+    callback back();
+    callback open-tab(page: TopBarPage);
+    callback open-settings();
+
+    property <length> bio-line-height: Theme.body-line-height;
+    property <length> grid-gap-x: Theme.space-xl;
+    property <length> grid-gap-y: Theme.space-2xl;
+
+    pure function month-name(month: int) -> string {
+        if month == 1 {
+            return @tr("January");
+        }
+        if month == 2 {
+            return @tr("February");
+        }
+        if month == 3 {
+            return @tr("March");
+        }
+        if month == 4 {
+            return @tr("April");
+        }
+        if month == 5 {
+            return @tr("May");
+        }
+        if month == 6 {
+            return @tr("June");
+        }
+        if month == 7 {
+            return @tr("July");
+        }
+        if month == 8 {
+            return @tr("August");
+        }
+        if month == 9 {
+            return @tr("September");
+        }
+        if month == 10 {
+            return @tr("October");
+        }
+        if month == 11 {
+            return @tr("November");
+        }
+        @tr("December")
+    }
+
+    pure function born(p: PersonData) -> string {
+        if p.birth-year <= 0 {
+            return p.birth-place == "" ? "" : @tr("Born in {}", p.birth-place);
+        }
+        // Day, month name and year of the birth date.
+        let date = @tr("{0} {1} {2}", p.birth-day, root.month-name(p.birth-month), p.birth-year);
+        p.birth-place == "" ? @tr("Born {}", date) : @tr("Born {} in {}", date, p.birth-place)
+    }
+
+    pure function facts(p: PersonData) -> string {
+        let born = root.born(p);
+        if p.title-count <= 0 {
+            return born;
+        }
+        let count = @tr("{n} title in your library" | "{n} titles in your library" % p.title-count);
+        born == "" ? count : born + " · " + count
+    }
+
+    pure function status(card: CardData) -> CardStatus {
+        if card.watched {
+            return CardStatus.watched;
+        }
+        card.progress > 0 ? CardStatus.in-progress : CardStatus.default
+    }
+
+    accessible-role: groupbox;
+    accessible-label: @tr("Person");
+
+    background: Theme.bg-base;
+    forward-focus: keys;
+
+    // Wraps the content so Escape reaches it from any focused control.
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.back();
+                return accept;
+            }
+            reject
+        }
+
+        flick := Flickable {
+            height: parent.height;
+            content-width: self.width;
+            content-height: max(content.preferred-height, self.height);
+
+            // The mouse back button, on whatever lies behind the content.
+            TouchArea {
+                width: flick.content-width;
+                height: flick.content-height;
+                pointer-event(event) => {
+                    if event.button == PointerEventButton.back && event.kind == PointerEventKind.up {
+                        root.back();
+                    }
+                }
+            }
+
+            content := VerticalLayout {
+                width: parent.width;
+                alignment: start;
+                padding-top: top-bar.height + Theme.space-lg;
+                padding-left: Theme.space-3xl;
+                padding-right: Theme.space-3xl;
+                padding-bottom: Theme.space-3xl;
+                spacing: Theme.space-xl;
+
+                HorizontalLayout {
+                    alignment: start;
+
+                    IconButton {
+                        icon: Icons.arrow-left;
+                        label: @tr("Back");
+                        clicked => {
+                            root.back();
+                        }
+                    }
+                }
+
+                if root.loaded: HorizontalLayout {
+                    spacing: Theme.space-3xl;
+                    alignment: start;
+
+                    VerticalLayout {
+                        alignment: start;
+
+                        PersonPhoto {
+                            height: 200px;
+                            large: true;
+                            image: root.photo;
+                            has-image: root.has-photo;
+                            initials: root.person.initials;
+                        }
+                    }
+
+                    VerticalLayout {
+                        alignment: start;
+                        spacing: Theme.space-md;
+
+                        DisplayText {
+                            text: root.person.name;
+                            wrap: word-wrap;
+                        }
+                        if root.facts(root.person) != "": BodyText {
+                            text: root.facts(root.person);
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        if root.person.overview != "": VerticalLayout {
+                            alignment: start;
+                            spacing: Theme.space-md;
+
+                            bio := BodyText {
+                                max-width: 720px;
+                                height: root.expanded ? self.preferred-height : min(self.preferred-height, 3 * root.bio-line-height);
+                                text: root.person.overview;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                                overflow: elide;
+                            }
+                            if bio.preferred-height > 3 * root.bio-line-height + 1px: HorizontalLayout {
+                                alignment: start;
+
+                                LabelText {
+                                    accessible-role: button;
+                                    accessible-label: self.text;
+                                    accessible-action-default => {
+                                        root.expanded = !root.expanded;
+                                    }
+                                    text: root.expanded ? @tr("Read less") : @tr("Read more");
+                                    color: Theme.accent;
+
+                                    TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            root.expanded = !root.expanded;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if root.loaded && root.person.movie-count > 0 && root.person.show-count > 0: HorizontalLayout {
+                    padding-top: Theme.space-lg;
+                    spacing: Theme.space-sm;
+                    alignment: start;
+
+                    Chip {
+                        label: @tr("All ({})", root.person.title-count);
+                        selected: root.filter == PersonFilter.all;
+                        clicked => {
+                            root.select-filter(PersonFilter.all);
+                        }
+                    }
+                    Chip {
+                        label: @tr("Movies ({})", root.person.movie-count);
+                        selected: root.filter == PersonFilter.movies;
+                        clicked => {
+                            root.select-filter(PersonFilter.movies);
+                        }
+                    }
+                    Chip {
+                        label: @tr("Shows ({})", root.person.show-count);
+                        selected: root.filter == PersonFilter.shows;
+                        clicked => {
+                            root.select-filter(PersonFilter.shows);
+                        }
+                    }
+                }
+
+                if root.loaded && root.titles.length > 0: grid := Rectangle {
+                    property <int> columns: max(1, floor((self.width + root.grid-gap-x) / (Theme.poster-width + root.grid-gap-x)));
+                    property <int> rows: ceil(root.titles.length / self.columns);
+                    property <length> row-height: measure-card.preferred-height;
+
+                    height: self.rows * self.row-height + max(0, self.rows - 1) * root.grid-gap-y + Theme.space-lg;
+                    accessible-role: list;
+                    accessible-label: @tr("Titles");
+
+                    measure-card := PosterCard {
+                        visible: false;
+                        title: "M";
+                        subtitle: "M";
+                    }
+
+                    for card[index] in root.titles: PosterCard {
+                        x: mod(index, grid.columns) * (Theme.poster-width + root.grid-gap-x);
+                        y: Theme.space-lg + floor(index / grid.columns) * (grid.row-height + root.grid-gap-y);
+                        height: grid.row-height;
+                        title: card.title;
+                        subtitle: card.subtitle;
+                        image: card.image;
+                        status: root.status(card);
+                        progress: card.progress;
+                        clicked => {
+                            root.open-item(card.id);
+                        }
+                    }
+                }
+
+                if root.loading: BodyText {
+                    text: @tr("Loading");
+                    color: Theme.text-secondary;
+                }
+                if root.error != "": BodyText {
+                    text: root.error;
+                    color: Theme.text-secondary;
+                    wrap: word-wrap;
+                }
+                if root.error != "": HorizontalLayout {
+                    alignment: start;
+
+                    Button {
+                        label: @tr("Retry");
+                        style: ButtonStyle.secondary;
+                        clicked => {
+                            root.retry();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    top-bar := TopBar {
+        y: 0;
+        height: self.preferred-height;
+        current: root.page;
+        home-clicked => {
+            root.open-tab(TopBarPage.home);
+        }
+        movies-clicked => {
+            root.open-tab(TopBarPage.movies);
+        }
+        shows-clicked => {
+            root.open-tab(TopBarPage.shows);
+        }
+        favorites-clicked => {
+            root.open-tab(TopBarPage.favorites);
+        }
+        search-clicked => {
+            root.open-tab(TopBarPage.search);
+        }
+        settings-clicked => {
+            root.open-settings();
+        }
+    }
+
+    init => {
+        keys.focus();
+    }
+}
