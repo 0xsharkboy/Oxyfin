@@ -750,7 +750,10 @@ impl PlaybackController {
             LoadStage::Done(outcome) => match *outcome {
                 Ok(prepared) => {
                     if let Some(request) = self.remembered_transcode(&prepared) {
-                        return self.start_load(request);
+                        let navigation = self.navigation.take();
+                        self.start_load(request);
+                        self.navigation = navigation;
+                        return;
                     }
                     let deadline = Instant::now() + self.timings.unload_grace;
                     self.pending = Some((prepared, deadline));
