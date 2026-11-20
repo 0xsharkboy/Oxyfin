@@ -1207,6 +1207,72 @@ async fn countdown_then_next_episode() {
     assert_eq!(next.start, None);
 }
 
+/// Every event received so far.
+fn drain(events: &mut UnboundedReceiver<PlaybackEvent>) -> Vec<PlaybackEvent> {
+    let mut seen = Vec::new();
+    while let Ok(event) = events.try_recv() {
+        seen.push(event);
+    }
+    seen
+}
+
+/// Lets more than ten steps of a 20 ms countdown pass, then checks that it
+/// moved no further and started nothing.
+async fn assert_held(h: &mut Harness) {
+    tokio::time::sleep(Duration::from_millis(250)).await;
+    let later = drain(&mut h.events);
+    assert!(countdowns(&later).is_empty(), "{later:?}");
+    assert_eq!(h.loads().len(), 1);
+}
+
+/// Resumes playback and checks that the countdown goes on from `remaining`
+/// down to 1, then starts the next episode.
+async fn assert_resumes_from(h: &mut Harness, remaining: u32) {
+    h.sink.send(PlayerEvent::Paused(false));
+    let seen = events_until(
+        &mut h.events,
+        |e| matches!(e, PlaybackEvent::Loading { item, .. } if *item == ItemId::from(EPISODES[2])),
+    )
+    .await;
+    let expected: Vec<(String, u32)> = (1..remaining)
+        .rev()
+        .map(|left| (EPISODES[2].to_owned(), left))
+        .collect();
+    assert_eq!(countdowns(&seen), expected);
+}
+
+#[tokio::test]
+async fn pausing_holds_the_countdown() {
+    let mut h = harness(episode_timings(Duration::from_millis(20))).await;
+    h.start_item(EPISODES[1], TEN_MINUTES).await;
+    h.end_at(Duration::from_secs(599));
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::NextUpCountdown { .. })
+    })
+    .await;
+    h.sink.send(PlayerEvent::Paused(true));
+    let seen = events_until(&mut h.events, |e| *e == PlaybackEvent::Paused(true)).await;
+    let remaining = countdowns(&seen).last().map_or(10, |(_, left)| *left);
+    assert_held(&mut h).await;
+    assert_resumes_from(&mut h, remaining).await;
+}
+
+#[tokio::test]
+async fn an_episode_ending_paused_holds_the_countdown() {
+    let mut h = harness(episode_timings(Duration::from_millis(20))).await;
+    h.start_item(EPISODES[1], TEN_MINUTES).await;
+    h.sink.send(PlayerEvent::Paused(true));
+    wait_event(&mut h.events, |e| *e == PlaybackEvent::Paused(true)).await;
+    h.end_at(Duration::from_secs(599));
+    let first = wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::NextUpCountdown { .. })
+    })
+    .await;
+    assert_eq!(countdowns(&[first]), [(EPISODES[2].to_owned(), 10)]);
+    assert_held(&mut h).await;
+    assert_resumes_from(&mut h, 10).await;
+}
+
 #[tokio::test]
 async fn cancel_next_up() {
     let mut h = harness(episode_timings(Duration::from_millis(20))).await;

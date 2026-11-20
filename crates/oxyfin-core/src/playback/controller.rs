@@ -370,7 +370,7 @@ impl PlaybackController {
     }
 
     fn start_countdown(&mut self, episode: Episode) {
-        let (countdown, event) = if self.prefs.autoplay_next {
+        let (mut countdown, event) = if self.prefs.autoplay_next {
             Countdown::start(
                 episode,
                 self.prefs.countdown,
@@ -379,6 +379,9 @@ impl PlaybackController {
         } else {
             Countdown::wait(episode)
         };
+        if self.current.as_ref().is_some_and(|current| current.paused) {
+            countdown.hold();
+        }
         self.countdown = Some(countdown);
         self.emit(event);
     }
@@ -1143,6 +1146,13 @@ impl PlaybackController {
 
     fn on_paused(&mut self, paused: bool) {
         self.emit(PlaybackEvent::Paused(paused));
+        if let Some(countdown) = self.countdown.as_mut() {
+            if paused {
+                countdown.hold();
+            } else {
+                countdown.resume();
+            }
+        }
         let Some(current) = self.current.as_mut() else {
             return;
         };
