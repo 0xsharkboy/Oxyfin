@@ -3,9 +3,13 @@ import { Button, ButtonStyle } from "../components/button.slint";
 import { TopBar, TopBarPage } from "../components/top_bar.slint";
 import { BodyText, CaptionText, DisplayText, HeadingText, LabelText } from "../components/text.slint";
 import { Chip } from "../components/chip.slint";
+import { TextField } from "../components/text_field.slint";
 
 // Where the sign-in token is kept; mirrors the core `TokenStorage`.
 export enum TokenStore { keyring, file, memory }
+
+// Progress of a Quick Connect code typed to sign another device in.
+export enum AuthorizeState { idle, busy, done, wrong-code, unavailable, failed }
 
 // How subtitles look, as indexes into the choices of each row (see `oxyfin_core::SubtitleStyle`).
 export struct SubtitleChoice {
@@ -147,8 +151,8 @@ component SettingSection inherits Rectangle {
     }
 }
 
-// Settings: the signed-in account, playback, the subtitle style, the application version and the
-// sign-out action.
+// Settings: the signed-in account, playback, the subtitle style, the Quick Connect code entry, the
+// application version and the sign-out action.
 export component SettingsScreen inherits Rectangle {
     in property <string> server-name;
     in property <string> server-address;
@@ -165,6 +169,20 @@ export component SettingsScreen inherits Rectangle {
     callback start-fullscreen-changed(on: bool);
     in property <PlaybackChoice> playback;
     callback playback-changed(choice: PlaybackChoice);
+    // The Quick Connect code typed to sign another device in.
+    in-out property <string> authorize-code;
+    in-out property <AuthorizeState> authorize-state;
+    // Whether `code` holds more than spaces.
+    pure callback code-ready(code: string) -> bool;
+    callback authorize(code: string);
+
+    property <bool> can-authorize: root.authorize-state != AuthorizeState.busy && root.code-ready(root.authorize-code);
+
+    function submit-code() {
+        if root.can-authorize {
+            root.authorize(root.authorize-code);
+        }
+    }
 
     accessible-role: groupbox;
     accessible-label: @tr("Settings");
@@ -389,6 +407,53 @@ export component SettingsScreen inherits Rectangle {
                                     position: index,
                                 });
                             }
+                        }
+                    }
+
+                    SettingSection {
+                        title: @tr("Devices");
+
+                        CaptionText {
+                            text: @tr("Sign in another device: open Quick Connect on it, then type the code it shows.");
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            spacing: Theme.space-md;
+
+                            TextField {
+                                horizontal-stretch: 1;
+                                label: @tr("Quick Connect code");
+                                text <=> root.authorize-code;
+                                enabled: root.authorize-state != AuthorizeState.busy;
+                                edited => {
+                                    if root.authorize-state != AuthorizeState.busy {
+                                        root.authorize-state = AuthorizeState.idle;
+                                    }
+                                }
+                                accepted => {
+                                    root.submit-code();
+                                }
+                            }
+                            VerticalLayout {
+                                alignment: end;
+
+                                Button {
+                                    label: @tr("Authorize");
+                                    enabled: root.can-authorize;
+                                    clicked => {
+                                        root.submit-code();
+                                    }
+                                }
+                            }
+                        }
+                        if root.authorize-state != AuthorizeState.idle && root.authorize-state != AuthorizeState.busy: LabelText {
+                            accessible-role: text;
+                            text: root.authorize-state == AuthorizeState.done ? @tr("Device authorized")
+                                : root.authorize-state == AuthorizeState.wrong-code ? @tr("This code is wrong or expired")
+                                : root.authorize-state == AuthorizeState.unavailable ? @tr("Quick Connect is turned off on this server")
+                                : @tr("The device could not be authorized. Try again.");
+                            color: root.authorize-state == AuthorizeState.done ? Theme.watched : Theme.danger;
+                            wrap: word-wrap;
                         }
                     }
 

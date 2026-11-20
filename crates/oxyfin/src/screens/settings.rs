@@ -1,13 +1,13 @@
 //! Settings screen: the signed-in account, the playback choices, the subtitle
-//! style and the application version.
+//! style, the Quick Connect code entry and the application version.
 
 use oxyfin_core::{
-    COUNTDOWNS, PlaybackPrefs, SubtitleBackground, SubtitleColor, SubtitlePosition, SubtitleSize,
-    SubtitleStyle, TokenStorage,
+    COUNTDOWNS, CoreError, PlaybackPrefs, SubtitleBackground, SubtitleColor, SubtitlePosition,
+    SubtitleSize, SubtitleStyle, TokenStorage, quick_connect_code,
 };
 
 use crate::state::SessionInfo;
-use crate::{AppWindow, PlaybackChoice, SubtitleChoice, TokenStore};
+use crate::{AppWindow, AuthorizeState, PlaybackChoice, SubtitleChoice, TokenStore};
 
 /// Version of the application, shown on the settings screen.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -38,6 +38,27 @@ pub fn show(window: &AppWindow, session: Option<&SessionInfo>) {
         Some(TokenStorage::Memory) => TokenStore::Memory,
         Some(TokenStorage::Keyring) | None => TokenStore::Keyring,
     });
+    // A code still being sent keeps its state until the server answers.
+    if window.get_settings_authorize_state() != AuthorizeState::Busy {
+        window.set_settings_authorize_state(AuthorizeState::Idle);
+        window.set_settings_authorize_code("".into());
+    }
+}
+
+/// Whether `code` holds a Quick Connect code to send, spaces aside.
+pub fn code_ready(code: &str) -> bool {
+    !quick_connect_code(code).is_empty()
+}
+
+/// What the Devices section shows once the server answered a code; a session that
+/// expired is left to the caller.
+pub fn authorize_state(result: &Result<bool, CoreError>) -> AuthorizeState {
+    match result {
+        Ok(true) => AuthorizeState::Done,
+        Ok(false) => AuthorizeState::WrongCode,
+        Err(CoreError::QuickConnectDisabled) => AuthorizeState::Unavailable,
+        Err(_) => AuthorizeState::Failed,
+    }
 }
 
 /// The chips selected for `style`.
@@ -151,6 +172,50 @@ mod tests {
 
         show(&window, None);
         assert_eq!(window.get_settings_server_name(), "");
+    }
+
+    #[test]
+    fn showing_the_settings_clears_a_finished_code() {
+        i_slint_backend_testing::init_no_event_loop();
+        let window = AppWindow::new().unwrap();
+
+        window.set_settings_authorize_code("482913".into());
+        window.set_settings_authorize_state(AuthorizeState::Done);
+        show(&window, Some(&info(None)));
+        assert_eq!(window.get_settings_authorize_state(), AuthorizeState::Idle);
+        assert_eq!(window.get_settings_authorize_code(), "");
+
+        window.set_settings_authorize_code("482913".into());
+        window.set_settings_authorize_state(AuthorizeState::Busy);
+        show(&window, Some(&info(None)));
+        assert_eq!(window.get_settings_authorize_state(), AuthorizeState::Busy);
+        assert_eq!(window.get_settings_authorize_code(), "482913");
+    }
+
+    #[test]
+    fn a_code_is_ready_once_it_has_more_than_spaces() {
+        assert!(!code_ready(""));
+        assert!(!code_ready("  \t"));
+        assert!(code_ready(" 4"));
+        assert!(code_ready("482 913"));
+    }
+
+    #[test]
+    fn the_server_answer_picks_the_message() {
+        assert_eq!(authorize_state(&Ok(true)), AuthorizeState::Done);
+        assert_eq!(authorize_state(&Ok(false)), AuthorizeState::WrongCode);
+        assert_eq!(
+            authorize_state(&Err(CoreError::QuickConnectDisabled)),
+            AuthorizeState::Unavailable
+        );
+        assert_eq!(
+            authorize_state(&Err(CoreError::Network("down".into()))),
+            AuthorizeState::Failed
+        );
+        assert_eq!(
+            authorize_state(&Err(CoreError::Server { status: 500 })),
+            AuthorizeState::Failed
+        );
     }
 
     #[test]

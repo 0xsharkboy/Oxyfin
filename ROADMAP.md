@@ -38,7 +38,7 @@ This file is the single source of truth for planned work. An item is checked onl
 - [x] Cast and crew pages
 - [x] Collections (box sets)
 - [x] Server discovery on the local network
-- [ ] Authorize another device (Quick Connect code entry)
+- [x] Authorize another device (Quick Connect code entry)
 - [x] Fullscreen launch option
 - [ ] Discord Rich Presence (opt-in, never sends the server address)
 - [ ] AUR package

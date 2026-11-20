@@ -7,7 +7,7 @@ use i_slint_backend_testing::{AccessibleRole, ElementHandle};
 use oxyfin::{AppWindow, Screen};
 use oxyfin_core::{Config, Paths, PlaybackPrefs};
 use slint::{ComponentHandle, LogicalSize};
-use wiremock::MockServer;
+use wiremock::{Mock, MockServer};
 
 use super::{click, mount_browse_basics, run, save_session, start_with, wait_role, wait_until};
 
@@ -62,10 +62,21 @@ pub fn enabled(window: &AppWindow, label: &str) -> bool {
 pub fn open_settings(
     scenario: impl AsyncFnOnce(&AppWindow, &Shared) -> Result<(), String> + 'static,
 ) {
+    open_settings_with(Vec::new(), scenario);
+}
+
+/// Like [`open_settings`], with `mocks` mounted on the simulated server as well.
+pub fn open_settings_with(
+    mocks: Vec<Mock>,
+    scenario: impl AsyncFnOnce(&AppWindow, &Shared) -> Result<(), String> + 'static,
+) {
     let shared: Shared = Arc::new(Mutex::new(None));
     let keep = Arc::clone(&shared);
     let flow = start_with(
         |mock: MockServer| async move {
+            for extra in mocks {
+                mock.register(extra).await;
+            }
             mount_browse_basics(&mock, EMPTY).await;
             mock
         },

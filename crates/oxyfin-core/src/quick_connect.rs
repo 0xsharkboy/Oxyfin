@@ -9,6 +9,11 @@ use crate::{CoreError, Result, ServerHandle, SessionManager, SignedIn};
 /// Delay between two checks of a pending Quick Connect code.
 pub const QUICK_CONNECT_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
+/// The Quick Connect code typed by the user, without the spaces that group its digits.
+pub fn quick_connect_code(text: &str) -> String {
+    text.chars().filter(|c| !c.is_whitespace()).collect()
+}
+
 /// A pending Quick Connect attempt.
 #[derive(Debug)]
 pub struct QuickConnect {
@@ -71,5 +76,17 @@ impl SessionManager {
             .map_err(expired)?;
         let user_name = session.me().await?.name;
         self.remember(server, session, user_name).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_code_loses_its_spaces() {
+        assert_eq!(quick_connect_code("482 913"), "482913");
+        assert_eq!(quick_connect_code(" 48\t2913\n"), "482913");
+        assert_eq!(quick_connect_code("   "), "");
     }
 }
