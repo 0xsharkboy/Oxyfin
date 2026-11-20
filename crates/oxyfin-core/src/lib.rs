@@ -78,6 +78,7 @@ pub use models::{
     LibraryKind, MovieDetails, Page, Person, PersonDetails, PersonKind, PersonTitle, Season,
     SeriesDetails, UserState,
 };
+pub use oxyfin_api::DiscoveredServer;
 pub use paths::Paths;
 pub use playback::{
     AudioOption, AudioPick, CHAPTER_RESTART_GRACE, COUNTDOWNS, Chapter, HdrFormat, HdrInfo,
@@ -92,7 +93,9 @@ pub use quick_connect::{QUICK_CONNECT_POLL_INTERVAL, QuickConnect};
 pub use secrets::{
     FileStore, KeyringStore, MemoryStore, SecretStore, TokenStorage, TokenVault, account_key,
 };
-pub use session::{ServerHandle, SessionManager, SignedIn};
+pub use session::{
+    DISCOVERY_TIMEOUT, SERVER_VERSION_TIMEOUT, ServerHandle, SessionManager, SignedIn,
+};
 pub use subtitles::{
     SubtitleBackground, SubtitleColor, SubtitlePosition, SubtitleSize, SubtitleStyle,
 };

@@ -639,3 +639,75 @@ async fn unreadable_prefs_fall_back() {
         assert!(!paths.config_dir.join("config.json.bad").exists());
     }
 }
+
+async fn discovery_responder(address: String) -> std::net::SocketAddr {
+    let socket = tokio::net::UdpSocket::bind("127.0.0.1:0")
+        .await
+        .unwrap_or_else(|err| panic!("bind: {err}"));
+    let local = socket
+        .local_addr()
+        .unwrap_or_else(|err| panic!("local address: {err}"));
+    tokio::spawn(async move {
+        let mut buffer = [0u8; 256];
+        while let Ok((_, from)) = socket.recv_from(&mut buffer).await {
+            let reply = json!({ "Address": address, "Id": "server-1", "Name": "Maison" });
+            let _ = socket.send_to(reply.to_string().as_bytes(), from).await;
+        }
+    });
+    local
+}
+
+#[tokio::test]
+async fn discover_lists_servers_answering_on_the_targets() {
+    let mock = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let manager = manager(&mock, &dir, memory_vault());
+    let target = discovery_responder(mock.uri()).await;
+    manager.set_discovery_targets(vec![target]);
+
+    let servers = manager.discover().await;
+
+    assert_eq!(servers.len(), 1, "{servers:?}");
+    assert_eq!(servers[0].name, "Maison");
+    assert_eq!(servers[0].address, mock.uri());
+}
+
+#[tokio::test]
+async fn discover_without_targets_finds_nothing_at_once() {
+    let mock = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let manager = manager(&mock, &dir, memory_vault());
+    manager.set_discovery_targets(Vec::new());
+    let start = std::time::Instant::now();
+
+    assert!(manager.discover().await.is_empty());
+    assert!(start.elapsed() < Duration::from_millis(500));
+}
+
+#[tokio::test]
+async fn server_version_reads_the_public_info() {
+    let mock = MockServer::start().await;
+    mount_public_info(&mock).await;
+    let dir = TempDir::new().unwrap();
+    let manager = manager(&mock, &dir, memory_vault());
+
+    assert_eq!(
+        manager.server_version(&mock.uri()).await.as_deref(),
+        Some("12.4.0")
+    );
+}
+
+#[tokio::test]
+async fn server_version_is_none_when_the_server_does_not_answer() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/System/Info/Public"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&mock)
+        .await;
+    let dir = TempDir::new().unwrap();
+    let manager = manager(&mock, &dir, memory_vault());
+
+    assert_eq!(manager.server_version(&mock.uri()).await, None);
+    assert_eq!(manager.server_version("not a url").await, None);
+}
