@@ -219,8 +219,8 @@ pub struct PlaybackStats {
     /// Frames the video output dropped.
     pub dropped_output: Option<u64>,
     /// HDR format of the video, such as `HDR10` or `HLG`, followed by
-    /// `→ SDR` and the tone mapping curve when the output is SDR; `None`
-    /// for SDR video.
+    /// `, tone mapped` and the curve when the output is SDR, such as
+    /// `HDR10, tone mapped (bt.2390)`; `None` for SDR video.
     pub hdr: Option<String>,
     /// Audio codec name, such as `eac3`.
     pub audio_codec: Option<String>,
