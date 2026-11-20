@@ -45,7 +45,7 @@ pub enum BrowseSource {
     },
     /// All movies or all series of the server, across libraries.
     All(ContentKind),
-    /// The favorite movies and series of the user.
+    /// The favorite movies, series, videos and box sets of the user.
     Favorites,
 }
 
@@ -273,6 +273,7 @@ impl Catalog {
             }
             BrowseSource::Favorites => {
                 items.include_item_types = movies_series_videos();
+                items.include_item_types.push(BaseItemKind::BoxSet);
                 items.is_favorite = Some(true);
             }
         }
