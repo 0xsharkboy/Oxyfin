@@ -2,7 +2,8 @@
 
 use std::sync::Arc;
 
-use tokio::sync::OnceCell;
+use tokio::sync::Mutex;
+use tokio::time::{Duration, Instant};
 
 use oxyfin_api::{
     BaseItemDto, BaseItemKind, ItemFields, ItemId, ItemSortBy, ItemsQuery, Session, SortOrder,
@@ -68,12 +69,16 @@ const IN_PROGRESS_CAP: u32 = 200;
 /// Requests listing the items of box sets sent at the same time.
 const BOX_SET_REQUESTS: usize = 4;
 
+/// How long the box sets listed stay valid before they are listed again.
+const BOX_SET_LIFETIME: Duration = Duration::from_secs(30 * 60);
+
 type ChildrenAnswer = (
     usize,
     oxyfin_api::Result<oxyfin_api::QueryResult<BaseItemDto>>,
 );
 
-/// Stores the item identifiers of one box set answer at its index.
+/// Stores the item identifiers of one box set answer at its index. A box set whose items cannot
+/// be listed keeps no item, unless the session expired.
 fn store_children(
     items: &mut [Vec<ItemId>],
     joined: Option<std::result::Result<ChildrenAnswer, tokio::task::JoinError>>,
@@ -83,8 +88,16 @@ fn store_children(
     };
     let (index, result) =
         joined.map_err(|error| CoreError::Decode(format!("box set task: {error}")))?;
+    let ids = match result.map_err(CoreError::from) {
+        Ok(answer) => answer.items.into_iter().map(|dto| dto.id).collect(),
+        Err(CoreError::SessionExpired) => return Err(CoreError::SessionExpired),
+        Err(error) => {
+            log::warn!("cannot list the items of a box set: {error}");
+            Vec::new()
+        }
+    };
     if let Some(slot) = items.get_mut(index) {
-        *slot = result?.items.into_iter().map(|dto| dto.id).collect();
+        *slot = ids;
     }
     Ok(())
 }
@@ -122,13 +135,16 @@ pub struct BrowseQuery {
 /// Box sets of the user with the identifiers of their items.
 type BoxSets = Vec<(CollectionLink, Vec<ItemId>)>;
 
+/// The box sets last listed, with the time they were.
+type KeptBoxSets = Mutex<Option<(Instant, Arc<BoxSets>)>>;
+
 /// Read access to the library, and the played and favorite toggles.
 ///
-/// Clones share the box sets, listed once per catalog.
+/// Clones share the box sets, listed once per catalog and again every half hour.
 #[derive(Clone, Debug)]
 pub struct Catalog {
     session: Session,
-    box_sets: Arc<OnceCell<BoxSets>>,
+    box_sets: Arc<KeptBoxSets>,
 }
 
 fn summaries(items: &[BaseItemDto]) -> Vec<ItemSummary> {
@@ -347,13 +363,22 @@ impl Catalog {
 
     /// Lists the box sets the movie or series `id` belongs to.
     ///
-    /// The box sets of the user and their items are listed on the first call only; a failed
-    /// listing is asked again on the next call.
+    /// The box sets of the user and their items are listed on the first call, then again once
+    /// they are half an hour old; a failed listing is asked again on the next call.
     pub async fn collections_of(&self, id: &ItemId) -> Result<Vec<CollectionLink>> {
-        let box_sets = self
-            .box_sets
-            .get_or_try_init(|| self.list_box_sets())
-            .await?;
+        let box_sets = {
+            let mut kept = self.box_sets.lock().await;
+            match &*kept {
+                Some((listed, box_sets)) if listed.elapsed() < BOX_SET_LIFETIME => {
+                    Arc::clone(box_sets)
+                }
+                _ => {
+                    let box_sets = Arc::new(self.list_box_sets().await?);
+                    *kept = Some((Instant::now(), Arc::clone(&box_sets)));
+                    box_sets
+                }
+            }
+        };
         Ok(box_sets
             .iter()
             .filter(|(_, items)| items.contains(id))
@@ -366,6 +391,7 @@ impl Catalog {
             include_item_types: vec![BaseItemKind::BoxSet],
             recursive: true,
             sort_by: vec![ItemSortBy::SortName],
+            bare: true,
             ..ItemsQuery::default()
         };
         let links: Vec<CollectionLink> = self
@@ -390,6 +416,7 @@ impl Catalog {
             children.spawn(async move {
                 let query = ItemsQuery {
                     parent_id: Some(parent),
+                    bare: true,
                     ..ItemsQuery::default()
                 };
                 (index, session.items(&query).await)
