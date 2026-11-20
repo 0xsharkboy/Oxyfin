@@ -3848,6 +3848,123 @@ async fn remembered_audio_is_asked_of_a_transcode() {
     assert_eq!(h.loads().len(), 1);
 }
 
+/// [`episode_transcode`] with a French image subtitle (4) burned into the picture.
+fn burned_transcode(id: &str, audio: i32) -> Value {
+    let mut info = episode_transcode(id, audio);
+    let source = &mut info["MediaSources"][0];
+    let url = source["TranscodingUrl"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    source["TranscodingUrl"] = json!(format!("{url}&SubtitleStreamIndex=4&SubtitleMethod=Encode"));
+    source["DefaultSubtitleStreamIndex"] = json!(4);
+    let streams = source["MediaStreams"].as_array_mut();
+    streams.unwrap_or_else(|| panic!("no streams")).push(json!({
+        "Index": 4,
+        "Type": "Subtitle",
+        "Codec": "PGSSUB",
+        "Language": "fre",
+        "IsExternal": false,
+        "IsTextSubtitleStream": false,
+        "DeliveryMethod": "Encode",
+    }));
+    info
+}
+
+#[tokio::test]
+async fn remembered_subtitle_off_is_asked_of_a_burning_transcode() {
+    let episode = EPISODES[0];
+    let route = format!("/Items/{episode}/PlaybackInfo");
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(&route))
+        .and(body_partial_json(json!({ "SubtitleStreamIndex": -1 })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(episode_transcode(episode, 3)))
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    mount_info_for(&mock, episode, burned_transcode(episode, 3)).await;
+    let mut h = harness_in(
+        mock,
+        episode_timings(Duration::from_secs(3600)),
+        remembered_french(),
+    )
+    .await;
+    h.play_item(episode, PlayMode::FromStart).await;
+    let load = h.wait_load(1).await;
+    assert!(
+        !load.location.contains("SubtitleStreamIndex"),
+        "{}",
+        load.location
+    );
+    let infos = bodies(&h.mock, &route).await;
+    assert_eq!(infos.len(), 2);
+    assert!(
+        infos[0].get("SubtitleStreamIndex").is_none(),
+        "{:?}",
+        infos[0]
+    );
+    assert_eq!(infos[1]["MediaSourceId"], json!(MOVIE_ID));
+    assert_eq!(infos[1]["SubtitleStreamIndex"], json!(-1));
+    assert_eq!(infos[1]["AudioStreamIndex"], json!(3));
+    h.loaded_with(transcode_tracks()).await;
+    assert_eq!(h.loads().len(), 1);
+}
+
+#[tokio::test]
+async fn a_remembered_text_subtitle_replaces_a_burned_one() {
+    let episode = EPISODES[0];
+    let route = format!("/Items/{episode}/PlaybackInfo");
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(&route))
+        .and(body_partial_json(json!({ "SubtitleStreamIndex": 0 })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(episode_transcode(episode, 2)))
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    mount_info_for(&mock, episode, burned_transcode(episode, 2)).await;
+    let data = tempfile::tempdir().unwrap_or_else(|err| panic!("no temporary directory: {err}"));
+    TrackMemory::load(&Paths::under(data.path()), ACCOUNT)
+        .set(
+            &ItemId::from(SERIES_ID),
+            TrackChoice {
+                audio: None,
+                subtitle: SubtitlePick::Track {
+                    language: Some("eng".to_owned()),
+                    forced: false,
+                    hearing_impaired: false,
+                    external: true,
+                },
+            },
+        )
+        .unwrap_or_else(|err| panic!("cannot seed the track memory: {err}"));
+    let mut h = harness_in(mock, episode_timings(Duration::from_secs(3600)), data).await;
+    h.play_item(episode, PlayMode::FromStart).await;
+    h.wait_load(1).await;
+    let infos = bodies(&h.mock, &route).await;
+    assert_eq!(infos.len(), 2);
+    assert_eq!(infos[1]["SubtitleStreamIndex"], json!(0));
+    assert!(infos[1].get("AudioStreamIndex").is_none(), "{:?}", infos[1]);
+}
+
+#[tokio::test]
+async fn a_transcode_with_the_remembered_streams_is_not_asked_again() {
+    let episode = EPISODES[0];
+    let route = format!("/Items/{episode}/PlaybackInfo");
+    let mock = MockServer::start().await;
+    mount_info_for(&mock, episode, episode_transcode(episode, 3)).await;
+    let mut h = harness_in(
+        mock,
+        episode_timings(Duration::from_secs(3600)),
+        remembered_french(),
+    )
+    .await;
+    h.play_item(episode, PlayMode::FromStart).await;
+    h.wait_load(1).await;
+    assert_eq!(bodies(&h.mock, &route).await.len(), 1);
+}
+
 #[tokio::test]
 async fn next_sent_before_a_remembered_audio_request_is_kept() {
     let episode = EPISODES[0];
