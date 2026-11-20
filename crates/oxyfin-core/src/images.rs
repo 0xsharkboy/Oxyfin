@@ -22,6 +22,9 @@ pub struct ImageSize {
 /// Default memory budget of the image cache: 64 MB.
 pub const DEFAULT_MEMORY_BUDGET: u64 = 64 * 1024 * 1024;
 
+/// Image downloads an [`ImageCache`] runs at the same time; the others wait for a slot.
+pub const IMAGE_FETCHES: usize = 6;
+
 /// Default disk budget of the image cache: 500 MB.
 pub const DEFAULT_DISK_BUDGET: u64 = 500 * 1024 * 1024;
 
@@ -240,6 +243,7 @@ pub struct ImageCache {
     budget: usize,
     memory: Mutex<Memory>,
     trimmer: Arc<Trimmer>,
+    fetches: tokio::sync::Semaphore,
 }
 
 impl ImageCache {
@@ -266,6 +270,7 @@ impl ImageCache {
             budget: usize::try_from(budgets.memory_bytes).unwrap_or(usize::MAX),
             memory: Mutex::new(Memory::default()),
             trimmer,
+            fetches: tokio::sync::Semaphore::new(IMAGE_FETCHES),
         }
     }
 
@@ -282,6 +287,8 @@ impl ImageCache {
     }
 
     /// Returns the bytes of `image` scaled to fit `size`, from memory, disk or the server.
+    ///
+    /// At most [`IMAGE_FETCHES`] images are downloaded at a time; memory and disk hits never wait.
     pub async fn get(&self, image: &ImageRef, size: ImageSize) -> Result<Arc<[u8]>> {
         self.cached(file_name(image, size), async {
             let mut request = ImageRequest::new(image.item_id.clone(), image.image_type.clone());
@@ -289,6 +296,8 @@ impl ImageCache {
             request.index = image.index;
             request.max_width = Some(size.max_width);
             request.max_height = Some(size.max_height);
+            // The semaphore is never closed, so a failed acquire cannot happen.
+            let _slot = self.fetches.acquire().await.ok();
             self.session.fetch_image(&request).await
         })
         .await
