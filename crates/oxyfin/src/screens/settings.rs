@@ -45,7 +45,7 @@ pub fn show(window: &AppWindow, session: Option<&SessionInfo>) {
     }
 }
 
-/// Whether `code` holds a Quick Connect code to send, spaces aside.
+/// Whether `code` holds a Quick Connect code to send: at least one digit.
 pub fn code_ready(code: &str) -> bool {
     !quick_connect_code(code).is_empty()
 }
@@ -193,11 +193,13 @@ mod tests {
     }
 
     #[test]
-    fn a_code_is_ready_once_it_has_more_than_spaces() {
+    fn a_code_is_ready_once_it_has_a_digit() {
         assert!(!code_ready(""));
         assert!(!code_ready("  \t"));
         assert!(code_ready(" 4"));
         assert!(code_ready("482 913"));
+        assert!(code_ready("482-913"));
+        assert!(!code_ready(" - -"));
     }
 
     #[test]
