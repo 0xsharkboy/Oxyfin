@@ -931,6 +931,8 @@ async fn mount_box_sets(mock: &MockServer, calls: u64) {
         Mock::given(method("GET"))
             .and(path("/Items"))
             .and(query_param("parentId", parent))
+            .and(query_param("enableImages", "false"))
+            .and(query_param("enableUserData", "false"))
             .respond_with(
                 ResponseTemplate::new(200)
                     .set_body_json(json!({"Items": items, "TotalRecordCount": 1})),
@@ -1185,4 +1187,76 @@ fn cast_joins_the_credits_of_one_person() {
     let karl = &details.cast[3];
     assert_eq!(karl.kind, PersonKind::Writer);
     assert_eq!(karl.also, None);
+}
+
+/// Box set listings, then the items of the two box sets, the second answering `status`.
+async fn mount_failing_box_set(mock: &MockServer, status: u16) {
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .and(query_param("includeItemTypes", "BoxSet"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Items": [
+                {"Id": BOX_SET_ID, "Name": "Northbound Collection", "Type": "BoxSet"},
+                {"Id": OTHER_BOX_SET_ID, "Name": "Other Collection", "Type": "BoxSet"}
+            ],
+            "TotalRecordCount": 2
+        })))
+        .mount(mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .and(query_param("parentId", BOX_SET_ID))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Items": [{"Id": MOVIE_ID, "Name": "Northbound", "Type": "Movie"}],
+            "TotalRecordCount": 1
+        })))
+        .mount(mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .and(query_param("parentId", OTHER_BOX_SET_ID))
+        .respond_with(ResponseTemplate::new(status))
+        .expect(1)
+        .mount(mock)
+        .await;
+}
+
+#[tokio::test]
+async fn collections_skip_a_box_set_whose_items_fail() {
+    let mock = MockServer::start().await;
+    mount_failing_box_set(&mock, 500).await;
+    let catalog = catalog(&mock);
+    let found = catalog
+        .collections_of(&ItemId::from(MOVIE_ID))
+        .await
+        .unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].id, ItemId::from(BOX_SET_ID));
+    let none = catalog.collections_of(&ItemId::from("m9")).await.unwrap();
+    assert!(none.is_empty());
+}
+
+#[tokio::test]
+async fn collections_end_the_session_when_a_box_set_answers_401() {
+    let mock = MockServer::start().await;
+    mount_failing_box_set(&mock, 401).await;
+    let result = catalog(&mock).collections_of(&ItemId::from(MOVIE_ID)).await;
+    assert_eq!(result, Err(CoreError::SessionExpired));
+}
+
+#[tokio::test]
+async fn collections_listed_again_after_half_an_hour() {
+    let mock = MockServer::start().await;
+    mount_box_sets(&mock, 2).await;
+    let catalog = catalog(&mock);
+    let movie = ItemId::from(MOVIE_ID);
+    assert_eq!(catalog.collections_of(&movie).await.unwrap().len(), 1);
+    tokio::time::pause();
+    tokio::time::advance(std::time::Duration::from_secs(20 * 60)).await;
+    tokio::time::resume();
+    assert_eq!(catalog.collections_of(&movie).await.unwrap().len(), 1);
+    tokio::time::pause();
+    tokio::time::advance(std::time::Duration::from_secs(11 * 60)).await;
+    tokio::time::resume();
+    assert_eq!(catalog.collections_of(&movie).await.unwrap().len(), 1);
 }
