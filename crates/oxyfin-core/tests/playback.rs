@@ -3683,6 +3683,35 @@ async fn an_audio_pick_keeps_the_remembered_subtitle() {
 }
 
 #[tokio::test]
+async fn picks_without_a_language_keep_the_memory() {
+    let mut info = fixture("playback_info");
+    let streams = &mut info["MediaSources"][0]["MediaStreams"];
+    streams[0]["Language"] = Value::Null;
+    streams[2]["Language"] = json!("und");
+    let mock = MockServer::start().await;
+    mount_info_for(&mock, EPISODES[0], info).await;
+    let mut h = harness_in(
+        mock,
+        episode_timings(Duration::from_secs(3600)),
+        remembered_french(),
+    )
+    .await;
+    let remembered = h.memory().get(&ItemId::from(SERIES_ID));
+    h.start_item(EPISODES[0], TEN_MINUTES).await;
+    h.pick(
+        PlaybackCommand::SelectAudio(2),
+        Call::SelectAudio(Some(TrackId(1))),
+    )
+    .await;
+    h.pick(
+        PlaybackCommand::SelectSubtitle(Some(0)),
+        Call::SelectSubtitle(Some(TrackId(1))),
+    )
+    .await;
+    assert_eq!(h.memory().get(&ItemId::from(SERIES_ID)), remembered);
+}
+
+#[tokio::test]
 async fn no_matching_language_keeps_the_server_default() {
     let mut info = two_languages();
     info["MediaSources"][0]["MediaStreams"][2]["Language"] = json!("jpn");

@@ -54,25 +54,37 @@ pub enum SubtitlePick {
     },
 }
 
+/// The language of `stream`, unless it has none or an undetermined one.
+fn known_language(stream: &MediaStream) -> Option<String> {
+    stream
+        .language
+        .as_deref()
+        .map(str::trim)
+        .filter(|language| !language.is_empty() && !language.eq_ignore_ascii_case("und"))
+        .map(str::to_owned)
+}
+
 impl AudioPick {
-    /// Describes `stream`.
-    pub fn of(stream: &MediaStream) -> Self {
-        Self {
-            language: stream.language.clone(),
+    /// Describes `stream`; `None` when it names no language, as such a pick
+    /// would match no stream of the next episodes.
+    pub fn of(stream: &MediaStream) -> Option<Self> {
+        Some(Self {
+            language: Some(known_language(stream)?),
             channels: stream.channels,
-        }
+        })
     }
 }
 
 impl SubtitlePick {
-    /// Describes `stream`.
-    pub fn of(stream: &MediaStream) -> Self {
-        Self::Track {
-            language: stream.language.clone(),
+    /// Describes `stream`; `None` when it names no language, as such a pick
+    /// would match no stream of the next episodes.
+    pub fn of(stream: &MediaStream) -> Option<Self> {
+        Some(Self::Track {
+            language: Some(known_language(stream)?),
             forced: stream.is_forced,
             hearing_impaired: stream.is_hearing_impaired,
             external: stream.is_external,
-        }
+        })
     }
 }
 
