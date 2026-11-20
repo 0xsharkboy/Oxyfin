@@ -436,6 +436,14 @@ impl PlaybackController {
                 self.call(self.player.set_paused(paused));
             }
             PlaybackCommand::Seek(target) => {
+                if let Some(current) = self.current.as_ref() {
+                    let to = match target {
+                        SeekTarget::Absolute(position) => position,
+                        SeekTarget::Forward(step) => current.position.saturating_add(step),
+                        SeekTarget::Backward(step) => current.position.saturating_sub(step),
+                    };
+                    self.skips.sought(&current.segments, to);
+                }
                 self.seek(target);
             }
             PlaybackCommand::SetSpeed(speed) => {

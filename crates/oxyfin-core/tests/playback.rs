@@ -3372,6 +3372,63 @@ async fn undo_skip_returns_and_disables() {
 }
 
 #[tokio::test]
+async fn a_seek_into_a_fresh_intro_is_not_skipped() {
+    let mut h = segmented(
+        vec![
+            segment_json("Recap", secs(2), secs(4)),
+            segment_json("Intro", secs(5), secs(9)),
+        ],
+        prefs(|p| {
+            p.skip_intros = true;
+            p.skip_recaps = true;
+        }),
+    )
+    .await;
+    h.sink.send(PlayerEvent::Position(secs(1)));
+    let target = SeekTarget::Forward(secs(5));
+    h.handle.send(PlaybackCommand::Seek(target));
+    h.player.wait_call(|c| *c == Call::Seek(target)).await;
+    land(&h, secs(6));
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::Seeked)).await;
+    assert_eq!(segment_events(&seen), vec![Some(intro(5, 9))], "{seen:?}");
+
+    let target = SeekTarget::Absolute(secs(3));
+    h.handle.send(PlaybackCommand::Seek(target));
+    h.player.wait_call(|c| *c == Call::Seek(target)).await;
+    land(&h, secs(3));
+    h.sink.send(PlayerEvent::Position(secs(7)));
+    let seen = h.stop().await;
+    assert!(skipped(&seen).is_empty(), "{seen:?}");
+    assert_eq!(seeks_to(&h, secs(4)), 0);
+    assert_eq!(seeks_to(&h, secs(9)), 0);
+}
+
+#[tokio::test]
+async fn undo_after_a_seek_does_nothing() {
+    let mut h = segmented(
+        vec![segment_json("Intro", secs(5), secs(9))],
+        prefs(|p| p.skip_intros = true),
+    )
+    .await;
+    h.sink.send(PlayerEvent::Position(secs(5)));
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::SegmentSkipped { .. })
+    })
+    .await;
+    land(&h, secs(9));
+    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Seeked)).await;
+
+    let target = SeekTarget::Absolute(secs(20));
+    h.handle.send(PlaybackCommand::Seek(target));
+    h.player.wait_call(|c| *c == Call::Seek(target)).await;
+    land(&h, secs(20));
+    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Seeked)).await;
+    h.handle.send(PlaybackCommand::UndoSkip);
+    h.stop().await;
+    assert_eq!(seeks_to(&h, secs(5)), 0);
+}
+
+#[tokio::test]
 async fn undo_after_back_to_back_skips_returns_to_the_last_one() {
     let mut h = segmented(
         vec![
