@@ -172,7 +172,7 @@ export component PlayerScreen inherits Rectangle {
 
     // Serial of the last skip whose notice timed out or was answered.
     property <int> skip-notice-done: 0;
-    property <bool> skip-notice-visible: root.skipped.kind != SkipKind.none && root.skipped.serial != root.skip-notice-done && !root.toast-visible && !root.loading && !root.has-error;
+    property <bool> skip-notice-visible: root.skipped.kind != SkipKind.none && root.skipped.serial != root.skip-notice-done && !root.toast-visible && root.menu == PlayerMenu.none && !root.loading && !root.has-error;
     changed skipped => {
         if skip-notice-timer.running {
             skip-notice-timer.restart();
