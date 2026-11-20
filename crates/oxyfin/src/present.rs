@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use oxyfin_core::{
-    AudioOption, Chapter, CoreError, Episode, ImageSize, ItemKind, ItemSummary, Person, PlayMethod,
-    PlaybackError, PlaybackTitle, SeriesDetails, StatsReport, SubtitleOption,
+    AudioOption, Chapter, CoreError, Episode, HdrFormat, HdrInfo, ImageSize, ItemKind, ItemSummary,
+    Person, PlayMethod, PlaybackError, PlaybackTitle, SeriesDetails, StatsReport, SubtitleOption,
 };
 use slint::{ModelRc, SharedString, VecModel};
 
@@ -376,6 +376,13 @@ pub trait StatWords {
     fn dropped(&self, decoder: &str, output: &str) -> String;
     /// Media buffered ahead of the position.
     fn ahead(&self, seconds: &str) -> String;
+    /// An HDR `format` tone mapped to SDR, with an unknown curve.
+    fn tone_mapped(&self, format: &str) -> String;
+    /// An HDR `format` tone mapped to SDR with `curve`.
+    fn tone_mapped_with(&self, format: &str, curve: &str) -> String;
+    /// A short phrase for a transcode `reason` as Jellyfin names it, or the
+    /// name itself when unknown.
+    fn transcode_reason(&self, reason: &str) -> String;
 }
 
 /// The sections of the playback statistics panel, in the order of the
@@ -397,7 +404,12 @@ pub fn stat_sections(report: &StatsReport, words: &dyn StatWords) -> Vec<StatSec
     let method = if report.transcode_reasons.is_empty() {
         method
     } else {
-        format!("{method} ({})", report.transcode_reasons.join(", "))
+        let reasons: Vec<String> = report
+            .transcode_reasons
+            .iter()
+            .map(|reason| words.transcode_reason(reason))
+            .collect();
+        format!("{method} ({})", reasons.join(", "))
     };
     // A stream whose bitrate is not known yet would make the total too low.
     let part = |present: bool, bits: Option<u64>| if present { bits } else { Some(0) };
@@ -446,7 +458,10 @@ pub fn stat_sections(report: &StatsReport, words: &dyn StatWords) -> Vec<StatSec
                 words.dropped(&decoder.to_string(), &output.to_string()),
             )
         }),
-        stats.hdr.clone().map(|hdr| row(words.hdr(), hdr)),
+        stats
+            .hdr
+            .as_ref()
+            .map(|hdr| row(words.hdr(), hdr_text(hdr, words))),
     ];
 
     let codec_line = [
@@ -497,6 +512,20 @@ pub fn stat_sections(report: &StatsReport, words: &dyn StatWords) -> Vec<StatSec
         })
     })
     .collect()
+}
+
+/// The HDR format, with the tone mapping when the output is SDR, as in the
+/// reference design: `HDR10, tone mapped (bt.2390)`.
+fn hdr_text(hdr: &HdrInfo, words: &dyn StatWords) -> String {
+    let format = match hdr.format {
+        HdrFormat::Hdr10 => "HDR10",
+        HdrFormat::Hlg => "HLG",
+    };
+    match (hdr.tone_mapped, hdr.curve.as_deref()) {
+        (false, _) => format.to_owned(),
+        (true, Some(curve)) => words.tone_mapped_with(format, curve),
+        (true, None) => words.tone_mapped(format),
+    }
 }
 
 /// A bitrate in bits per second, as kbps below 1 Mbps and Mbps from there.

@@ -406,6 +406,17 @@ impl StatWords for Words<'_> {
     fn ahead(&self, seconds: &str) -> String {
         self.0.invoke_ahead(seconds.into()).into()
     }
+    fn tone_mapped(&self, format: &str) -> String {
+        self.0.invoke_tone_mapped(format.into()).into()
+    }
+    fn tone_mapped_with(&self, format: &str, curve: &str) -> String {
+        self.0
+            .invoke_tone_mapped_with(format.into(), curve.into())
+            .into()
+    }
+    fn transcode_reason(&self, reason: &str) -> String {
+        self.0.invoke_transcode_reason(reason.into()).into()
+    }
 }
 
 /// Wires the seek bar preview of `window`: `request` is asked for each

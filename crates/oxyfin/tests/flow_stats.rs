@@ -11,7 +11,9 @@ use common::click;
 use i_slint_backend_testing::{AccessibleRole, ElementHandle, ElementQuery};
 use oxyfin::screens::player;
 use oxyfin::{AppWindow, Screen, StatRow};
-use oxyfin_core::{PlayMethod, PlaybackCommand, PlaybackEvent, PlaybackStats, StatsReport};
+use oxyfin_core::{
+    HdrFormat, HdrInfo, PlayMethod, PlaybackCommand, PlaybackEvent, PlaybackStats, StatsReport,
+};
 use slint::platform::{Key, WindowEvent};
 use slint::{ComponentHandle, LogicalSize, Model};
 
@@ -61,7 +63,11 @@ fn full_report() -> StatsReport {
             fps: Some(23.976),
             dropped_decoder: Some(0),
             dropped_output: Some(2),
-            hdr: Some("HDR10".into()),
+            hdr: Some(HdrInfo {
+                format: HdrFormat::Hdr10,
+                tone_mapped: true,
+                curve: Some("bt.2390".into()),
+            }),
             audio_codec: Some("eac3".into()),
             audio_channels: Some("5.1".into()),
             audio_output: Some("PipeWire · 48 kHz stereo".into()),
@@ -303,7 +309,7 @@ fn values_follow_the_design() {
         ("Video", "Resolution", "3840 × 2160 → 2560 × 1440"),
         ("Video", "Frame rate", "23.976 fps"),
         ("Video", "Dropped frames", "0 decoder · 2 output"),
-        ("Video", "HDR", "HDR10"),
+        ("Video", "HDR", "HDR10, tone mapped (bt.2390)"),
         ("Audio", "Codec", "E-AC3 5.1 · 640 kbps"),
         ("Audio", "Output", "PipeWire · 48 kHz stereo"),
         ("Network", "Buffer", "38 s ahead"),
@@ -320,7 +326,7 @@ fn values_follow_the_design() {
     report.player.output_size = Some((3840, 2160));
     player::apply(&window, PlaybackEvent::Stats(Box::new(report)));
     let method = row(&window, "Method").unwrap_or_else(|| panic!("no method row"));
-    assert_eq!(method.value, "Transcode (VideoCodecNotSupported)");
+    assert_eq!(method.value, "Transcode (video codec not supported)");
     assert!(!method.good);
     assert_eq!(
         row(&window, "Resolution").map(|row| row.value.to_string()),
@@ -372,7 +378,7 @@ fn the_panel_fits_a_wrapped_value() {
         .unwrap_or_else(|| panic!("no speed value"));
     let method = ElementHandle::find_by_accessible_label(
         &window,
-        "Transcode (ContainerBitrateExceedsLimit, VideoCodecNotSupported)",
+        "Transcode (bitrate over the limit, video codec not supported)",
     )
     .next()
     .unwrap_or_else(|| panic!("no method value"));
@@ -386,5 +392,49 @@ fn the_panel_fits_a_wrapped_value() {
     assert!(
         last_bottom <= panel_bottom - 8.0,
         "last row ends at {last_bottom}, panel at {panel_bottom}"
+    );
+}
+
+#[test]
+fn hdr_and_transcode_reasons_are_worded_for_people() {
+    let (window, _sent) = player_window();
+    let hdr = |info: HdrInfo| {
+        let mut report = full_report();
+        report.player.hdr = Some(info);
+        player::apply(&window, PlaybackEvent::Stats(Box::new(report)));
+        row(&window, "HDR").map(|row| row.value.to_string())
+    };
+    assert_eq!(
+        hdr(HdrInfo {
+            format: HdrFormat::Hlg,
+            tone_mapped: false,
+            curve: Some("bt.2390".into()),
+        }),
+        Some("HLG".to_owned())
+    );
+    assert_eq!(
+        hdr(HdrInfo {
+            format: HdrFormat::Hdr10,
+            tone_mapped: true,
+            curve: None,
+        }),
+        Some("HDR10, tone mapped".to_owned())
+    );
+
+    let mut report = full_report();
+    report.method = PlayMethod::Transcode;
+    report.transcode_reasons = vec![
+        "AudioCodecNotSupported".into(),
+        "VideoRangeTypeNotSupported".into(),
+        "SomethingNew".into(),
+    ];
+    player::apply(&window, PlaybackEvent::Stats(Box::new(report)));
+    assert_eq!(
+        row(&window, "Method").map(|row| row.value.to_string()),
+        Some(
+            "Transcode (audio codec not supported, HDR type not supported, SomethingNew)"
+                .to_owned()
+        ),
+        "an unknown reason shows as the server names it"
     );
 }

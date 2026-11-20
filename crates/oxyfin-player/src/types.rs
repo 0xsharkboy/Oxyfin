@@ -218,10 +218,8 @@ pub struct PlaybackStats {
     pub dropped_decoder: Option<u64>,
     /// Frames the video output dropped.
     pub dropped_output: Option<u64>,
-    /// HDR format of the video, such as `HDR10` or `HLG`, followed by
-    /// `, tone mapped` and the curve when the output is SDR, such as
-    /// `HDR10, tone mapped (bt.2390)`; `None` for SDR video.
-    pub hdr: Option<String>,
+    /// HDR format of the video and how it reaches the screen; `None` for SDR video.
+    pub hdr: Option<HdrInfo>,
     /// Audio codec name, such as `eac3`.
     pub audio_codec: Option<String>,
     /// Channel layout of the audio, such as `5.1` or `stereo`.
@@ -237,6 +235,27 @@ pub struct PlaybackStats {
     pub cache_seconds: Option<f64>,
     /// Network read speed, in bytes per second.
     pub cache_speed: Option<u64>,
+}
+
+/// HDR transfer of a video.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HdrFormat {
+    /// The PQ transfer of HDR10, HDR10+ and Dolby Vision.
+    Hdr10,
+    /// Hybrid log-gamma.
+    Hlg,
+}
+
+/// The HDR of a video and how it reaches the screen.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HdrInfo {
+    /// HDR transfer of the video.
+    pub format: HdrFormat,
+    /// Whether the output is SDR, so the video is tone mapped.
+    pub tone_mapped: bool,
+    /// Tone mapping curve as mpv names it, such as `bt.2390`; mpv's `auto`
+    /// is reported as the curve it picks. `None` when mpv cannot tell.
+    pub curve: Option<String>,
 }
 
 impl fmt::Display for PlaybackStats {
