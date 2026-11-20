@@ -173,9 +173,10 @@ export component AppWindow inherits Window {
     in property <TrickplayGrid> player-trickplay;
     in property <SeekPreview> player-preview;
     callback player-preview-requested(seconds: float);
-    // Whether the window was fullscreen when the player opened; leaving the player restores it.
-    in-out property <bool> player-fullscreen-before;
-    callback player-toggle-fullscreen();
+    // Whether the player turned fullscreen on: leaving the player or Escape drops only that one.
+    in-out property <bool> player-fullscreen-own;
+    // Toggles fullscreen, from F11 on any screen and from the player controls.
+    callback toggle-fullscreen();
     callback player-cursor-hidden(x: length, y: length);
     callback player-command-stop();
     callback player-command-set-paused(paused: bool);
@@ -225,372 +226,393 @@ export component AppWindow inherits Window {
     preferred-width: 1280px;
     preferred-height: 720px;
 
-    // The video is drawn under the interface, so the player screen leaves the window transparent.
-    if root.screen != Screen.player: Rectangle {
-        background: Theme.bg-base;
-    }
-
-    if root.screen == Screen.starting: StartingScreen { }
-
-    if root.screen == Screen.sign-in: SignInScreen {
-        server-address <=> root.server-address;
-        username <=> root.username;
-        server-status: root.server-status;
-        busy: root.busy;
-        form-error: root.form-error;
-        server-changed(address) => {
-            root.server-changed(address);
-        }
-        server-confirmed(address) => {
-            root.server-confirmed(address);
-        }
-        sign-in(username, password) => {
-            root.sign-in(username, password);
-        }
-        open-quick-connect => {
-            root.open-quick-connect();
+    forward-focus: keys;
+    // The screens that take no focus of their own leave it here, where F11 works.
+    changed screen => {
+        if root.screen == Screen.starting || root.screen == Screen.sign-in || root.screen == Screen.quick-connect || root.screen == Screen.home || root.screen == Screen.library {
+            keys.focus();
         }
     }
 
-    if root.screen == Screen.quick-connect: QuickConnectScreen {
-        code: root.quick-connect-code;
-        digits: root.quick-connect-digits;
-        error: root.quick-connect-error;
-        can-retry: root.quick-connect-can-retry;
-        cancel => {
-            root.cancel-quick-connect();
+    // Wraps every screen, so F11 reaches it whatever has the focus.
+    keys := FocusScope {
+        focus-on-tab-navigation: false;
+        capture-key-pressed(event) => {
+            if event.text == Key.F11 && !event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta {
+                root.toggle-fullscreen();
+                return accept;
+            }
+            reject
         }
-        retry => {
-            root.retry-quick-connect();
-        }
-    }
 
-    if root.screen == Screen.home: HomeScreen {
-        banner: root.home-banner;
-        rows: root.home-rows;
-        settled: root.home-settled;
-        open-tab(page) => {
-            root.open-tab(page);
+        // The video is drawn under the interface, so the player screen leaves the window transparent.
+        if root.screen != Screen.player: Rectangle {
+            background: Theme.bg-base;
         }
-        play(id) => {
-            root.play(id);
-        }
-        open-item(id) => {
-            root.open-item(id);
-        }
-        open-settings => {
-            root.open-settings();
-        }
-    }
 
-    if root.screen == Screen.library: LibraryScreen {
-        page: root.top-bar-page;
-        cards: root.library-cards;
-        total: root.library-total;
-        loading: root.library-loading;
-        loading-more: root.library-loading-more;
-        error: root.library-error;
-        more-failed: root.library-more-failed;
-        filtered: root.library-filtered;
-        watch: root.library-watch;
-        genres: root.library-genres;
-        genre: root.library-genre;
-        sort-field: root.library-sort-field;
-        descending: root.library-descending;
-        viewport-y <=> root.library-viewport-y;
-        watch-selected(index) => {
-            root.library-watch-selected(index);
-        }
-        genre-selected(index) => {
-            root.library-genre-selected(index);
-        }
-        sort-selected(index) => {
-            root.library-sort-selected(index);
-        }
-        direction-toggled => {
-            root.library-direction-toggled();
-        }
-        near-end => {
-            root.library-near-end();
-        }
-        open(id) => {
-            root.library-open(id);
-        }
-        retry => {
-            root.library-retry();
-        }
-        retry-more => {
-            root.library-retry-more();
-        }
-        open-tab(page) => {
-            root.open-tab(page);
-        }
-        open-settings => {
-            root.open-settings();
-        }
-    }
+        if root.screen == Screen.starting: StartingScreen { }
 
-    if root.screen == Screen.search: SearchScreen {
-        page: root.top-bar-page;
-        text <=> root.search-text;
-        cards: root.search-cards;
-        total: root.search-total;
-        query: root.search-query;
-        loading: root.search-loading;
-        loading-more: root.search-loading-more;
-        error: root.search-error;
-        more-failed: root.search-more-failed;
-        viewport-y <=> root.search-viewport-y;
-        edited(text) => {
-            root.search-edited(text);
+        if root.screen == Screen.sign-in: SignInScreen {
+            server-address <=> root.server-address;
+            username <=> root.username;
+            server-status: root.server-status;
+            busy: root.busy;
+            form-error: root.form-error;
+            server-changed(address) => {
+                root.server-changed(address);
+            }
+            server-confirmed(address) => {
+                root.server-confirmed(address);
+            }
+            sign-in(username, password) => {
+                root.sign-in(username, password);
+            }
+            open-quick-connect => {
+                root.open-quick-connect();
+            }
         }
-        accepted(text) => {
-            root.search-accepted(text);
-        }
-        near-end => {
-            root.search-near-end();
-        }
-        open(id) => {
-            root.search-open(id);
-        }
-        retry => {
-            root.search-retry();
-        }
-        retry-more => {
-            root.search-retry-more();
-        }
-        open-tab(page) => {
-            root.open-tab(page);
-        }
-        open-settings => {
-            root.open-settings();
-        }
-    }
 
-    if root.screen == Screen.movie: MovieScreen {
-        page: root.top-bar-page;
-        loaded: root.movie-loaded;
-        loading: root.movie-loading;
-        error: root.movie-error;
-        movie: root.movie-data;
-        poster: root.movie-poster;
-        backdrop: root.movie-backdrop;
-        busy: root.movie-busy;
-        play(from-start) => {
-            root.movie-play(from-start);
+        if root.screen == Screen.quick-connect: QuickConnectScreen {
+            code: root.quick-connect-code;
+            digits: root.quick-connect-digits;
+            error: root.quick-connect-error;
+            can-retry: root.quick-connect-can-retry;
+            cancel => {
+                root.cancel-quick-connect();
+            }
+            retry => {
+                root.retry-quick-connect();
+            }
         }
-        toggle-watched => {
-            root.movie-toggle-watched();
-        }
-        toggle-favorite => {
-            root.movie-toggle-favorite();
-        }
-        retry => {
-            root.movie-retry();
-        }
-        back => {
-            root.back();
-        }
-        open-tab(page) => {
-            root.open-tab(page);
-        }
-        open-settings => {
-            root.open-settings();
-        }
-    }
 
-    if root.screen == Screen.series: SeriesScreen {
-        page: root.top-bar-page;
-        loaded: root.series-loaded;
-        loading: root.series-loading;
-        error: root.series-error;
-        series: root.series-data;
-        poster: root.series-poster;
-        backdrop: root.series-backdrop;
-        busy: root.series-busy;
-        seasons: root.series-seasons;
-        season: root.series-season;
-        episodes: root.series-episodes;
-        episodes-loading: root.series-episodes-loading;
-        episodes-stale: root.series-episodes-stale;
-        episodes-error: root.series-episodes-error;
-        play => {
-            root.series-play();
+        if root.screen == Screen.home: HomeScreen {
+            banner: root.home-banner;
+            rows: root.home-rows;
+            settled: root.home-settled;
+            open-tab(page) => {
+                root.open-tab(page);
+            }
+            play(id) => {
+                root.play(id);
+            }
+            open-item(id) => {
+                root.open-item(id);
+            }
+            open-settings => {
+                root.open-settings();
+            }
         }
-        play-episode(id) => {
-            root.series-play-episode(id);
-        }
-        select-season(index) => {
-            root.series-select-season(index);
-        }
-        toggle-watched => {
-            root.series-toggle-watched();
-        }
-        toggle-favorite => {
-            root.series-toggle-favorite();
-        }
-        retry => {
-            root.series-retry();
-        }
-        retry-episodes => {
-            root.series-retry-episodes();
-        }
-        back => {
-            root.back();
-        }
-        open-tab(page) => {
-            root.open-tab(page);
-        }
-        open-settings => {
-            root.open-settings();
-        }
-    }
 
-    if root.screen == Screen.player: PlayerScreen {
-        title: root.player-title;
-        subtitle: root.player-subtitle;
-        loading: root.player-loading;
-        has-error: root.player-has-error;
-        error: root.player-error;
-        video-active: root.player-video-active;
-        position: root.player-position;
-        duration: root.player-duration;
-        elapsed: root.player-elapsed;
-        total: root.player-total;
-        paused: root.player-paused;
-        volume: root.player-volume;
-        muted: root.player-muted;
-        speed: root.player-speed;
-        speeds: root.player-speeds;
-        qualities: root.player-qualities;
-        quality: root.player-quality;
-        has-next: root.player-has-next;
-        audio: root.player-audio;
-        subtitles: root.player-subtitles;
-        audio-delay: root.player-audio-delay;
-        subtitle-delay: root.player-subtitle-delay;
-        chapters: root.player-chapters;
-        current-chapter: root.player-current-chapter;
-        chapter-marks: root.player-chapter-marks;
-        next-up: root.player-next-up;
-        skip-kind: root.player-skip-kind;
-        skip-end: root.player-skip-end;
-        fullscreen: root.full-screen;
-        scrubbing <=> root.player-scrubbing;
-        preview: root.player-preview;
-        stats: root.player-stats;
-        stats-visible <=> root.player-stats-visible;
-        preview-requested(seconds) => {
-            root.player-preview-requested(seconds);
+        if root.screen == Screen.library: LibraryScreen {
+            page: root.top-bar-page;
+            cards: root.library-cards;
+            total: root.library-total;
+            loading: root.library-loading;
+            loading-more: root.library-loading-more;
+            error: root.library-error;
+            more-failed: root.library-more-failed;
+            filtered: root.library-filtered;
+            watch: root.library-watch;
+            genres: root.library-genres;
+            genre: root.library-genre;
+            sort-field: root.library-sort-field;
+            descending: root.library-descending;
+            viewport-y <=> root.library-viewport-y;
+            watch-selected(index) => {
+                root.library-watch-selected(index);
+            }
+            genre-selected(index) => {
+                root.library-genre-selected(index);
+            }
+            sort-selected(index) => {
+                root.library-sort-selected(index);
+            }
+            direction-toggled => {
+                root.library-direction-toggled();
+            }
+            near-end => {
+                root.library-near-end();
+            }
+            open(id) => {
+                root.library-open(id);
+            }
+            retry => {
+                root.library-retry();
+            }
+            retry-more => {
+                root.library-retry-more();
+            }
+            open-tab(page) => {
+                root.open-tab(page);
+            }
+            open-settings => {
+                root.open-settings();
+            }
         }
-        back => {
-            root.player-command-stop();
-            root.close-player();
-        }
-        toggle-fullscreen => {
-            root.player-toggle-fullscreen();
-        }
-        cursor-hidden(x, y) => {
-            root.player-cursor-hidden(x, y);
-        }
-        command-set-paused(paused) => {
-            root.player-command-set-paused(paused);
-        }
-        command-seek(seconds) => {
-            root.player-command-seek(seconds);
-        }
-        command-skip(direction) => {
-            root.player-command-skip(direction);
-        }
-        command-previous => {
-            root.player-command-previous();
-        }
-        command-next => {
-            root.player-command-next();
-        }
-        command-play-next-now => {
-            root.player-command-play-next-now();
-        }
-        command-cancel-next-up => {
-            root.player-command-cancel-next-up();
-        }
-        command-set-speed(speed) => {
-            root.player-command-set-speed(speed);
-        }
-        command-step-speed(direction) => {
-            root.player-command-step-speed(direction);
-        }
-        command-set-quality(index) => {
-            root.player-command-set-quality(index);
-        }
-        command-set-volume(volume) => {
-            root.player-command-set-volume(volume);
-        }
-        command-step-volume(direction) => {
-            root.player-command-step-volume(direction);
-        }
-        command-set-muted(muted) => {
-            root.player-command-set-muted(muted);
-        }
-        command-select-audio(index) => {
-            root.player-command-select-audio(index);
-        }
-        command-select-subtitle(index) => {
-            root.player-command-select-subtitle(index);
-        }
-        command-step-audio-delay(direction) => {
-            root.player-command-step-audio-delay(direction);
-        }
-        command-set-audio-delay(ms) => {
-            root.player-command-set-audio-delay(ms);
-        }
-        command-step-subtitle-delay(direction) => {
-            root.player-command-step-subtitle-delay(direction);
-        }
-        command-set-subtitle-delay(ms) => {
-            root.player-command-set-subtitle-delay(ms);
-        }
-        command-step-chapter(direction) => {
-            root.player-command-step-chapter(direction);
-        }
-        command-stats => {
-            root.player-command-stats();
-        }
-    }
 
-    if root.screen == Screen.settings: SettingsScreen {
-        open-tab(page) => {
-            root.open-tab(page);
+        if root.screen == Screen.search: SearchScreen {
+            page: root.top-bar-page;
+            text <=> root.search-text;
+            cards: root.search-cards;
+            total: root.search-total;
+            query: root.search-query;
+            loading: root.search-loading;
+            loading-more: root.search-loading-more;
+            error: root.search-error;
+            more-failed: root.search-more-failed;
+            viewport-y <=> root.search-viewport-y;
+            edited(text) => {
+                root.search-edited(text);
+            }
+            accepted(text) => {
+                root.search-accepted(text);
+            }
+            near-end => {
+                root.search-near-end();
+            }
+            open(id) => {
+                root.search-open(id);
+            }
+            retry => {
+                root.search-retry();
+            }
+            retry-more => {
+                root.search-retry-more();
+            }
+            open-tab(page) => {
+                root.open-tab(page);
+            }
+            open-settings => {
+                root.open-settings();
+            }
         }
-        server-name: root.settings-server-name;
-        server-address: root.settings-server-address;
-        user-name: root.settings-user-name;
-        token-store: root.settings-token-store;
-        subtitles: root.settings-subtitles;
-        subtitles-changed(choice) => {
-            root.settings-subtitles-changed(choice);
-        }
-        start-fullscreen: root.settings-start-fullscreen;
-        start-fullscreen-changed(on) => {
-            root.settings-start-fullscreen-changed(on);
-        }
-        version: root.app-version;
-        back => {
-            root.close-settings();
-        }
-        sign-out => {
-            root.sign-out();
-        }
-    }
 
-    // Below the top bar of the screens that have one.
-    if root.notice.visible: NoticeBanner {
-        y: root.screen == Screen.home || root.screen == Screen.library || root.screen == Screen.search || root.screen == Screen.movie || root.screen == Screen.series || root.screen == Screen.settings ? Theme.space-3xl + Theme.space-lg : Theme.space-lg;
-        x: (parent.width - self.width) / 2;
-        width: min(parent.width - 2 * Theme.space-lg, 560px);
-        notice: root.notice;
-        dismiss => {
-            root.dismiss-notice();
+        if root.screen == Screen.movie: MovieScreen {
+            page: root.top-bar-page;
+            loaded: root.movie-loaded;
+            loading: root.movie-loading;
+            error: root.movie-error;
+            movie: root.movie-data;
+            poster: root.movie-poster;
+            backdrop: root.movie-backdrop;
+            busy: root.movie-busy;
+            play(from-start) => {
+                root.movie-play(from-start);
+            }
+            toggle-watched => {
+                root.movie-toggle-watched();
+            }
+            toggle-favorite => {
+                root.movie-toggle-favorite();
+            }
+            retry => {
+                root.movie-retry();
+            }
+            back => {
+                root.back();
+            }
+            open-tab(page) => {
+                root.open-tab(page);
+            }
+            open-settings => {
+                root.open-settings();
+            }
+        }
+
+        if root.screen == Screen.series: SeriesScreen {
+            page: root.top-bar-page;
+            loaded: root.series-loaded;
+            loading: root.series-loading;
+            error: root.series-error;
+            series: root.series-data;
+            poster: root.series-poster;
+            backdrop: root.series-backdrop;
+            busy: root.series-busy;
+            seasons: root.series-seasons;
+            season: root.series-season;
+            episodes: root.series-episodes;
+            episodes-loading: root.series-episodes-loading;
+            episodes-stale: root.series-episodes-stale;
+            episodes-error: root.series-episodes-error;
+            play => {
+                root.series-play();
+            }
+            play-episode(id) => {
+                root.series-play-episode(id);
+            }
+            select-season(index) => {
+                root.series-select-season(index);
+            }
+            toggle-watched => {
+                root.series-toggle-watched();
+            }
+            toggle-favorite => {
+                root.series-toggle-favorite();
+            }
+            retry => {
+                root.series-retry();
+            }
+            retry-episodes => {
+                root.series-retry-episodes();
+            }
+            back => {
+                root.back();
+            }
+            open-tab(page) => {
+                root.open-tab(page);
+            }
+            open-settings => {
+                root.open-settings();
+            }
+        }
+
+        if root.screen == Screen.player: PlayerScreen {
+            title: root.player-title;
+            subtitle: root.player-subtitle;
+            loading: root.player-loading;
+            has-error: root.player-has-error;
+            error: root.player-error;
+            video-active: root.player-video-active;
+            position: root.player-position;
+            duration: root.player-duration;
+            elapsed: root.player-elapsed;
+            total: root.player-total;
+            paused: root.player-paused;
+            volume: root.player-volume;
+            muted: root.player-muted;
+            speed: root.player-speed;
+            speeds: root.player-speeds;
+            qualities: root.player-qualities;
+            quality: root.player-quality;
+            has-next: root.player-has-next;
+            audio: root.player-audio;
+            subtitles: root.player-subtitles;
+            audio-delay: root.player-audio-delay;
+            subtitle-delay: root.player-subtitle-delay;
+            chapters: root.player-chapters;
+            current-chapter: root.player-current-chapter;
+            chapter-marks: root.player-chapter-marks;
+            next-up: root.player-next-up;
+            skip-kind: root.player-skip-kind;
+            skip-end: root.player-skip-end;
+            fullscreen: root.full-screen;
+            fullscreen-own: root.player-fullscreen-own;
+            scrubbing <=> root.player-scrubbing;
+            preview: root.player-preview;
+            stats: root.player-stats;
+            stats-visible <=> root.player-stats-visible;
+            preview-requested(seconds) => {
+                root.player-preview-requested(seconds);
+            }
+            back => {
+                root.player-command-stop();
+                root.close-player();
+            }
+            toggle-fullscreen => {
+                root.toggle-fullscreen();
+            }
+            cursor-hidden(x, y) => {
+                root.player-cursor-hidden(x, y);
+            }
+            command-set-paused(paused) => {
+                root.player-command-set-paused(paused);
+            }
+            command-seek(seconds) => {
+                root.player-command-seek(seconds);
+            }
+            command-skip(direction) => {
+                root.player-command-skip(direction);
+            }
+            command-previous => {
+                root.player-command-previous();
+            }
+            command-next => {
+                root.player-command-next();
+            }
+            command-play-next-now => {
+                root.player-command-play-next-now();
+            }
+            command-cancel-next-up => {
+                root.player-command-cancel-next-up();
+            }
+            command-set-speed(speed) => {
+                root.player-command-set-speed(speed);
+            }
+            command-step-speed(direction) => {
+                root.player-command-step-speed(direction);
+            }
+            command-set-quality(index) => {
+                root.player-command-set-quality(index);
+            }
+            command-set-volume(volume) => {
+                root.player-command-set-volume(volume);
+            }
+            command-step-volume(direction) => {
+                root.player-command-step-volume(direction);
+            }
+            command-set-muted(muted) => {
+                root.player-command-set-muted(muted);
+            }
+            command-select-audio(index) => {
+                root.player-command-select-audio(index);
+            }
+            command-select-subtitle(index) => {
+                root.player-command-select-subtitle(index);
+            }
+            command-step-audio-delay(direction) => {
+                root.player-command-step-audio-delay(direction);
+            }
+            command-set-audio-delay(ms) => {
+                root.player-command-set-audio-delay(ms);
+            }
+            command-step-subtitle-delay(direction) => {
+                root.player-command-step-subtitle-delay(direction);
+            }
+            command-set-subtitle-delay(ms) => {
+                root.player-command-set-subtitle-delay(ms);
+            }
+            command-step-chapter(direction) => {
+                root.player-command-step-chapter(direction);
+            }
+            command-stats => {
+                root.player-command-stats();
+            }
+        }
+
+        if root.screen == Screen.settings: SettingsScreen {
+            open-tab(page) => {
+                root.open-tab(page);
+            }
+            server-name: root.settings-server-name;
+            server-address: root.settings-server-address;
+            user-name: root.settings-user-name;
+            token-store: root.settings-token-store;
+            subtitles: root.settings-subtitles;
+            subtitles-changed(choice) => {
+                root.settings-subtitles-changed(choice);
+            }
+            start-fullscreen: root.settings-start-fullscreen;
+            start-fullscreen-changed(on) => {
+                root.settings-start-fullscreen-changed(on);
+            }
+            version: root.app-version;
+            back => {
+                root.close-settings();
+            }
+            sign-out => {
+                root.sign-out();
+            }
+        }
+
+        // Below the top bar of the screens that have one.
+        if root.notice.visible: NoticeBanner {
+            y: root.screen == Screen.home || root.screen == Screen.library || root.screen == Screen.search || root.screen == Screen.movie || root.screen == Screen.series || root.screen == Screen.settings ? Theme.space-3xl + Theme.space-lg : Theme.space-lg;
+            x: (parent.width - self.width) / 2;
+            width: min(parent.width - 2 * Theme.space-lg, 560px);
+            notice: root.notice;
+            dismiss => {
+                root.dismiss-notice();
+            }
         }
     }
 }
