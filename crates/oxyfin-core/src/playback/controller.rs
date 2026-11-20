@@ -609,28 +609,40 @@ impl PlaybackController {
     }
 
     /// The new request for a transcode made with another audio stream than
-    /// the one remembered for its series.
+    /// the one remembered for its series, or with a subtitle burned into its
+    /// picture that is not the one remembered.
     fn remembered_transcode(&self, prepared: &Prepared) -> Option<LoadRequest> {
         let Delivery::Transcoded { audio } = prepared.delivery else {
             return None;
         };
         let request = self.request.as_ref().filter(|request| {
-            request.resume.is_none() && request.options.audio_stream_index.is_none()
+            request.resume.is_none()
+                && request.options.audio_stream_index.is_none()
+                && request.options.subtitle_stream_index.is_none()
         })?;
-        let (wanted, _) = remembered(
+        let source = &prepared.source;
+        let (wanted_audio, wanted_subtitle) = remembered(
             &self.memory,
             self.prefs,
             prepared.series.as_ref(),
-            &prepared.source.media_streams,
+            &source.media_streams,
         );
-        let wanted = wanted.filter(|wanted| Some(*wanted) != audio)?;
+        let subtitle = wanted_subtitle.map(|subtitle| text_subtitle(source, subtitle));
+        let burned = source.transcoding_subtitle_stream_index();
+        let other_audio = wanted_audio.is_some_and(|wanted| Some(wanted) != audio);
+        let other_subtitle =
+            burned.is_some() && subtitle.is_some_and(|wanted| Some(wanted) != burned);
+        if !other_audio && !other_subtitle {
+            return None;
+        }
         let mut request = request.clone();
         if request.item != prepared.item {
             request.item = prepared.item.clone();
             request.mode = PlayMode::Auto;
         }
-        request.options.media_source_id = Some(prepared.source.id.clone());
-        request.options.audio_stream_index = Some(wanted);
+        request.options.media_source_id = Some(source.id.clone());
+        request.options.audio_stream_index = wanted_audio;
+        request.options.subtitle_stream_index = subtitle;
         Some(request)
     }
 
