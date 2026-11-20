@@ -148,20 +148,32 @@ fn choice_describes_the_streams_picked() {
     sdh.is_external = true;
     assert_eq!(
         SubtitlePick::of(&sdh),
-        SubtitlePick::Track {
+        Some(SubtitlePick::Track {
             language: Some("fre".to_owned()),
             forced: false,
             hearing_impaired: true,
             external: true,
-        }
+        })
     );
     assert_eq!(
         AudioPick::of(&audio(1, "eng", 6)),
-        AudioPick {
+        Some(AudioPick {
             language: Some("eng".to_owned()),
             channels: Some(6),
-        }
+        })
     );
+}
+
+#[test]
+fn streams_without_a_language_describe_no_pick() {
+    for language in [None, Some("und"), Some(" UND "), Some("")] {
+        let mut sound = audio(1, "eng", 2);
+        sound.language = language.map(str::to_owned);
+        let mut text = subtitle(2, "eng", false);
+        text.language = language.map(str::to_owned);
+        assert_eq!(AudioPick::of(&sound), None, "{language:?}");
+        assert_eq!(SubtitlePick::of(&text), None, "{language:?}");
+    }
 }
 
 fn series(n: usize) -> ItemId {

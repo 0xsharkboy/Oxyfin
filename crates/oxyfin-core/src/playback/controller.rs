@@ -571,7 +571,7 @@ impl PlaybackController {
     fn remember_audio(&mut self, index: i32) {
         if let Some(pick) = self
             .stream(index, MediaStreamType::Audio)
-            .map(AudioPick::of)
+            .and_then(AudioPick::of)
         {
             self.remember(|choice| choice.audio = Some(pick));
         }
@@ -582,7 +582,7 @@ impl PlaybackController {
             None => Some(SubtitlePick::Off),
             Some(index) => self
                 .stream(index, MediaStreamType::Subtitle)
-                .map(SubtitlePick::of),
+                .and_then(SubtitlePick::of),
         };
         if let Some(pick) = pick {
             self.remember(|choice| choice.subtitle = pick);
