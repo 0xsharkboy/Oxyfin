@@ -1,6 +1,6 @@
 //! Browsing the library: views, listings, details, resume and next up.
 
-use crate::models::{BaseItemDto, BaseItemKind, ItemsQuery, QueryResult};
+use crate::models::{BaseItemDto, BaseItemKind, ItemFields, ItemsQuery, QueryResult};
 use crate::{ItemId, Result, Session};
 
 impl Session {
@@ -64,6 +64,20 @@ impl Session {
         }
         params.push(("limit", limit.to_string()));
         self.get_items("Shows/NextUp", &params).await
+    }
+
+    /// Lists items similar to `id` (`GET Items/{id}/Similar`).
+    pub async fn similar(&self, id: &ItemId, limit: u32) -> Result<QueryResult<BaseItemDto>> {
+        let params = [
+            self.user_param(),
+            ("limit", limit.to_string()),
+            (
+                "fields",
+                ItemFields::PrimaryImageAspectRatio.as_str().to_owned(),
+            ),
+        ];
+        self.get_items(&format!("Items/{id}/Similar"), &params)
+            .await
     }
 
     /// Lists the seasons of a series (`GET Shows/{id}/Seasons`).

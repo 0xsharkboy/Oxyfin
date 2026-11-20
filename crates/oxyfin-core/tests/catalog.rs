@@ -726,3 +726,23 @@ async fn browse_mixed_sends_movie_series_and_video_kinds() {
     let page = catalog(&mock).browse(&q).await.unwrap();
     assert_eq!(page.items.len(), 1);
 }
+
+#[tokio::test]
+async fn similar_maps_summaries() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/Items/{MOVIE_ID}/Similar")))
+        .and(query_param("userId", TEST_USER_ID))
+        .and(query_param("limit", "12"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("items_movies")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let items = catalog(&mock)
+        .similar(&ItemId::from(MOVIE_ID), 12)
+        .await
+        .unwrap();
+    let titles: Vec<_> = items.iter().map(|item| item.title.as_str()).collect();
+    assert_eq!(titles, ["Test Movie (2020)"]);
+    assert_eq!(items[0].kind, ItemKind::Movie);
+}

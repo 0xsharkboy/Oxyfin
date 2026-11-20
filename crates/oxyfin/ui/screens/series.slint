@@ -1,4 +1,4 @@
-import { Theme } from "../theme.slint";
+import { Theme, CardData } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { TopBar, TopBarPage } from "../components/top_bar.slint";
 import { DetailHeader } from "../components/detail_header.slint";
@@ -7,6 +7,7 @@ import { IconButton } from "../components/icon_button.slint";
 import { Chip } from "../components/chip.slint";
 import { CardStatus } from "../components/card.slint";
 import { EpisodeRow } from "../components/episode_row.slint";
+import { PosterRow } from "../components/poster_row.slint";
 import { BodyText } from "../components/text.slint";
 
 // What the main button of the series page does.
@@ -60,11 +61,14 @@ export component SeriesScreen inherits Rectangle {
     // True while the episodes belong to another season than the chosen one.
     in property <bool> episodes-stale;
     in property <string> episodes-error;
+    // Items like this one; the row is hidden while empty.
+    in property <[CardData]> similar;
     callback play();
     callback play-episode(id: string);
     callback select-season(index: int);
     callback toggle-watched();
     callback toggle-favorite();
+    callback open-item(id: string);
     callback retry();
     callback retry-episodes();
     callback back();
@@ -76,6 +80,14 @@ export component SeriesScreen inherits Rectangle {
 
     background: Theme.bg-base;
     forward-focus: keys;
+
+    // Another series may replace this one without a new page, and the clicked card took the focus.
+    changed loaded => {
+        if !self.loaded {
+            flick.content-y = 0;
+            keys.focus();
+        }
+    }
 
     // Wraps the content so Escape reaches it from any focused control.
     keys := FocusScope {
@@ -201,6 +213,18 @@ export component SeriesScreen inherits Rectangle {
                             clicked => {
                                 root.retry-episodes();
                             }
+                        }
+                    }
+                }
+
+                if root.loaded && root.similar.length > 0: VerticalLayout {
+                    padding-bottom: Theme.space-3xl;
+
+                    PosterRow {
+                        title: @tr("More like this");
+                        items: root.similar;
+                        clicked(id) => {
+                            root.open-item(id);
                         }
                     }
                 }

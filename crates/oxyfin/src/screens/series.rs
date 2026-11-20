@@ -15,6 +15,7 @@ use crate::present::{
     kept_thumbnails, series_play, thumbnail_tags,
 };
 use crate::screens::home::{banner_artwork, banner_box};
+use crate::screens::similar::SimilarRow;
 use crate::state::{GenerationId, Msg, Screen};
 use crate::{AppWindow, EpisodeData, Messages, SeriesData, SeriesPlayKind};
 
@@ -42,6 +43,7 @@ pub(crate) struct SeriesController {
     episodes: Rc<VecModel<EpisodeData>>,
     thumbnail_tags: RefCell<HashMap<String, String>>,
     images_requested: Cell<bool>,
+    similar: SimilarRow,
 }
 
 impl SeriesController {
@@ -118,6 +120,11 @@ impl SeriesController {
         self.request_episodes(app);
     }
 
+    /// Opens the item of the card `id` in the "More like this" row.
+    pub(crate) fn open_similar(&self, app: &Rc<App>, id: &str) {
+        self.similar.open(app, id);
+    }
+
     /// Marks the series watched or unwatched.
     pub(crate) fn toggle_watched(&self, app: &Rc<App>) {
         self.toggle(app, Flag::Watched);
@@ -140,6 +147,7 @@ impl SeriesController {
         self.episodes.set_vec(Vec::new());
         self.thumbnail_tags.borrow_mut().clear();
         self.images_requested.set(false);
+        self.similar.clear(app, AppWindow::set_series_similar);
         if let Some(window) = app.window() {
             window.set_series_loaded(false);
             window.set_series_loading(false);
@@ -199,6 +207,8 @@ impl SeriesController {
                 *self.details.borrow_mut() = Some(details);
                 self.publish(app, id, &window);
                 if let Some(series) = self.current.borrow().clone() {
+                    self.similar
+                        .request(app, &series, AppWindow::set_series_similar);
                     app.dispatch(Msg::ItemChanged(Screen::Series(series)));
                 }
                 self.request_episodes(app);
