@@ -276,6 +276,9 @@ pub struct ItemsQuery {
     pub ids: Vec<ItemId>,
     /// Only items crediting one of these people, sent comma delimited.
     pub person_ids: Vec<ItemId>,
+    /// Leave the images and the user data out of the answer, for listings that only need
+    /// identifiers.
+    pub bare: bool,
 }
 
 fn join<'a>(values: impl Iterator<Item = &'a str>) -> String {
@@ -332,7 +335,12 @@ impl ItemsQuery {
             params.push(("fields", join(self.fields.iter().map(ItemFields::as_str))));
         }
         params.push(("userId", user_id.to_owned()));
-        params.push(("enableUserData", "true".to_owned()));
+        if self.bare {
+            params.push(("enableImages", "false".to_owned()));
+            params.push(("enableUserData", "false".to_owned()));
+        } else {
+            params.push(("enableUserData", "true".to_owned()));
+        }
         params
     }
 }
