@@ -125,8 +125,15 @@ pub(crate) struct LibraryController {
 impl LibraryController {
     /// A screen was shown: a library page loads when it is not the one already loaded.
     pub(crate) fn shown(&self, app: &Rc<App>, screen: &Screen) {
-        let Screen::Library(tab) = screen else { return };
+        let Screen::Library(tab) = screen else {
+            // A page opened over the grid gets the download slots its posters would wait for.
+            if self.tab.get().is_some() && *screen != Screen::Player {
+                self.loads.abort();
+            }
+            return;
+        };
         if self.tab.get() == Some(*tab) {
+            self.load_missing_posters(app);
             return;
         }
         self.clear(app);
@@ -138,6 +145,26 @@ impl LibraryController {
         }
         self.load_genres(app);
         self.request(app, 0, true);
+    }
+
+    /// Loads again the posters of the cards still without one, after their loads were aborted.
+    fn load_missing_posters(&self, app: &Rc<App>) {
+        let (Some((id, ..)), Some(window)) = (app.services(), app.window()) else {
+            return;
+        };
+        let missing: Vec<ItemSummary> = self
+            .items
+            .borrow()
+            .iter()
+            .filter(|item| {
+                !self
+                    .cards
+                    .iter()
+                    .any(|card| card.has_image && card.id == item.id.as_str())
+            })
+            .cloned()
+            .collect();
+        load_posters(app, id, &window, &self.cards, &missing, &self.loads);
     }
 
     /// The page came back from the player.
