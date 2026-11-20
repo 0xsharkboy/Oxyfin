@@ -1137,7 +1137,7 @@ msgstr "Intros"
 #: crates/oxyfin/ui/screens/settings.slint:292
 msgctxt "SettingsScreen"
 msgid "Show a skip button"
-msgstr "Afficher un bouton pour passer"
+msgstr "Bouton pour passer"
 
 #: crates/oxyfin/ui/screens/settings.slint:292
 msgctxt "SettingsScreen"
