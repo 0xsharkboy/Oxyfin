@@ -172,6 +172,24 @@ fn missing_values_are_omitted() {
     assert!(row(&window, "Speed").is_none());
     assert!(!texts(&window).iter().any(|text| text == "HDR"));
 
+    // Before the first video packets, a total would only be the audio bitrate.
+    let mut report = full_report();
+    report.player.video_bitrate = None;
+    report.player.dropped_decoder = None;
+    player::apply(&window, PlaybackEvent::Stats(Box::new(report)));
+    assert!(row(&window, "Bitrate").is_none());
+    assert!(row(&window, "Dropped frames").is_none());
+
+    let mut report = full_report();
+    report.player.video_codec = None;
+    report.player.video_bitrate = None;
+    player::apply(&window, PlaybackEvent::Stats(Box::new(report)));
+    assert_eq!(
+        row(&window, "Bitrate").map(|row| row.value.to_string()),
+        Some("640 kbps".to_owned()),
+        "audio only"
+    );
+
     player::apply(
         &window,
         PlaybackEvent::Stats(Box::new(StatsReport {
