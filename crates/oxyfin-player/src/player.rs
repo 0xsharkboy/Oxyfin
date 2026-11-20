@@ -360,12 +360,12 @@ impl Player {
             "hlg" => HdrFormat::Hlg,
             _ => return None,
         };
-        let tone_mapped = self
-            .text("video-target-params/gamma")
-            .is_some_and(|gamma| gamma != "pq" && gamma != "hlg");
         Some(HdrInfo {
             format,
-            tone_mapped,
+            tone_mapped: tone_mapped(
+                self.text("video-target-params/gamma").as_deref(),
+                self.text("target-trc").as_deref(),
+            ),
             curve: self.text("tone-mapping").map(|curve| tone_curve(&curve)),
         })
     }
@@ -530,6 +530,15 @@ fn fit((width, height): (u32, u32), (area_width, area_height): (u32, u32)) -> (u
     )
 }
 
+/// Whether HDR video is tone mapped, from the transfer the output targets as
+/// mpv reports it, or else from the `target-trc` option: only a PQ or HLG
+/// output shows HDR as it is.
+fn tone_mapped(target_gamma: Option<&str>, target_trc: Option<&str>) -> bool {
+    // The render API reports no target parameters, and with `target-trc=auto` draws SDR.
+    let target = target_gamma.or(target_trc.filter(|trc| *trc != "auto"));
+    !matches!(target, Some("pq" | "hlg"))
+}
+
 /// The tone mapping curve mpv uses for its `tone-mapping` option.
 fn tone_curve(option: &str) -> String {
     // The render API draws with the gpu renderer, where `auto` is bt.2390 (mpv manual).
@@ -635,6 +644,17 @@ mod tests {
         assert_eq!(fit((1920, 1080), (1280, 720)), (1280, 720));
         assert_eq!(fit((1920, 1036), (1280, 720)), (1280, 691));
         assert_eq!(fit((1440, 1080), (1280, 720)), (960, 720));
+    }
+
+    #[test]
+    fn hdr_is_tone_mapped_unless_the_output_is_hdr() {
+        // The render API reports no target parameters and leaves the target transfer on auto.
+        assert!(tone_mapped(None, Some("auto")));
+        assert!(tone_mapped(None, None));
+        assert!(tone_mapped(Some("bt.1886"), Some("auto")));
+        assert!(!tone_mapped(Some("pq"), Some("auto")));
+        assert!(!tone_mapped(None, Some("pq")));
+        assert!(!tone_mapped(None, Some("hlg")));
     }
 
     #[test]
