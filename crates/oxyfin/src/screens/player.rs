@@ -595,6 +595,10 @@ fn show_marks(window: &AppWindow) {
 /// Trickplay thumbnails standing for the chapters the server has no image
 /// of: the tile at each such chapter start, with the chapter index. Empty
 /// when the item has no trickplay.
+///
+/// Relies on the core sending [`PlaybackEvent::Trickplay`] before
+/// [`PlaybackEvent::Ready`] and [`PlaybackEvent::Chapters`] (see the playback
+/// controller), so the window holds the trickplay when the chapters come.
 pub fn chapter_tiles(window: &AppWindow, chapters: &[Chapter]) -> Vec<(usize, TrickplayTile)> {
     fallback_tiles(trickplay(&window.get_player_trickplay()).as_ref(), chapters)
 }
