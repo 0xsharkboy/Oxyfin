@@ -188,6 +188,7 @@ export component AppWindow inherits Window {
     callback player-command-play-next-now();
     callback player-command-cancel-next-up();
     callback player-command-undo-skip();
+    callback player-command-skip-segment();
     callback player-command-set-speed(speed: float);
     callback player-command-step-speed(direction: int);
     callback player-command-set-quality(index: int);
@@ -542,6 +543,9 @@ export component AppWindow inherits Window {
             }
             command-undo-skip => {
                 root.player-command-undo-skip();
+            }
+            command-skip-segment => {
+                root.player-command-skip-segment();
             }
             command-set-speed(speed) => {
                 root.player-command-set-speed(speed);

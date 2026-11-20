@@ -76,6 +76,7 @@ export component PlayerScreen inherits Rectangle {
     callback command-play-next-now();
     callback command-cancel-next-up();
     callback command-undo-skip();
+    callback command-skip-segment();
     callback command-set-speed(speed: float);
     callback command-step-speed(direction: int);
     callback command-set-quality(index: int);
@@ -181,7 +182,7 @@ export component PlayerScreen inherits Rectangle {
 
     function skip-segment() {
         if root.skip-visible {
-            root.command-seek(root.skip-end);
+            root.command-skip-segment();
         }
     }
 

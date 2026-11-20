@@ -12,7 +12,6 @@ use i_slint_backend_testing::{AccessibleRole, ElementHandle};
 use oxyfin::screens::player;
 use oxyfin::{AppWindow, NextUp, Screen};
 use oxyfin_core::{PlaybackCommand, PlaybackEvent, SegmentKind, SkippableSegment};
-use oxyfin_player::SeekTarget;
 use slint::platform::WindowEvent;
 use slint::{ComponentHandle, LogicalSize};
 
@@ -111,12 +110,7 @@ fn skip_button_seeks_to_the_end_of_the_segment() {
     assert_bottom_right(&skip);
 
     click(&window, &skip);
-    assert_eq!(
-        *sent.borrow(),
-        vec![PlaybackCommand::Seek(SeekTarget::Absolute(
-            Duration::from_secs(90)
-        ))]
-    );
+    assert_eq!(*sent.borrow(), vec![PlaybackCommand::SkipSegment]);
     assert_eq!(window.get_player_position(), 90.0);
     sent.borrow_mut().clear();
 
@@ -133,12 +127,7 @@ fn skip_button_seeks_to_the_end_of_the_segment() {
     player::apply(&window, segment(SegmentKind::Credits, 1400, 1500));
     button(&window, "Skip credits");
     press(&window, "s");
-    assert_eq!(
-        *sent.borrow(),
-        vec![PlaybackCommand::Seek(SeekTarget::Absolute(
-            Duration::from_secs(1500)
-        ))]
-    );
+    assert_eq!(*sent.borrow(), vec![PlaybackCommand::SkipSegment]);
     sent.borrow_mut().clear();
 
     window.set_player_next_up(NextUp {

@@ -3470,6 +3470,36 @@ async fn a_seek_into_a_fresh_intro_is_not_skipped() {
 }
 
 #[tokio::test]
+async fn the_skip_button_keeps_the_next_segment_skipped() {
+    let mut h = segmented(
+        vec![
+            segment_json("Recap", secs(0), secs(4)),
+            segment_json("Intro", secs(4), secs(8)),
+        ],
+        prefs(|p| p.skip_intros = true),
+    )
+    .await;
+    h.sink.send(PlayerEvent::Position(secs(1)));
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::Segment(Some(segment)) if segment.kind == SegmentKind::Recap)
+    })
+    .await;
+    h.handle.send(PlaybackCommand::SkipSegment);
+    h.player
+        .wait_call(|c| *c == Call::Seek(SeekTarget::Absolute(secs(4))))
+        .await;
+    land(&h, secs(4));
+    let seen = events_until(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::SegmentSkipped { .. })
+    })
+    .await;
+    assert_eq!(skipped(&seen), vec![(SegmentKind::Intro, secs(4))]);
+    h.player
+        .wait_call(|c| *c == Call::Seek(SeekTarget::Absolute(secs(8))))
+        .await;
+}
+
+#[tokio::test]
 async fn undo_after_a_seek_does_nothing() {
     let mut h = segmented(
         vec![segment_json("Intro", secs(5), secs(9))],
