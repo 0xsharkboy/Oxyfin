@@ -37,7 +37,7 @@ This file is the single source of truth for planned work. An item is checked onl
 - [x] "More like this" on detail pages
 - [x] Cast and crew pages
 - [x] Collections (box sets)
-- [ ] Server discovery on the local network
+- [x] Server discovery on the local network
 - [ ] Authorize another device (Quick Connect code entry)
 - [x] Fullscreen launch option
 - [ ] Discord Rich Presence (opt-in, never sends the server address)

@@ -1,7 +1,8 @@
 import { Theme } from "../theme.slint";
 import { Button, ButtonStyle } from "../components/button.slint";
 import { TextField } from "../components/text_field.slint";
-import { HeadingText, CaptionText, LabelText } from "../components/text.slint";
+import { Icons } from "../icons.slint";
+import { HeadingText, BodyStrongText, CaptionText, LabelText } from "../components/text.slint";
 import { AuthPage } from "../components/auth_card.slint";
 
 export enum ServerState { idle, checking, found, error }
@@ -11,6 +12,145 @@ export struct ServerStatus {
     text: string,
 }
 
+// A server that answered on the local network: `detail` is its address, with its version when known.
+export struct FoundServer {
+    name: string,
+    detail: string,
+    address: string,
+}
+
+// A server found on the local network: a click fills the address with it.
+component FoundServerRow inherits Rectangle {
+    in property <FoundServer> server;
+    in property <bool> enabled: true;
+    callback chosen();
+
+    accessible-role: button;
+    accessible-label: root.server.name;
+    accessible-description: root.server.detail;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if root.enabled {
+            root.chosen();
+        }
+    }
+
+    border-radius: Theme.radius-md;
+    border-width: Theme.border-thin;
+    border-color: Theme.border-default;
+    background: touch.has-hover && root.enabled ? Theme.bg-hover : transparent;
+    opacity: root.enabled ? 1 : Theme.disabled-opacity;
+    clip: true;
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => {
+            root.chosen();
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: Theme.space-md;
+        padding-right: Theme.space-sm;
+        padding-top: Theme.space-sm;
+        padding-bottom: Theme.space-sm;
+        spacing: Theme.space-md;
+
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: Icons.server;
+                width: Theme.found-server-icon-size;
+                height: self.width;
+                colorize: Theme.text-primary;
+            }
+        }
+
+        VerticalLayout {
+            spacing: Theme.space-2xs;
+            horizontal-stretch: 1;
+
+            BodyStrongText {
+                accessible-role: none;
+                text: root.server.name;
+                overflow: elide;
+            }
+            CaptionText {
+                accessible-role: none;
+                text: root.server.detail;
+                color: Theme.text-secondary;
+                overflow: elide;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: Icons.chevron-right;
+                width: Theme.found-server-chevron-size;
+                height: self.width;
+                colorize: Theme.text-primary;
+            }
+        }
+    }
+}
+
+// Servers that answered on the local network, under the address field.
+component FoundServers inherits VerticalLayout {
+    in property <[FoundServer]> servers;
+    in property <bool> enabled: true;
+    callback chosen(address: string);
+
+    property <length> row-height: Theme.space-sm * 2 + Theme.body-strong-line-height + Theme.space-2xs
+        + Theme.caption-line-height + Theme.border-thin * 2;
+    property <length> list-height: min(root.servers.length, Theme.found-servers-visible) * (root.row-height + Theme.space-xs)
+        - Theme.space-xs;
+
+    accessible-role: list;
+    accessible-label: @tr("On your network");
+    spacing: Theme.space-xs;
+
+    HorizontalLayout {
+        spacing: Theme.space-sm;
+        padding-bottom: Theme.space-xs;
+        alignment: start;
+
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: Icons.wifi;
+                width: Theme.found-server-header-icon-size;
+                height: self.width;
+                colorize: Theme.text-muted;
+            }
+        }
+        CaptionText {
+            accessible-role: none;
+            text: @tr("On your network");
+            color: Theme.text-muted;
+        }
+    }
+
+    Flickable {
+        height: root.list-height;
+        content-height: root.servers.length * (root.row-height + Theme.space-xs) - Theme.space-xs;
+        interactive: root.servers.length > Theme.found-servers-visible;
+
+        VerticalLayout {
+            spacing: Theme.space-xs;
+            for server in root.servers: FoundServerRow {
+                height: root.row-height;
+                server: server;
+                enabled: root.enabled;
+                chosen => {
+                    root.chosen(server.address);
+                }
+            }
+        }
+    }
+}
+
 // Sign-in card: server address, credentials, password and Quick Connect buttons.
 export component SignInScreen inherits AuthPage {
     in-out property <string> server-address;
@@ -18,10 +158,12 @@ export component SignInScreen inherits AuthPage {
     in property <ServerStatus> server-status;
     in property <bool> busy;
     in property <string> form-error;
+    in property <[FoundServer]> found-servers;
     callback server-changed(address: string);
     callback server-confirmed(address: string);
     callback sign-in(username: string, password: string);
     callback open-quick-connect();
+    callback found-server-chosen(address: string);
 
     property <ServerState> state: server-status.state;
     property <bool> found: state == ServerState.found;
@@ -70,6 +212,14 @@ export component SignInScreen inherits AuthPage {
             if !self.has-focus {
                 root.server-confirmed(self.text);
             }
+        }
+    }
+
+    if root.found-servers.length > 0: FoundServers {
+        servers: root.found-servers;
+        enabled: !root.locked;
+        chosen(address) => {
+            root.found-server-chosen(address);
         }
     }
 

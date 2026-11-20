@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 pub mod collection;
+pub mod discovery;
 pub mod person;
 pub mod playback_settings;
 
@@ -180,6 +181,8 @@ where
     let _ = slint::select_bundled_translation("en");
     let app = App::new(&window, runtime.handle().clone(), paths, vault)
         .unwrap_or_else(|err| panic!("cannot create the app: {err}"));
+    // Flows never broadcast on the network of the machine running them.
+    app.set_discovery_targets(Vec::new());
     window
         .show()
         .unwrap_or_else(|err| panic!("cannot show the window: {err}"));

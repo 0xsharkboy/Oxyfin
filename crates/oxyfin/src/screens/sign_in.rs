@@ -1,17 +1,19 @@
-//! Sign-in card and Quick Connect: server check, password sign-in, Quick Connect flow.
+//! Sign-in card and Quick Connect: server discovery and check, password sign-in, Quick Connect
+//! flow.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
-use oxyfin_core::{CoreError, ServerHandle};
+use oxyfin_core::{CoreError, DiscoveredServer, ServerHandle};
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 use tokio::task::AbortHandle;
 
 use crate::app::App;
 use crate::present::core_error_message;
 use crate::state::{Msg, Screen};
-use crate::{AppWindow, Messages, ServerState, ServerStatus};
+use crate::{AppWindow, FoundServer, Messages, ServerState, ServerStatus};
 
 /// Delay between the last edit of the server address and its check.
 pub const SERVER_CHECK_DEBOUNCE: Duration = Duration::from_millis(600);
@@ -25,6 +27,7 @@ pub(crate) struct SignInController {
     debounce: Timer,
     attempt: Cell<u64>,
     quick_connect: RefCell<Option<AbortHandle>>,
+    discovery: Cell<u64>,
 }
 
 fn error_text(window: &AppWindow, error: &CoreError) -> SharedString {
@@ -168,6 +171,47 @@ impl SignInController {
         }
         self.debounce.stop();
         self.check(app, window.get_server_address());
+        self.discover(app);
+    }
+
+    /// A server found on the network was picked: its address replaces the typed one.
+    pub(crate) fn found_server_chosen(&self, app: &Rc<App>, address: SharedString) {
+        let Some(window) = app.window() else { return };
+        if window.get_busy() {
+            return;
+        }
+        window.set_server_address(address.clone());
+        self.debounce.stop();
+        self.check(app, address);
+    }
+
+    /// Lists the servers answering on the local network, with their version when they tell it.
+    fn discover(&self, app: &Rc<App>) {
+        let round = self.discovery.get() + 1;
+        self.discovery.set(round);
+        let manager = app.manager();
+        app.spawn(
+            async move {
+                let servers = manager.discover().await;
+                let versions = versions(&manager, &servers).await;
+                servers.into_iter().zip(versions).collect::<Vec<_>>()
+            },
+            move |app, found| {
+                if app.sign_in.discovery.get() != round {
+                    return;
+                }
+                let Some(window) = app.window() else { return };
+                let rows: Vec<FoundServer> = found
+                    .into_iter()
+                    .map(|(server, version)| FoundServer {
+                        detail: found_detail(&server.address, version.as_deref()).into(),
+                        name: server.name.into(),
+                        address: server.address.into(),
+                    })
+                    .collect();
+                window.set_found_servers(ModelRc::new(VecModel::from(rows)));
+            },
+        );
     }
 
     /// Requests a Quick Connect code, then waits for its approval.
@@ -244,5 +288,51 @@ impl SignInController {
         if let Some(task) = self.quick_connect.borrow_mut().take() {
             task.abort();
         }
+    }
+}
+
+async fn versions(
+    manager: &Arc<oxyfin_core::SessionManager>,
+    servers: &[DiscoveredServer],
+) -> Vec<Option<String>> {
+    let mut lookups = tokio::task::JoinSet::new();
+    for (index, server) in servers.iter().enumerate() {
+        let manager = Arc::clone(manager);
+        let address = server.address.clone();
+        lookups.spawn(async move { (index, manager.server_version(&address).await) });
+    }
+    let mut versions = vec![None; servers.len()];
+    while let Some(done) = lookups.join_next().await {
+        if let Ok((index, version)) = done
+            && let Some(slot) = versions.get_mut(index)
+        {
+            *slot = version;
+        }
+    }
+    versions
+}
+
+/// Second line of a server found on the network: its address, then its version when known.
+fn found_detail(address: &str, version: Option<&str>) -> String {
+    match version {
+        Some(version) => format!("{address} · {version}"),
+        None => address.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn found_detail_names_the_version_when_known() {
+        assert_eq!(
+            found_detail("http://10.0.0.1:8096", Some("10.11.0")),
+            "http://10.0.0.1:8096 · 10.11.0"
+        );
+        assert_eq!(
+            found_detail("http://10.0.0.1:8096", None),
+            "http://10.0.0.1:8096"
+        );
     }
 }
