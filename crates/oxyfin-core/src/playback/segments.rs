@@ -70,6 +70,18 @@ impl SkipMemory {
     pub(super) fn undo(&mut self) -> Option<Duration> {
         self.last.take()
     }
+
+    /// The user moved to `target`: the segments around it are theirs to
+    /// watch, and the last skip can no longer be undone.
+    pub(super) fn sought(&mut self, segments: &[SkippableSegment], target: Duration) {
+        self.last = None;
+        for segment in segments {
+            let key = (segment.kind, segment.start);
+            if segment.start <= target && target < segment.end && !self.done.contains(&key) {
+                self.done.push(key);
+            }
+        }
+    }
 }
 
 /// The segments of `segments` worth skipping, ordered by start. Unknown
