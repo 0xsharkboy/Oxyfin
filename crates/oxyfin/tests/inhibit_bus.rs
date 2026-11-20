@@ -352,3 +352,50 @@ async fn a_portal_grant_after_the_timeout_is_released() {
     timeout(DEADLINE, inhibitor.release()).await.unwrap();
     assert_eq!(call(&mut calls).await, "uninhibit 7");
 }
+
+/// A screen saver service that refuses every inhibition.
+struct RefusingScreenSaver {
+    calls: UnboundedSender<String>,
+}
+
+#[interface(name = "org.freedesktop.ScreenSaver")]
+impl RefusingScreenSaver {
+    fn inhibit(&self, application: &str, _reason: &str) -> zbus::fdo::Result<u32> {
+        let _ = self.calls.send(format!("refused {application}"));
+        Err(zbus::fdo::Error::Failed("not allowed".to_owned()))
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "starts a private dbus-daemon: cargo test -p oxyfin --test inhibit_bus -- --ignored"]
+async fn a_refused_inhibition_is_asked_again_only_on_the_next_player() {
+    let (_bus, address) = PrivateBus::start();
+    let (sender, mut calls) = unbounded_channel();
+    let _screen_saver = serve(
+        &address,
+        SCREEN_SAVER,
+        SCREEN_SAVER_PATH,
+        RefusingScreenSaver { calls: sender },
+    )
+    .await;
+    let inhibitor = Inhibitor::start(
+        &tokio::runtime::Handle::current(),
+        Bus::Address(address.clone()),
+    );
+
+    inhibitor.update(Update::Active(true));
+    inhibitor.update(ready());
+    assert_eq!(call(&mut calls).await, "refused Oxyfin");
+    for paused in [true, false, true, false] {
+        inhibitor.update(Update::Event(PlaybackEvent::Paused(paused)));
+    }
+    inhibitor.update(ready());
+    quiet(&mut calls).await;
+
+    inhibitor.update(Update::Active(false));
+    inhibitor.update(Update::Active(true));
+    inhibitor.update(ready());
+    assert_eq!(call(&mut calls).await, "refused Oxyfin");
+    timeout(DEADLINE, inhibitor.release()).await.unwrap();
+    quiet(&mut calls).await;
+}

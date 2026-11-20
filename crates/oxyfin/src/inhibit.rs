@@ -176,7 +176,8 @@ pub struct Inhibitor {
 
 impl Inhibitor {
     /// Starts the task on `runtime`; it connects to `bus` the first time the
-    /// screen must stay awake. Failing to inhibit only logs a warning.
+    /// screen must stay awake. Failing to inhibit only logs a warning, and is
+    /// not tried again until the player screen opens anew.
     pub fn start(runtime: &Handle, bus: Bus) -> Self {
         let (messages, received) = unbounded_channel();
         runtime.spawn(run(bus, received));
@@ -213,10 +214,12 @@ async fn run(bus: Bus, mut messages: UnboundedReceiver<Message>) {
     let mut playing = Playing::default();
     let mut connection = None;
     let mut held = None;
+    // After a failure, asked again only once the player opens anew: every event would retry.
+    let mut gave_up = false;
     while let Some(message) = messages.recv().await {
         let mut release = None;
         match message {
-            Message::Update(update) => playing.apply(&update),
+            Message::Update(update) => follow(&mut playing, &mut gave_up, &update),
             Message::Release(done) => release = Some(done),
         }
         // Only the latest state matters: quick play and pause changes never queue up calls.
@@ -224,7 +227,7 @@ async fn run(bus: Bus, mut messages: UnboundedReceiver<Message>) {
             && let Ok(message) = messages.try_recv()
         {
             match message {
-                Message::Update(update) => playing.apply(&update),
+                Message::Update(update) => follow(&mut playing, &mut gave_up, &update),
                 Message::Release(done) => release = Some(done),
             }
         }
@@ -236,13 +239,14 @@ async fn run(bus: Bus, mut messages: UnboundedReceiver<Message>) {
             return;
         }
         match (playing.wanted(), held.is_some()) {
-            (Want::Hold, false) => {
+            (Want::Hold, false) if !gave_up => {
                 if connection.is_none() {
                     connection = connect(&bus).await;
                 }
                 if let Some(connection) = &connection {
                     held = inhibit(connection).await;
                 }
+                gave_up = held.is_none();
             }
             (Want::Release, true) => {
                 if let (Some(connection), Some(held)) = (&connection, held.take()) {
@@ -255,6 +259,14 @@ async fn run(bus: Bus, mut messages: UnboundedReceiver<Message>) {
     if let (Some(connection), Some(held)) = (&connection, held) {
         uninhibit(connection, held).await;
     }
+}
+
+/// Applies `update` to `playing`; opening the player clears `gave_up`.
+fn follow(playing: &mut Playing, gave_up: &mut bool, update: &Update) {
+    if *update == Update::Active(true) && !playing.active {
+        *gave_up = false;
+    }
+    playing.apply(update);
 }
 
 async fn connect(bus: &Bus) -> Option<Connection> {
