@@ -2,7 +2,8 @@ import "fonts/Inter-Regular.ttf";
 import "fonts/Inter-Medium.ttf";
 import "fonts/Inter-SemiBold.ttf";
 import "fonts/Inter-Bold.ttf";
-import { Theme, CardData, ChapterRow, Message, Messages, NextUp, QualityRow, SeekPreview, SkipKind, TrackRow, TrickplayGrid } from "theme.slint";
+import { Theme, CardData, ChapterRow, Message, Messages, NextUp, QualityRow, SeekPreview, SkipKind, StatRow, StatSection, TrackRow, TrickplayGrid } from "theme.slint";
+import { StatsTitles } from "components/stats_panel.slint";
 import { StartingScreen } from "screens/starting.slint";
 import { SignInScreen, ServerState, ServerStatus } from "screens/sign_in.slint";
 import { QuickConnectScreen } from "screens/quick_connect.slint";
@@ -16,7 +17,8 @@ import { SeriesScreen, SeriesData, SeriesPlayKind, EpisodeData } from "screens/s
 import { TopBarPage } from "components/top_bar.slint";
 import { NoticeBanner, NoticeData } from "components/notice_banner.slint";
 
-export { CardData, ChapterRow, Message, Messages, NextUp, QualityRow, SeekPreview, SkipKind, TrackRow, TrickplayGrid } from "theme.slint";
+export { CardData, ChapterRow, Message, Messages, NextUp, QualityRow, SeekPreview, SkipKind, StatRow, StatSection, TrackRow, TrickplayGrid } from "theme.slint";
+export { StatsTitles }
 export { ServerState, ServerStatus }
 export { HomeBanner, HomeRow, HomeRowKind, HomeTitles }
 export { NoticeData }
@@ -196,6 +198,8 @@ export component AppWindow inherits Window {
     callback player-command-step-subtitle-delay(direction: int);
     callback player-command-set-subtitle-delay(ms: int);
     callback player-command-step-chapter(direction: int);
+    in property <[StatSection]> player-stats;
+    callback player-command-stats();
     callback close-player();
 
     in property <string> settings-server-name;
@@ -472,6 +476,7 @@ export component AppWindow inherits Window {
         fullscreen: root.full-screen;
         scrubbing <=> root.player-scrubbing;
         preview: root.player-preview;
+        stats: root.player-stats;
         preview-requested(seconds) => {
             root.player-preview-requested(seconds);
         }
@@ -544,6 +549,9 @@ export component AppWindow inherits Window {
         }
         command-step-chapter(direction) => {
             root.player-command-step-chapter(direction);
+        }
+        command-stats => {
+            root.player-command-stats();
         }
     }
 

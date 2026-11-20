@@ -13,6 +13,7 @@ export global Theme {
     out property <color> watched: #4ade80;
     out property <color> progress-track: #6b7385;
     out property <color> danger: #f87171;
+    out property <color> warning: #fbbf24;
 
     // Gradients drawn in the design without a variable.
     out property <brush> top-bar-scrim: @linear-gradient(180deg, #0b0d12f2 0%, #0b0d1200 100%);
@@ -59,6 +60,10 @@ export global Theme {
     out property <length> menu-max-width: 420px;
     // Chapters menu and its thumbnails.
     out property <length> chapter-menu-width: 360px;
+    // Playback statistics panel, its label column and the top and bottom padding of a row.
+    out property <length> stats-panel-width: 380px;
+    out property <length> stats-label-width: 120px;
+    out property <length> stats-row-padding-y: 3px;
     out property <length> chapter-thumb-width: 64px;
     out property <length> chapter-thumb-height: 36px;
     // Cut in the seek bar at each chapter start.
@@ -143,6 +148,21 @@ export struct ChapterRow {
 export struct QualityRow {
     height: int,
     kbps: int,
+}
+
+// A row of the playback statistics panel: `warn` shows the value in the warning color, `good`
+// in the watched color.
+export struct StatRow {
+    label: string,
+    value: string,
+    warn: bool,
+    good: bool,
+}
+
+// A section of the playback statistics panel; `title` is shown in capitals.
+export struct StatSection {
+    title: string,
+    rows: [StatRow],
 }
 
 // The next episode toast of the player.

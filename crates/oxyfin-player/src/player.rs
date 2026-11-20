@@ -10,8 +10,8 @@ use crate::error::describe;
 use crate::events::{self, Shared};
 use crate::tracks;
 use crate::{
-    MediaSource, PlayerError, PlayerEvent, SeekTarget, SubtitleAppearance, Track, TrackId,
-    TrackKind,
+    MediaSource, PlaybackStats, PlayerError, PlayerEvent, SeekTarget, SubtitleAppearance, Track,
+    TrackId, TrackKind,
 };
 
 /// Where mpv sends decoded video.
@@ -293,42 +293,114 @@ impl Player {
         .map(|_| ())
     }
 
-    /// Returns a one-line summary of decoding and rendering counters
-    /// (hardware decoder, video size, dropped and delayed frames, fps).
-    ///
-    /// Meant for diagnostics only: the format is not stable. A value mpv
-    /// cannot report is shown as `-`.
-    pub fn stats(&self) -> String {
-        fn show<T: std::fmt::Display>(value: Option<T>) -> String {
-            value.map_or_else(|| "-".to_owned(), |v| v.to_string())
-        }
-        let hwdec = self
-            .mpv
-            .get_property::<String>("hwdec-current")
-            .ok()
-            .filter(|h| !h.is_empty());
-        let video = match (
-            self.mpv.get_property::<i64>("video-params/w").ok(),
-            self.mpv.get_property::<i64>("video-params/h").ok(),
+    /// Reads the decoding, rendering and network figures of the playing
+    /// media. Never fails: what mpv cannot report is `None`.
+    pub fn stats(&self) -> PlaybackStats {
+        let size = |prefix: &str| match (
+            self.int(&format!("{prefix}/w")),
+            self.int(&format!("{prefix}/h")),
         ) {
-            (Some(w), Some(h)) => Some(format!("{w}x{h}")),
+            (Some(w), Some(h)) if w > 0 && h > 0 => Some((w, h)),
             _ => None,
         };
-        let dropped = self.mpv.get_property::<i64>("frame-drop-count").ok();
-        let delayed = self.mpv.get_property::<i64>("vo-delayed-frame-count").ok();
-        let fps = self
-            .mpv
-            .get_property::<f64>("estimated-vf-fps")
-            .ok()
-            .map(|f| format!("{f:.2}"));
-        format!(
-            "hwdec={} video={} drop={} delayed={} fps={}",
-            show(hwdec),
-            show(video),
-            show(dropped),
-            show(delayed),
-            show(fps),
+        // The osd margins are unreliable with the render API: fit the video by its display aspect.
+        let output = match (
+            self.int("video-params/dw").zip(self.int("video-params/dh")),
+            size("osd-dimensions"),
+        ) {
+            (Some(video), Some(area)) if video.0 > 0 && video.1 > 0 => Some(fit(video, area)),
+            _ => None,
+        };
+        let video_codec = self.text("current-tracks/video/codec").map(|codec| {
+            match self.text("current-tracks/video/codec-profile") {
+                Some(profile) => format!("{codec} {profile}"),
+                None => codec,
+            }
+        });
+        let audio_output = self.text("current-ao").map(|ao| {
+            let rate = self
+                .int("audio-out-params/samplerate")
+                .filter(|rate| *rate > 0)
+                .map(|rate| format!("{} kHz", trim_number(rate as f64 / 1000.0, 1)));
+            let layout = self.text("audio-out-params/hr-channels");
+            let details = [rate, layout].into_iter().flatten().collect::<Vec<_>>();
+            if details.is_empty() {
+                output_name(&ao)
+            } else {
+                format!("{} · {}", output_name(&ao), details.join(" "))
+            }
+        });
+        PlaybackStats {
+            file_format: self.text("file-format"),
+            video_codec,
+            hwdec: self.text("hwdec-current").filter(|hwdec| hwdec != "no"),
+            source_size: size("video-params"),
+            output_size: output.or_else(|| size("video-out-params")),
+            fps: self
+                .float("estimated-vf-fps")
+                .filter(|fps| *fps > 0.0 && fps.is_finite()),
+            dropped_decoder: self.count("decoder-frame-drop-count"),
+            dropped_output: self.count("frame-drop-count"),
+            hdr: self.hdr(),
+            audio_codec: self.text("current-tracks/audio/codec"),
+            audio_channels: self.text("audio-params/hr-channels"),
+            audio_output,
+            video_bitrate: self.bitrate("video-bitrate"),
+            audio_bitrate: self.bitrate("audio-bitrate"),
+            cache_seconds: self
+                .float("demuxer-cache-duration")
+                .filter(|seconds| *seconds >= 0.0 && seconds.is_finite()),
+            cache_speed: self.count("cache-speed"),
+        }
+    }
+
+    fn hdr(&self) -> Option<String> {
+        let format = match self.text("video-params/gamma")?.as_str() {
+            "pq" => "HDR10",
+            "hlg" => "HLG",
+            _ => return None,
+        };
+        let target = self.text("video-target-params/gamma");
+        if target.is_none_or(|gamma| gamma == "pq" || gamma == "hlg") {
+            return Some(format.to_owned());
+        }
+        Some(
+            match self.text("tone-mapping").filter(|curve| curve != "auto") {
+                Some(curve) => format!("{format} → SDR ({curve})"),
+                None => format!("{format} → SDR"),
+            },
         )
+    }
+
+    fn text(&self, name: &str) -> Option<String> {
+        self.mpv
+            .get_property::<String>(name)
+            .ok()
+            .filter(|value| !value.is_empty())
+    }
+
+    fn int(&self, name: &str) -> Option<u32> {
+        self.mpv
+            .get_property::<i64>(name)
+            .ok()
+            .and_then(|value| u32::try_from(value).ok())
+    }
+
+    fn count(&self, name: &str) -> Option<u64> {
+        self.mpv
+            .get_property::<i64>(name)
+            .ok()
+            .and_then(|value| u64::try_from(value).ok())
+    }
+
+    fn float(&self, name: &str) -> Option<f64> {
+        self.mpv.get_property::<f64>(name).ok()
+    }
+
+    fn bitrate(&self, name: &str) -> Option<u64> {
+        self.float(name)
+            .filter(|bits| *bits >= 1.0 && bits.is_finite())
+            .map(|bits| bits.round() as u64)
     }
 
     /// Fails with [`PlayerError::NoMediaLoaded`] unless a media is loaded.
@@ -450,6 +522,40 @@ fn track_value(track: Option<TrackId>) -> String {
     track.map_or_else(|| "no".to_owned(), |id| id.0.to_string())
 }
 
+/// The size of a video of display size `video` scaled to fit in `area`, keeping its aspect.
+fn fit((width, height): (u32, u32), (area_width, area_height): (u32, u32)) -> (u32, u32) {
+    let scale =
+        (f64::from(area_width) / f64::from(width)).min(f64::from(area_height) / f64::from(height));
+    (
+        (f64::from(width) * scale).round() as u32,
+        (f64::from(height) * scale).round() as u32,
+    )
+}
+
+/// Display name of an mpv audio output driver.
+fn output_name(ao: &str) -> String {
+    match ao {
+        "pipewire" => "PipeWire",
+        "pulse" => "PulseAudio",
+        "alsa" => "ALSA",
+        "jack" => "JACK",
+        "coreaudio" => "Core Audio",
+        "wasapi" => "WASAPI",
+        other => other,
+    }
+    .to_owned()
+}
+
+/// `value` with at most `decimals` decimals and no trailing zero.
+fn trim_number(value: f64, decimals: usize) -> String {
+    let text = format!("{value:.decimals$}");
+    if text.contains('.') {
+        text.trim_end_matches('0').trim_end_matches('.').to_owned()
+    } else {
+        text
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -510,6 +616,25 @@ mod tests {
         if let Some(style) = read(&player, "sub-border-style") {
             assert_eq!(style, "outline-and-shadow");
         }
+    }
+
+    #[test]
+    fn audio_outputs_have_display_names() {
+        assert_eq!(output_name("pipewire"), "PipeWire");
+        assert_eq!(output_name("sdl"), "sdl");
+        assert_eq!(trim_number(48.0, 1), "48");
+        assert_eq!(trim_number(44.1, 1), "44.1");
+        assert_eq!(fit((1920, 1080), (1280, 720)), (1280, 720));
+        assert_eq!(fit((1920, 1036), (1280, 720)), (1280, 691));
+        assert_eq!(fit((1440, 1080), (1280, 720)), (960, 720));
+    }
+
+    #[test]
+    fn stats_without_media_are_empty() {
+        let stats = headless().stats();
+        assert_eq!(stats.source_size, None);
+        assert_eq!(stats.video_codec, None);
+        assert_eq!(stats.hdr, None);
     }
 
     #[test]

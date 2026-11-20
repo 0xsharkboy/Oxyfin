@@ -195,6 +195,70 @@ pub enum PlayerEvent {
     Unloaded(UnloadReason),
 }
 
+/// Decoding, rendering and network figures of the playing media, for a
+/// statistics display. A value mpv cannot report, such as before the first
+/// frame or without a media, is `None`.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PlaybackStats {
+    /// Container format as mpv names it, such as `mkv` or `hls`.
+    pub file_format: Option<String>,
+    /// Video codec name, followed by its profile when known, such as
+    /// `hevc Main 10`.
+    pub video_codec: Option<String>,
+    /// Hardware decoding API in use, such as `vaapi`; `None` for software
+    /// decoding or when no video is decoded.
+    pub hwdec: Option<String>,
+    /// Size of the decoded video, in pixels.
+    pub source_size: Option<(u32, u32)>,
+    /// Size the video is drawn at on screen, in pixels.
+    pub output_size: Option<(u32, u32)>,
+    /// Frame rate after filters, as mpv estimates it.
+    pub fps: Option<f64>,
+    /// Frames the decoder dropped.
+    pub dropped_decoder: Option<u64>,
+    /// Frames the video output dropped.
+    pub dropped_output: Option<u64>,
+    /// HDR format of the video, such as `HDR10` or `HLG`, followed by
+    /// `→ SDR` and the tone mapping curve when the output is SDR; `None`
+    /// for SDR video.
+    pub hdr: Option<String>,
+    /// Audio codec name, such as `eac3`.
+    pub audio_codec: Option<String>,
+    /// Channel layout of the audio, such as `5.1` or `stereo`.
+    pub audio_channels: Option<String>,
+    /// Audio output driver, followed by the output rate and layout, such as
+    /// `PipeWire · 48 kHz stereo`.
+    pub audio_output: Option<String>,
+    /// Video bitrate, in bits per second.
+    pub video_bitrate: Option<u64>,
+    /// Audio bitrate, in bits per second.
+    pub audio_bitrate: Option<u64>,
+    /// Media buffered ahead of the position, in seconds.
+    pub cache_seconds: Option<f64>,
+    /// Network read speed, in bytes per second.
+    pub cache_speed: Option<u64>,
+}
+
+impl fmt::Display for PlaybackStats {
+    /// A one-line summary for logs; the format is not stable.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fn show<T: fmt::Display>(value: Option<&T>) -> String {
+            value.map_or_else(|| "-".to_owned(), ToString::to_string)
+        }
+        let size = |size: Option<(u32, u32)>| size.map(|(w, h)| format!("{w}x{h}"));
+        write!(
+            f,
+            "hwdec={} video={} output={} drop={}/{} fps={}",
+            show(self.hwdec.as_ref()),
+            show(size(self.source_size).as_ref()),
+            show(size(self.output_size).as_ref()),
+            show(self.dropped_decoder.as_ref()),
+            show(self.dropped_output.as_ref()),
+            show(self.fps.map(|fps| format!("{fps:.2}")).as_ref()),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Duration;

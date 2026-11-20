@@ -670,3 +670,29 @@ fn delays_are_set_in_milliseconds_and_kept_across_loads() {
     player.set_subtitle_delay(0).unwrap();
     assert_eq!(player.subtitle_delay().unwrap(), 0);
 }
+
+#[test]
+fn stats_report_video_size() {
+    let (events, on_event) = Events::new();
+    let player = headless(on_event);
+    let idle = player.stats();
+    assert_eq!(idle.source_size, None);
+    assert_eq!(idle.video_codec, None);
+
+    player.load(&sample()).unwrap();
+    events.wait_for(TIMEOUT, is_file_loaded);
+    // mpv fills the video parameters once the first frame is decoded.
+    let deadline = Instant::now() + TIMEOUT;
+    let stats = loop {
+        let stats = player.stats();
+        if stats.source_size.is_some() || Instant::now() > deadline {
+            break stats;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    assert_eq!(stats.source_size, Some((64, 48)), "{stats:#?}");
+    assert!(stats.video_codec.is_some(), "{stats:#?}");
+    assert!(stats.audio_codec.is_some(), "{stats:#?}");
+    assert_eq!(stats.file_format.as_deref(), Some("mkv"), "{stats:#?}");
+    assert!(!stats.to_string().is_empty());
+}

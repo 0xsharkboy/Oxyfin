@@ -10,7 +10,9 @@ use oxyfin_core::{
     CoreError, MediaPlayer, MemoryStore, Paths, PlaybackEvent, Result, SecretStore, SessionManager,
     TokenVault,
 };
-use oxyfin_player::{MediaSource, PlayerError, SeekTarget, SubtitleAppearance, TrackId};
+use oxyfin_player::{
+    MediaSource, PlaybackStats, PlayerError, SeekTarget, SubtitleAppearance, TrackId,
+};
 use serde_json::Value;
 use tempfile::TempDir;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -146,12 +148,21 @@ pub struct FakePlayer {
     next_subtitle: AtomicI64,
     no_media: AtomicBool,
     fail_load: AtomicBool,
+    stats: Mutex<PlaybackStats>,
 }
 
 impl FakePlayer {
     /// Makes every call but `load` fail with `NoMediaLoaded`, as before `FileLoaded`.
     pub fn set_no_media(&self, no_media: bool) {
         self.no_media.store(no_media, Ordering::SeqCst);
+    }
+
+    /// Sets what `stats` returns.
+    pub fn set_stats(&self, stats: PlaybackStats) {
+        *self
+            .stats
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = stats;
     }
 
     /// Makes `load` fail.
@@ -290,6 +301,12 @@ impl MediaPlayer for FakePlayer {
         appearance: &SubtitleAppearance,
     ) -> std::result::Result<(), PlayerError> {
         self.record(Call::SetSubtitles(*appearance))
+    }
+    fn stats(&self) -> PlaybackStats {
+        self.stats
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
     }
 }
 

@@ -18,11 +18,13 @@ pub use chapters::{
 };
 pub use controller::{PlaybackController, PlaybackHandle};
 pub use media_player::{MediaPlayer, PlayerEventSink, PlayerEvents, player_events};
+pub use oxyfin_api::PlayMethod;
+pub use oxyfin_player::PlaybackStats;
 pub use quality::{QUALITIES, Quality};
 pub use segments::{SegmentKind, SkippableSegment};
 pub use types::{
     NEXT_UP_COUNTDOWN, PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent,
-    PlaybackTimings, PlaybackTitle, SEEK_STEP, SHUTDOWN_TIMEOUT, SPEEDS, UNLOAD_GRACE,
+    PlaybackTimings, PlaybackTitle, SEEK_STEP, SHUTDOWN_TIMEOUT, SPEEDS, StatsReport, UNLOAD_GRACE,
 };
 
 /// An audio track the user can pick.

@@ -187,10 +187,15 @@ impl Current {
             is_paused: self.paused,
             audio_stream_index: self.audio,
             subtitle_stream_index: self.subtitle,
-            play_method: match self.delivery {
-                Delivery::Direct => PlayMethod::DirectPlay,
-                Delivery::Transcoded { .. } => PlayMethod::Transcode,
-            },
+            play_method: self.play_method(),
+        }
+    }
+
+    /// How the server delivers the item.
+    pub(super) fn play_method(&self) -> PlayMethod {
+        match self.delivery {
+            Delivery::Direct => PlayMethod::DirectPlay,
+            Delivery::Transcoded { .. } => PlayMethod::Transcode,
         }
     }
 

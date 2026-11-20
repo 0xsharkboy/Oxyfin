@@ -23,7 +23,9 @@ use super::media_player::{MediaPlayer, PlayerEvents};
 use super::quality::Quality;
 use super::reporter::{ReportKind, Reporter};
 use super::tracks::{Delivery, TrackMap, subtitle_format};
-use super::types::{PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent, PlaybackTimings};
+use super::types::{
+    PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent, PlaybackTimings, StatsReport,
+};
 use crate::error::CoreError;
 use crate::models::Episode;
 
@@ -478,7 +480,19 @@ impl PlaybackController {
                 }
             }
             PlaybackCommand::CancelNextUp => self.cancel_countdown(),
+            PlaybackCommand::RequestStats => self.report_stats(),
         }
+    }
+
+    fn report_stats(&self) {
+        let Some(current) = self.current.as_ref().filter(|current| current.loaded) else {
+            return;
+        };
+        self.emit(PlaybackEvent::Stats(Box::new(StatsReport {
+            method: current.play_method(),
+            transcode_reasons: current.source.transcode_reasons(),
+            player: self.player.stats(),
+        })));
     }
 
     /// A user pick replaces the default selection of that kind.

@@ -1,15 +1,17 @@
 import { QualityRow } from "../theme.slint";
 import { MenuPanel, MenuHeader, MenuDivider, MenuOption } from "track_menu.slint";
 
-// Playback settings menu of the player: speed and streaming quality. The speed follows what the
+// Playback settings menu of the player: speed, streaming quality and the statistics panel. The speed follows what the
 // player reports; the quality is the choice the user made.
 export component SpeedMenu inherits MenuPanel {
     in property <[float]> speeds;
     in property <float> speed;
     in property <[QualityRow]> qualities;
     in property <int> quality;
+    in property <bool> stats-visible;
     callback select(speed: float);
     callback select-quality(index: int);
+    callback toggle-stats();
 
     accessible-role: list;
     accessible-label: @tr("Playback settings");
@@ -38,6 +40,16 @@ export component SpeedMenu inherits MenuPanel {
         selected: index == root.quality;
         chosen => {
             root.select-quality(index);
+        }
+    }
+
+    MenuDivider { }
+
+    MenuOption {
+        label: @tr("Playback statistics");
+        selected: root.stats-visible;
+        chosen => {
+            root.toggle-stats();
         }
     }
 }

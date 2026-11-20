@@ -1,7 +1,7 @@
 //! The player seen by the controller, and the channel carrying its events.
 
 use oxyfin_player::{
-    MediaSource, PlayerError, PlayerEvent, SeekTarget, SubtitleAppearance, TrackId,
+    MediaSource, PlaybackStats, PlayerError, PlayerEvent, SeekTarget, SubtitleAppearance, TrackId,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
@@ -49,6 +49,8 @@ pub trait MediaPlayer: Send + Sync + 'static {
     ) -> Result<(), PlayerError>;
     /// Sets how subtitles look, for the current and later media.
     fn set_subtitle_appearance(&self, appearance: &SubtitleAppearance) -> Result<(), PlayerError>;
+    /// Reads the decoding, rendering and network figures of the media.
+    fn stats(&self) -> PlaybackStats;
 }
 
 #[cfg(feature = "mpv")]
@@ -104,6 +106,9 @@ impl MediaPlayer for oxyfin_player::Player {
     }
     fn set_subtitle_appearance(&self, appearance: &SubtitleAppearance) -> Result<(), PlayerError> {
         oxyfin_player::Player::set_subtitle_appearance(self, appearance)
+    }
+    fn stats(&self) -> PlaybackStats {
+        oxyfin_player::Player::stats(self)
     }
 }
 
