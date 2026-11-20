@@ -69,6 +69,101 @@ export global StatsTitles {
     public pure function ahead(seconds: string) -> string {
         @tr("{} s ahead", seconds)
     }
+    public pure function tone-mapped(format: string) -> string {
+        @tr("{}, tone mapped", format)
+    }
+    public pure function tone-mapped-with(format: string, curve: string) -> string {
+        @tr("{}, tone mapped ({})", format, curve)
+    }
+    // A short phrase for a reason the server gives to transcode, as Jellyfin names it; an
+    // unknown one stays as it is.
+    public pure function transcode-reason(reason: string) -> string {
+        if reason == "ContainerNotSupported" {
+            return @tr("container not supported");
+        }
+        if reason == "VideoCodecNotSupported" {
+            return @tr("video codec not supported");
+        }
+        if reason == "AudioCodecNotSupported" {
+            return @tr("audio codec not supported");
+        }
+        if reason == "SubtitleCodecNotSupported" {
+            return @tr("subtitle format not supported");
+        }
+        if reason == "AudioIsExternal" {
+            return @tr("external audio");
+        }
+        if reason == "SecondaryAudioNotSupported" {
+            return @tr("secondary audio not supported");
+        }
+        if reason == "StreamCountExceedsLimit" {
+            return @tr("too many streams");
+        }
+        if reason == "VideoProfileNotSupported" {
+            return @tr("video profile not supported");
+        }
+        if reason == "VideoRangeTypeNotSupported" {
+            return @tr("HDR type not supported");
+        }
+        if reason == "VideoCodecTagNotSupported" {
+            return @tr("video codec tag not supported");
+        }
+        if reason == "VideoLevelNotSupported" {
+            return @tr("video level not supported");
+        }
+        if reason == "VideoResolutionNotSupported" {
+            return @tr("resolution not supported");
+        }
+        if reason == "VideoBitDepthNotSupported" {
+            return @tr("video bit depth not supported");
+        }
+        if reason == "VideoFramerateNotSupported" {
+            return @tr("frame rate not supported");
+        }
+        if reason == "VideoRotationNotSupported" {
+            return @tr("video rotation not supported");
+        }
+        if reason == "RefFramesNotSupported" {
+            return @tr("reference frames not supported");
+        }
+        if reason == "AnamorphicVideoNotSupported" {
+            return @tr("anamorphic video not supported");
+        }
+        if reason == "InterlacedVideoNotSupported" {
+            return @tr("interlaced video not supported");
+        }
+        if reason == "AudioChannelsNotSupported" {
+            return @tr("audio channels not supported");
+        }
+        if reason == "AudioProfileNotSupported" {
+            return @tr("audio profile not supported");
+        }
+        if reason == "AudioSampleRateNotSupported" {
+            return @tr("audio sample rate not supported");
+        }
+        if reason == "AudioBitDepthNotSupported" {
+            return @tr("audio bit depth not supported");
+        }
+        if reason == "ContainerBitrateExceedsLimit" {
+            return @tr("bitrate over the limit");
+        }
+        if reason == "VideoBitrateNotSupported" {
+            return @tr("video bitrate over the limit");
+        }
+        if reason == "AudioBitrateNotSupported" {
+            return @tr("audio bitrate over the limit");
+        }
+        if reason == "UnknownVideoStreamInfo" {
+            return @tr("unknown video stream");
+        }
+        if reason == "UnknownAudioStreamInfo" {
+            return @tr("unknown audio stream");
+        }
+        if reason == "DirectPlayError" {
+            return @tr("direct play failed");
+        }
+        reason
+    }
 }
 
 // Playback statistics over the video, top left: sections of label and value rows.

@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-20 00:09+0000\n"
+"POT-Creation-Date: 2026-11-20 01:33+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -369,13 +369,163 @@ msgctxt "StatsTitles"
 msgid "{} s ahead"
 msgstr ""
 
-#: crates/oxyfin/ui/components/stats_panel.slint:79
-#: crates/oxyfin/ui/components/stats_panel.slint:79
+#: crates/oxyfin/ui/components/stats_panel.slint:73
+msgctxt "StatsTitles"
+msgid "{}, tone mapped"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:76
+msgctxt "StatsTitles"
+msgid "{}, tone mapped ({})"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:82
+msgctxt "StatsTitles"
+msgid "container not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:85
+msgctxt "StatsTitles"
+msgid "video codec not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:88
+msgctxt "StatsTitles"
+msgid "audio codec not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:91
+msgctxt "StatsTitles"
+msgid "subtitle format not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:94
+msgctxt "StatsTitles"
+msgid "external audio"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:97
+msgctxt "StatsTitles"
+msgid "secondary audio not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:100
+msgctxt "StatsTitles"
+msgid "too many streams"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:103
+msgctxt "StatsTitles"
+msgid "video profile not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:106
+msgctxt "StatsTitles"
+msgid "HDR type not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:109
+msgctxt "StatsTitles"
+msgid "video codec tag not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:112
+msgctxt "StatsTitles"
+msgid "video level not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:115
+msgctxt "StatsTitles"
+msgid "resolution not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:118
+msgctxt "StatsTitles"
+msgid "video bit depth not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:121
+msgctxt "StatsTitles"
+msgid "frame rate not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:124
+msgctxt "StatsTitles"
+msgid "video rotation not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:127
+msgctxt "StatsTitles"
+msgid "reference frames not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:130
+msgctxt "StatsTitles"
+msgid "anamorphic video not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:133
+msgctxt "StatsTitles"
+msgid "interlaced video not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:136
+msgctxt "StatsTitles"
+msgid "audio channels not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:139
+msgctxt "StatsTitles"
+msgid "audio profile not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:142
+msgctxt "StatsTitles"
+msgid "audio sample rate not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:145
+msgctxt "StatsTitles"
+msgid "audio bit depth not supported"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:148
+msgctxt "StatsTitles"
+msgid "bitrate over the limit"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:151
+msgctxt "StatsTitles"
+msgid "video bitrate over the limit"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:154
+msgctxt "StatsTitles"
+msgid "audio bitrate over the limit"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:157
+msgctxt "StatsTitles"
+msgid "unknown video stream"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:160
+msgctxt "StatsTitles"
+msgid "unknown audio stream"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:163
+msgctxt "StatsTitles"
+msgid "direct play failed"
+msgstr ""
+
+#: crates/oxyfin/ui/components/stats_panel.slint:174
+#: crates/oxyfin/ui/components/stats_panel.slint:174
 msgctxt "StatsPanel"
 msgid "Playback statistics"
 msgstr ""
 
-#: crates/oxyfin/ui/components/stats_panel.slint:112
+#: crates/oxyfin/ui/components/stats_panel.slint:207
 msgctxt "StatsPanel"
 msgid "I to close"
 msgstr ""

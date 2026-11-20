@@ -18,6 +18,6 @@ pub use player::{Player, PlayerOptions, VideoOutput};
 #[cfg(feature = "mpv")]
 pub use render::VideoRenderer;
 pub use types::{
-    MediaSource, PlaybackStats, PlayerEvent, SeekTarget, SubtitleAppearance, Track, TrackId,
-    TrackKind, UnloadReason,
+    HdrFormat, HdrInfo, MediaSource, PlaybackStats, PlayerEvent, SeekTarget, SubtitleAppearance,
+    Track, TrackId, TrackKind, UnloadReason,
 };

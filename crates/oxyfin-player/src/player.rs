@@ -10,8 +10,8 @@ use crate::error::describe;
 use crate::events::{self, Shared};
 use crate::tracks;
 use crate::{
-    MediaSource, PlaybackStats, PlayerError, PlayerEvent, SeekTarget, SubtitleAppearance, Track,
-    TrackId, TrackKind,
+    HdrFormat, HdrInfo, MediaSource, PlaybackStats, PlayerError, PlayerEvent, SeekTarget,
+    SubtitleAppearance, Track, TrackId, TrackKind,
 };
 
 /// Where mpv sends decoded video.
@@ -354,17 +354,20 @@ impl Player {
         }
     }
 
-    fn hdr(&self) -> Option<String> {
+    fn hdr(&self) -> Option<HdrInfo> {
         let format = match self.text("video-params/gamma")?.as_str() {
-            "pq" => "HDR10",
-            "hlg" => "HLG",
+            "pq" => HdrFormat::Hdr10,
+            "hlg" => HdrFormat::Hlg,
             _ => return None,
         };
         let tone_mapped = self
             .text("video-target-params/gamma")
             .is_some_and(|gamma| gamma != "pq" && gamma != "hlg");
-        let curve = self.text("tone-mapping");
-        Some(hdr_label(format, tone_mapped, curve.as_deref()))
+        Some(HdrInfo {
+            format,
+            tone_mapped,
+            curve: self.text("tone-mapping").map(|curve| tone_curve(&curve)),
+        })
     }
 
     fn text(&self, name: &str) -> Option<String> {
@@ -527,14 +530,14 @@ fn fit((width, height): (u32, u32), (area_width, area_height): (u32, u32)) -> (u
     )
 }
 
-/// `format`, followed by `, tone mapped` and the curve when the output is SDR, as in the
-/// reference design; mpv's `auto` curve is not named.
-fn hdr_label(format: &str, tone_mapped: bool, curve: Option<&str>) -> String {
-    match (tone_mapped, curve.filter(|curve| *curve != "auto")) {
-        (false, _) => format.to_owned(),
-        (true, Some(curve)) => format!("{format}, tone mapped ({curve})"),
-        (true, None) => format!("{format}, tone mapped"),
+/// The tone mapping curve mpv uses for its `tone-mapping` option.
+fn tone_curve(option: &str) -> String {
+    // The render API draws with the gpu renderer, where `auto` is bt.2390 (mpv manual).
+    match option {
+        "auto" => "bt.2390",
+        curve => curve,
     }
+    .to_owned()
 }
 
 /// Display name of an mpv audio output driver.
@@ -635,14 +638,15 @@ mod tests {
     }
 
     #[test]
-    fn hdr_label_names_the_tone_mapping_like_the_design() {
-        assert_eq!(hdr_label("HDR10", false, Some("bt.2390")), "HDR10");
+    fn the_tone_mapping_curve_is_the_one_mpv_picks() {
+        assert_eq!(tone_curve("auto"), "bt.2390");
+        assert_eq!(tone_curve("hable"), "hable");
+        let player = headless();
         assert_eq!(
-            hdr_label("HDR10", true, Some("bt.2390")),
-            "HDR10, tone mapped (bt.2390)"
+            player.text("tone-mapping").map(|curve| tone_curve(&curve)),
+            Some("bt.2390".to_owned()),
+            "the default curve"
         );
-        assert_eq!(hdr_label("HLG", true, Some("auto")), "HLG, tone mapped");
-        assert_eq!(hdr_label("HLG", true, None), "HLG, tone mapped");
     }
 
     #[test]

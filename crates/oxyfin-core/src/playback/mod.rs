@@ -19,7 +19,7 @@ pub use chapters::{
 pub use controller::{PlaybackController, PlaybackHandle};
 pub use media_player::{MediaPlayer, PlayerEventSink, PlayerEvents, player_events};
 pub use oxyfin_api::PlayMethod;
-pub use oxyfin_player::PlaybackStats;
+pub use oxyfin_player::{HdrFormat, HdrInfo, PlaybackStats};
 pub use quality::{QUALITIES, Quality};
 pub use segments::{SegmentKind, SkippableSegment};
 pub use types::{

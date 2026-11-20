@@ -72,12 +72,12 @@ pub use models::{
 };
 pub use paths::Paths;
 pub use playback::{
-    AudioOption, CHAPTER_RESTART_GRACE, Chapter, MediaPlayer, NEXT_UP_COUNTDOWN, PROGRESS_INTERVAL,
-    PlayMethod, PlayMode, PlaybackCommand, PlaybackController, PlaybackError, PlaybackEvent,
-    PlaybackHandle, PlaybackStats, PlaybackTimings, PlaybackTitle, PlayerEventSink, PlayerEvents,
-    QUALITIES, Quality, SEEK_STEP, SHUTDOWN_TIMEOUT, SPEEDS, SegmentKind, SkippableSegment,
-    StatsReport, SubtitleOption, UNLOAD_GRACE, chapter_at, next_chapter, player_events,
-    previous_chapter, start_at,
+    AudioOption, CHAPTER_RESTART_GRACE, Chapter, HdrFormat, HdrInfo, MediaPlayer,
+    NEXT_UP_COUNTDOWN, PROGRESS_INTERVAL, PlayMethod, PlayMode, PlaybackCommand,
+    PlaybackController, PlaybackError, PlaybackEvent, PlaybackHandle, PlaybackStats,
+    PlaybackTimings, PlaybackTitle, PlayerEventSink, PlayerEvents, QUALITIES, Quality, SEEK_STEP,
+    SHUTDOWN_TIMEOUT, SPEEDS, SegmentKind, SkippableSegment, StatsReport, SubtitleOption,
+    UNLOAD_GRACE, chapter_at, next_chapter, player_events, previous_chapter, start_at,
 };
 pub use quick_connect::{QUICK_CONNECT_POLL_INTERVAL, QuickConnect};
 pub use secrets::{
