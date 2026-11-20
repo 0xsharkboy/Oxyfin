@@ -31,14 +31,16 @@
 //! use std::sync::Arc;
 //!
 //! use oxyfin_core::{
-//!     PlayMode, PlaybackCommand, PlaybackController, PlaybackEvent, TrackMemory, player_events,
+//!     PlayMode, PlaybackCommand, PlaybackController, PlaybackEvent, TrackMemory, account_key,
+//!     player_events,
 //! };
 //! use oxyfin_player::{Player, PlayerOptions};
 //!
 //! let (sink, events) = player_events();
 //! let player = Arc::new(Player::new(PlayerOptions::default(), move |event| sink.send(event))?);
 //! // Keep `player` to create the `VideoRenderer` in the UI's rendering notifier.
-//! let memory = TrackMemory::load(&paths);
+//! let account = account_key(session.server().base_url().as_str(), session.user_id().as_str());
+//! let memory = TrackMemory::load(&paths, &account);
 //! let (handle, mut updates) = PlaybackController::spawn(session, player.clone(), events, memory);
 //!
 //! handle.send(PlaybackCommand::Play { item, mode: PlayMode::Auto });

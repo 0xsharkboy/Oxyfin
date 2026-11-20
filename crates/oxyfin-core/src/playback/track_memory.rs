@@ -1,6 +1,7 @@
 //! The audio and subtitle choices made in a series, kept for its next
 //! episodes and matched by description, never by stream index.
 
+use std::collections::BTreeMap;
 use std::fs;
 
 use oxyfin_api::{ItemId, MediaStream, MediaStreamType};
@@ -207,11 +208,16 @@ struct Entry {
     choice: TrackChoice,
 }
 
-/// The choices of the last [`TRACK_MEMORY_LIMIT`] series, saved in
-/// `track-memory.json` of the data directory.
+/// Entries of every account, by account key.
+type Accounts = BTreeMap<String, Vec<Entry>>;
+
+/// The choices of one account in its last [`TRACK_MEMORY_LIMIT`] series,
+/// saved in `track-memory.json` of the data directory beside those of the
+/// other accounts.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TrackMemory {
     paths: Paths,
+    account: String,
     /// Least recently changed first.
     entries: Vec<Entry>,
 }
@@ -220,24 +226,31 @@ fn storage<E: std::fmt::Display>(error: E) -> CoreError {
     CoreError::Storage(error.to_string())
 }
 
-impl TrackMemory {
-    /// Reads the saved choices; a missing or unreadable file gives an empty memory.
-    pub fn load(paths: &Paths) -> Self {
-        let file = paths.data_dir.join(FILE_NAME);
-        let entries = match fs::read(&file) {
-            Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_else(|error| {
-                log::warn!("ignoring the unreadable track memory: {error}");
-                Vec::new()
-            }),
-            Err(error) => {
-                if error.kind() != std::io::ErrorKind::NotFound {
-                    log::warn!("cannot read the track memory: {error}");
-                }
-                Vec::new()
+fn read(paths: &Paths) -> Accounts {
+    let file = paths.data_dir.join(FILE_NAME);
+    match fs::read(&file) {
+        Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_else(|error| {
+            log::warn!("ignoring the unreadable track memory: {error}");
+            Accounts::new()
+        }),
+        Err(error) => {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                log::warn!("cannot read the track memory: {error}");
             }
-        };
+            Accounts::new()
+        }
+    }
+}
+
+impl TrackMemory {
+    /// Reads the choices saved for `account`, the key
+    /// [`account_key`](crate::account_key) gives; a missing or unreadable
+    /// file gives an empty memory.
+    pub fn load(paths: &Paths, account: &str) -> Self {
+        let entries = read(paths).remove(account).unwrap_or_default();
         Self {
             paths: paths.clone(),
+            account: account.to_owned(),
             entries,
         }
     }
@@ -265,7 +278,10 @@ impl TrackMemory {
     fn save(&self) -> Result<()> {
         let dir = &self.paths.data_dir;
         fs::create_dir_all(dir).map_err(storage)?;
-        let json = serde_json::to_vec(&self.entries).map_err(storage)?;
+        // Read again so that the choices another account saved meanwhile stay.
+        let mut accounts = read(&self.paths);
+        accounts.insert(self.account.clone(), self.entries.clone());
+        let json = serde_json::to_vec(&accounts).map_err(storage)?;
         let tmp = dir.join("track-memory.json.tmp");
         fs::write(&tmp, json).map_err(storage)?;
         fs::rename(&tmp, dir.join(FILE_NAME)).map_err(storage)

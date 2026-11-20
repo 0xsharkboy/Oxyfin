@@ -335,7 +335,7 @@ impl App {
         built: Result<(Arc<oxyfin_player::Player>, oxyfin_core::PlayerEvents), String>,
     ) {
         use crate::generation::{Built, Playback};
-        use oxyfin_core::{PlaybackController, TrackMemory};
+        use oxyfin_core::{PlaybackController, TrackMemory, account_key};
 
         if self.creating_player.get() == Some(id) {
             self.creating_player.set(None);
@@ -361,11 +361,16 @@ impl App {
             match current.as_mut() {
                 Some(generation) if decision != Built::Release && generation.playback.is_none() => {
                     let _guard = self.runtime.enter();
+                    let session = &generation.session;
+                    let account = account_key(
+                        session.server().base_url().as_str(),
+                        session.user_id().as_str(),
+                    );
                     let (handle, updates) = PlaybackController::spawn(
-                        generation.session.clone(),
+                        session.clone(),
                         player.clone(),
                         events,
-                        TrackMemory::load(&self.paths),
+                        TrackMemory::load(&self.paths, &account),
                     );
                     handle.send(PlaybackCommand::SetSubtitleStyle(
                         self.manager.subtitle_style(),

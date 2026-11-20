@@ -37,6 +37,8 @@ const EPISODES: [&str; 4] = [
     "6aeeb019134a3bf62f0f69ab03349ab3",
 ];
 const PLAY_SESSION_ID: &str = "8050f69acbe34027b28b38f406d4fe49";
+/// Account whose track choices the tests remember.
+const ACCOUNT: &str = "user@http://jellyfin.test";
 const START: &str = "/Sessions/Playing";
 const PROGRESS: &str = "/Sessions/Playing/Progress";
 const STOPPED: &str = "/Sessions/Playing/Stopped";
@@ -130,7 +132,7 @@ async fn harness_in(mock: MockServer, timings: PlaybackTimings, data: TempDir) -
         player.clone(),
         player_events,
         timings,
-        TrackMemory::load(&Paths::under(data.path())),
+        TrackMemory::load(&Paths::under(data.path()), ACCOUNT),
     );
     Harness {
         mock,
@@ -3559,7 +3561,7 @@ async fn mount_info_for(mock: &MockServer, id: &str, body: Value) {
 /// French audio and no subtitle, remembered for [`SERIES_ID`] in a new data directory.
 fn remembered_french() -> TempDir {
     let data = tempfile::tempdir().unwrap_or_else(|err| panic!("no temporary directory: {err}"));
-    TrackMemory::load(&Paths::under(data.path()))
+    TrackMemory::load(&Paths::under(data.path()), ACCOUNT)
         .set(
             &ItemId::from(SERIES_ID),
             TrackChoice {
@@ -3595,7 +3597,7 @@ impl Harness {
     }
 
     fn memory(&self) -> TrackMemory {
-        TrackMemory::load(&Paths::under(self.data.path()))
+        TrackMemory::load(&Paths::under(self.data.path()), ACCOUNT)
     }
 }
 
