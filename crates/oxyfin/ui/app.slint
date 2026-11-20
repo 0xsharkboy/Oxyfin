@@ -16,6 +16,7 @@ import { MovieScreen, MovieData } from "screens/movie.slint";
 import { SeriesScreen, SeriesData, SeriesPlayKind, EpisodeData } from "screens/series.slint";
 import { PersonScreen, PersonData, PersonFilter } from "screens/person.slint";
 import { PersonCardData, PersonJob } from "components/person_card.slint";
+import { CollectionScreen, CollectionData } from "screens/collection.slint";
 import { TopBarPage } from "components/top_bar.slint";
 import { NoticeBanner, NoticeData } from "components/notice_banner.slint";
 
@@ -29,11 +30,12 @@ export { SearchTitles }
 export { MovieData }
 export { SeriesData, SeriesPlayKind, EpisodeData }
 export { PersonData, PersonFilter, PersonCardData, PersonJob }
+export { CollectionData }
 export { TopBarPage }
 export { PlaybackChoice, SubtitleChoice, TokenStore }
 
 // Mirrors the Rust `state::Screen` one to one.
-export enum Screen { starting, sign-in, quick-connect, home, library, search, movie, series, person, player, settings }
+export enum Screen { starting, sign-in, quick-connect, home, library, search, movie, series, person, collection, player, settings }
 
 export component AppWindow inherits Window {
     in property <Screen> screen: Screen.starting;
@@ -115,12 +117,14 @@ export component AppWindow inherits Window {
     in property <bool> movie-busy;
     in property <[PersonCardData]> movie-people;
     in property <[CardData]> movie-similar;
+    in property <string> movie-collection;
     callback movie-play(from-start: bool);
     callback movie-toggle-watched();
     callback movie-toggle-favorite();
     callback movie-retry();
     callback movie-open-similar(id: string);
     callback movie-open-person(id: string);
+    callback movie-open-collection();
 
     in property <bool> series-loaded;
     in property <bool> series-loading;
@@ -160,6 +164,20 @@ export component AppWindow inherits Window {
     callback person-select-filter(filter: PersonFilter);
     callback person-open(id: string);
     callback person-retry();
+
+    in property <bool> collection-loaded;
+    in property <bool> collection-loading;
+    in property <string> collection-error;
+    in property <CollectionData> collection-data;
+    in property <image> collection-poster;
+    in property <image> collection-backdrop;
+    in property <bool> collection-busy;
+    in property <[CardData]> collection-items;
+    callback collection-play();
+    callback collection-toggle-watched();
+    callback collection-toggle-favorite();
+    callback collection-open(id: string);
+    callback collection-retry();
 
     in property <string> player-title;
     in property <string> player-subtitle;
@@ -429,6 +447,7 @@ export component AppWindow inherits Window {
             busy: root.movie-busy;
             people: root.movie-people;
             similar: root.movie-similar;
+            collection: root.movie-collection;
             play(from-start) => {
                 root.movie-play(from-start);
             }
@@ -446,6 +465,9 @@ export component AppWindow inherits Window {
             }
             open-person(id) => {
                 root.movie-open-person(id);
+            }
+            open-collection => {
+                root.movie-open-collection();
             }
             back => {
                 root.back();
@@ -534,6 +556,43 @@ export component AppWindow inherits Window {
             }
             retry => {
                 root.person-retry();
+            }
+            back => {
+                root.back();
+            }
+            open-tab(page) => {
+                root.open-tab(page);
+            }
+            open-settings => {
+                root.open-settings();
+            }
+        }
+
+        if root.screen == Screen.collection: CollectionScreen {
+            active: root.screen == Screen.collection;
+            page: root.top-bar-page;
+            loaded: root.collection-loaded;
+            loading: root.collection-loading;
+            error: root.collection-error;
+            collection: root.collection-data;
+            poster: root.collection-poster;
+            backdrop: root.collection-backdrop;
+            busy: root.collection-busy;
+            items: root.collection-items;
+            play => {
+                root.collection-play();
+            }
+            toggle-watched => {
+                root.collection-toggle-watched();
+            }
+            toggle-favorite => {
+                root.collection-toggle-favorite();
+            }
+            open-item(id) => {
+                root.collection-open(id);
+            }
+            retry => {
+                root.collection-retry();
             }
             back => {
                 root.back();
@@ -697,7 +756,7 @@ export component AppWindow inherits Window {
 
         // Below the top bar of the screens that have one.
         if root.notice.visible: NoticeBanner {
-            y: root.screen == Screen.home || root.screen == Screen.library || root.screen == Screen.search || root.screen == Screen.movie || root.screen == Screen.series || root.screen == Screen.person || root.screen == Screen.settings ? Theme.space-3xl + Theme.space-lg : Theme.space-lg;
+            y: root.screen == Screen.home || root.screen == Screen.library || root.screen == Screen.search || root.screen == Screen.movie || root.screen == Screen.series || root.screen == Screen.person || root.screen == Screen.collection || root.screen == Screen.settings ? Theme.space-3xl + Theme.space-lg : Theme.space-lg;
             x: (parent.width - self.width) / 2;
             width: min(parent.width - 2 * Theme.space-lg, 560px);
             notice: root.notice;

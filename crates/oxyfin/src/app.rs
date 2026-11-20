@@ -20,6 +20,7 @@ use crate::generation::Generation;
 use crate::generation::{Route, route};
 use crate::present::device_name;
 use crate::screens::cast::open_person;
+use crate::screens::collection::CollectionController;
 use crate::screens::home::HomeController;
 use crate::screens::library::LibraryController;
 use crate::screens::movie::MovieController;
@@ -86,6 +87,7 @@ pub struct App {
     pub(crate) search: SearchController,
     pub(crate) movie: MovieController,
     pub(crate) person: PersonController,
+    pub(crate) collection: CollectionController,
     pub(crate) series: SeriesController,
 }
 
@@ -130,6 +132,7 @@ impl App {
             search: SearchController::default(),
             movie: MovieController::default(),
             person: PersonController::default(),
+            collection: CollectionController::default(),
             series: SeriesController::default(),
         });
         app.bind(window);
@@ -741,6 +744,7 @@ impl App {
             Screen::Movie(_) => self.movie.refresh(self),
             Screen::Series(_) => self.series.refresh(self),
             Screen::Person(_) => self.person.refresh(self),
+            Screen::Collection(_) => self.collection.refresh(self),
             _ => {}
         }
     }
@@ -880,6 +884,17 @@ impl App {
         window.on_series_retry(with(|app| app.series.retry(app)));
         window.on_series_retry_episodes(with(|app| app.series.retry_episodes(app)));
         window.on_person_retry(with(|app| app.person.retry(app)));
+        window.on_collection_retry(with(|app| app.collection.retry(app)));
+        window.on_collection_play(with(|app| app.collection.play(app)));
+        window.on_collection_toggle_watched(with(|app| app.collection.toggle_watched(app)));
+        window.on_collection_toggle_favorite(with(|app| app.collection.toggle_favorite(app)));
+        window.on_movie_open_collection(with(|app| app.movie.open_collection(app)));
+        let this = self.this.clone();
+        window.on_collection_open(move |id| {
+            if let Some(app) = this.upgrade() {
+                app.collection.open(&app, &id);
+            }
+        });
         window.on_series_play(with(|app| app.series.play(app)));
         let this = self.this.clone();
         window.on_movie_open_similar(move |id| {
@@ -1143,6 +1158,7 @@ impl App {
                 self.movie.shown(self, &screen);
                 self.series.shown(self, &screen);
                 self.person.shown(self, &screen);
+                self.collection.shown(self, &screen);
             }
             Effect::Discard(screen) => {
                 self.home.discard(self, &screen);
@@ -1151,6 +1167,7 @@ impl App {
                 self.movie.discard(self, &screen);
                 self.series.discard(self, &screen);
                 self.person.discard(self, &screen);
+                self.collection.discard(self, &screen);
             }
             Effect::Refresh(screen) => self.refresh(&screen),
             Effect::Notify(notice) => self.notify(notice_message(notice)),
@@ -1225,6 +1242,7 @@ fn slint_screen(screen: &Screen) -> crate::Screen {
         Screen::Movie(_) => crate::Screen::Movie,
         Screen::Series(_) => crate::Screen::Series,
         Screen::Person(_) => crate::Screen::Person,
+        Screen::Collection(_) => crate::Screen::Collection,
         Screen::Player => crate::Screen::Player,
         Screen::Settings => crate::Screen::Settings,
     }

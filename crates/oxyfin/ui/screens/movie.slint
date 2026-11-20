@@ -39,12 +39,15 @@ export component MovieScreen inherits Rectangle {
     in property <[PersonCardData]> people;
     // Items like this one; the row is hidden while empty.
     in property <[CardData]> similar;
+    // Name of the box set the movie belongs to; the link is hidden while empty.
+    in property <string> collection;
     // `from-start` is false to resume where the movie was left.
     callback play(from-start: bool);
     callback toggle-watched();
     callback toggle-favorite();
     callback open-item(id: string);
     callback open-person(id: string);
+    callback open-collection();
     callback retry();
     callback back();
     callback open-tab(page: TopBarPage);
@@ -107,6 +110,7 @@ export component MovieScreen inherits Rectangle {
                     rating: root.movie.rating;
                     official-rating: root.movie.official-rating;
                     genres: root.movie.genres;
+                    collection: root.collection;
                     overview: root.movie.overview;
                     watched: root.movie.watched;
                     favorite: root.movie.favorite;
@@ -120,6 +124,9 @@ export component MovieScreen inherits Rectangle {
                     }
                     toggle-favorite => {
                         root.toggle-favorite();
+                    }
+                    open-collection => {
+                        root.open-collection();
                     }
 
                     if root.movie.can-resume: Button {

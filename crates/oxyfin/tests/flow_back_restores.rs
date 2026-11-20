@@ -50,8 +50,15 @@ impl Respond for Items {
     }
 }
 
+/// Listing requests, leaving out the box sets the movie page looks up.
 fn requests(log: &QueryLog) -> usize {
-    log.lock().map(|log| log.len()).unwrap_or(0)
+    log.lock()
+        .map(|log| {
+            log.iter()
+                .filter(|query| !has_param(query, "includeItemTypes", "BoxSet"))
+                .count()
+        })
+        .unwrap_or(0)
 }
 
 fn searches(log: &QueryLog) -> usize {

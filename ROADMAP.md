@@ -36,7 +36,7 @@ This file is the single source of truth for planned work. An item is checked onl
 - [x] Playback statistics
 - [x] "More like this" on detail pages
 - [x] Cast and crew pages
-- [ ] Collections (box sets)
+- [x] Collections (box sets)
 - [ ] Server discovery on the local network
 - [ ] Authorize another device (Quick Connect code entry)
 - [x] Fullscreen launch option

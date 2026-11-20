@@ -4,7 +4,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use oxyfin_api::ItemId;
-use oxyfin_core::{CoreError, MovieDetails, PlayMode, UserState};
+use oxyfin_core::{CollectionLink, CoreError, MovieDetails, PlayMode, UserState};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::app::App;
@@ -12,6 +12,7 @@ use crate::images::load_into;
 use crate::present::{clock, core_error_message, image_size};
 use crate::screens::cast::cast_cards;
 use crate::screens::home::{banner_artwork, banner_box};
+use crate::screens::library::open_detail;
 use crate::screens::similar::SimilarRow;
 use crate::state::{GenerationId, Msg, Screen};
 use crate::{AppWindow, Messages, MovieData};
@@ -34,6 +35,7 @@ pub(crate) struct MovieController {
     details: RefCell<Option<MovieDetails>>,
     images_requested: Cell<bool>,
     similar: SimilarRow,
+    collection: Rc<RefCell<Option<CollectionLink>>>,
 }
 
 impl MovieController {
@@ -85,6 +87,14 @@ impl MovieController {
         self.similar.open(app, id);
     }
 
+    /// Opens the page of the box set the movie belongs to.
+    pub(crate) fn open_collection(&self, app: &Rc<App>) {
+        let link = self.collection.borrow().clone();
+        if let Some(link) = link {
+            open_detail(app, Screen::Collection(link.id.as_str().to_owned()));
+        }
+    }
+
     /// Marks the movie watched or unwatched.
     pub(crate) fn toggle_watched(&self, app: &Rc<App>) {
         self.toggle(app, Flag::Watched);
@@ -102,8 +112,10 @@ impl MovieController {
         self.details.borrow_mut().take();
         self.images_requested.set(false);
         self.similar.clear(app, AppWindow::set_movie_similar);
+        self.collection.borrow_mut().take();
         if let Some(window) = app.window() {
             window.set_movie_people(ModelRc::default());
+            window.set_movie_collection(SharedString::default());
             window.set_movie_loaded(false);
             window.set_movie_loading(false);
             window.set_movie_error(SharedString::default());
@@ -177,6 +189,7 @@ impl MovieController {
             return;
         }
         window.set_movie_people(cast_cards(app, id, window, &details.cast));
+        self.request_collection(app, id, &details.summary.id);
         let Some((_, _, images)) = app.services() else {
             return;
         };
@@ -202,6 +215,36 @@ impl MovieController {
                 }
             });
         }
+    }
+
+    /// Asks for the box sets of `movie`; the first one is linked, a failure hides the link.
+    fn request_collection(&self, app: &Rc<App>, id: GenerationId, movie: &ItemId) {
+        let Some((_, catalog, _)) = app.services() else {
+            return;
+        };
+        let (movie, instance) = (movie.clone(), self.instance.get());
+        let (current, slot) = (Rc::clone(&self.instance), Rc::clone(&self.collection));
+        app.spawn(
+            async move { catalog.collections_of(&movie).await },
+            move |app, result| {
+                if current.get() != instance || app.services().is_none_or(|(now, ..)| now != id) {
+                    return;
+                }
+                match result {
+                    Ok(links) => {
+                        let Some(link) = links.into_iter().next() else {
+                            return;
+                        };
+                        if let Some(window) = app.window() {
+                            window.set_movie_collection(link.name.as_str().into());
+                        }
+                        *slot.borrow_mut() = Some(link);
+                    }
+                    Err(CoreError::SessionExpired) => app.dispatch(Msg::Expired(id)),
+                    Err(error) => log::warn!("cannot load the collections of the movie: {error}"),
+                }
+            },
+        );
     }
 
     fn toggle(&self, app: &Rc<App>, flag: Flag) {

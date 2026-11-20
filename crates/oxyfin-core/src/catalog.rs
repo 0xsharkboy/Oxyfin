@@ -1,12 +1,16 @@
 //! Browsing the library: home rows, listings, search, details and user state.
 
+use std::sync::Arc;
+
+use tokio::sync::OnceCell;
+
 use oxyfin_api::{
     BaseItemDto, BaseItemKind, ItemFields, ItemId, ItemSortBy, ItemsQuery, Session, SortOrder,
 };
 
 use crate::models::{
-    Episode, ItemKind, ItemSummary, Library, LibraryKind, MovieDetails, Page, PersonDetails,
-    PersonTitle, Season, SeriesDetails, UserState,
+    CollectionDetails, CollectionLink, Episode, ItemKind, ItemSummary, Library, LibraryKind,
+    MovieDetails, Page, PersonDetails, PersonTitle, Season, SeriesDetails, UserState,
 };
 use crate::{CoreError, Result};
 
@@ -61,6 +65,30 @@ pub enum WatchFilter {
 /// Cap on each list of candidates for the in-progress filter.
 const IN_PROGRESS_CAP: u32 = 200;
 
+/// Requests listing the items of box sets sent at the same time.
+const BOX_SET_REQUESTS: usize = 4;
+
+type ChildrenAnswer = (
+    usize,
+    oxyfin_api::Result<oxyfin_api::QueryResult<BaseItemDto>>,
+);
+
+/// Stores the item identifiers of one box set answer at its index.
+fn store_children(
+    items: &mut [Vec<ItemId>],
+    joined: Option<std::result::Result<ChildrenAnswer, tokio::task::JoinError>>,
+) -> Result<()> {
+    let Some(joined) = joined else {
+        return Ok(());
+    };
+    let (index, result) =
+        joined.map_err(|error| CoreError::Decode(format!("box set task: {error}")))?;
+    if let Some(slot) = items.get_mut(index) {
+        *slot = result?.items.into_iter().map(|dto| dto.id).collect();
+    }
+    Ok(())
+}
+
 /// Field a listing is sorted by.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SortField {
@@ -91,10 +119,16 @@ pub struct BrowseQuery {
     pub limit: u32,
 }
 
+/// Box sets of the user with the identifiers of their items.
+type BoxSets = Vec<(CollectionLink, Vec<ItemId>)>;
+
 /// Read access to the library, and the played and favorite toggles.
+///
+/// Clones share the box sets, listed once per catalog.
 #[derive(Clone, Debug)]
 pub struct Catalog {
     session: Session,
+    box_sets: Arc<OnceCell<BoxSets>>,
 }
 
 fn summaries(items: &[BaseItemDto]) -> Vec<ItemSummary> {
@@ -133,7 +167,10 @@ fn kinds_of(kind: LibraryKind) -> Vec<BaseItemKind> {
 impl Catalog {
     /// Creates a catalog over a signed-in session.
     pub fn new(session: Session) -> Self {
-        Self { session }
+        Self {
+            session,
+            box_sets: Arc::default(),
+        }
     }
 
     /// Lists the movie, show, mixed and home video libraries of the user.
@@ -285,10 +322,14 @@ impl Catalog {
             .collect())
     }
 
-    /// Searches movies and series.
+    /// Searches movies, series and box sets.
     pub async fn search(&self, text: &str, start: u32, limit: u32) -> Result<Page<ItemSummary>> {
         let query = ItemsQuery {
-            include_item_types: vec![BaseItemKind::Movie, BaseItemKind::Series],
+            include_item_types: vec![
+                BaseItemKind::Movie,
+                BaseItemKind::Series,
+                BaseItemKind::BoxSet,
+            ],
             recursive: true,
             search_term: Some(text.to_owned()),
             start_index: Some(start),
@@ -302,6 +343,85 @@ impl Catalog {
     pub async fn similar(&self, id: &ItemId, limit: u32) -> Result<Vec<ItemSummary>> {
         let result = self.session.similar(id, limit).await?;
         Ok(summaries(&result.items))
+    }
+
+    /// Lists the box sets the movie or series `id` belongs to.
+    ///
+    /// The box sets of the user and their items are listed on the first call only; a failed
+    /// listing is asked again on the next call.
+    pub async fn collections_of(&self, id: &ItemId) -> Result<Vec<CollectionLink>> {
+        let box_sets = self
+            .box_sets
+            .get_or_try_init(|| self.list_box_sets())
+            .await?;
+        Ok(box_sets
+            .iter()
+            .filter(|(_, items)| items.contains(id))
+            .map(|(link, _)| link.clone())
+            .collect())
+    }
+
+    async fn list_box_sets(&self) -> Result<BoxSets> {
+        let query = ItemsQuery {
+            include_item_types: vec![BaseItemKind::BoxSet],
+            recursive: true,
+            sort_by: vec![ItemSortBy::SortName],
+            ..ItemsQuery::default()
+        };
+        let links: Vec<CollectionLink> = self
+            .session
+            .items(&query)
+            .await?
+            .items
+            .into_iter()
+            .filter(|dto| dto.r#type == BaseItemKind::BoxSet)
+            .map(|dto| CollectionLink {
+                id: dto.id,
+                name: dto.name.unwrap_or_default(),
+            })
+            .collect();
+        let mut items: Vec<Vec<ItemId>> = vec![Vec::new(); links.len()];
+        let mut children = tokio::task::JoinSet::new();
+        for (index, link) in links.iter().enumerate() {
+            if children.len() >= BOX_SET_REQUESTS {
+                store_children(&mut items, children.join_next().await)?;
+            }
+            let (session, parent) = (self.session.clone(), link.id.clone());
+            children.spawn(async move {
+                let query = ItemsQuery {
+                    parent_id: Some(parent),
+                    ..ItemsQuery::default()
+                };
+                (index, session.items(&query).await)
+            });
+        }
+        while !children.is_empty() {
+            store_children(&mut items, children.join_next().await)?;
+        }
+        Ok(links.into_iter().zip(items).collect())
+    }
+
+    /// Fetches a box set with its items in premiere order.
+    pub async fn collection(&self, id: &ItemId) -> Result<CollectionDetails> {
+        let query = ItemsQuery {
+            parent_id: Some(id.clone()),
+            sort_by: vec![ItemSortBy::PremiereDate],
+            sort_order: Some(SortOrder::Ascending),
+            ..ItemsQuery::default()
+        };
+        let (dto, children) = tokio::join!(self.session.item(id), self.session.items(&query));
+        let (dto, children) = (
+            dto.map_err(CoreError::from),
+            children.map_err(CoreError::from),
+        );
+        if matches!(dto, Err(CoreError::SessionExpired))
+            || matches!(children, Err(CoreError::SessionExpired))
+        {
+            return Err(CoreError::SessionExpired);
+        }
+        let (dto, children) = (dto?, children?);
+        CollectionDetails::from_dto(&dto, &children.items)
+            .ok_or_else(|| CoreError::Decode(format!("item {id} is not a box set")))
     }
 
     /// Fetches the biography and portrait of a person.
