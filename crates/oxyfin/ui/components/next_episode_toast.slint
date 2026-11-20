@@ -10,8 +10,9 @@ export component NextEpisodeToast inherits Rectangle {
     callback play-now();
     callback cancel();
 
-    // Part of the countdown already elapsed, from 0 to 1.
-    property <float> elapsed: root.next-up.total > 0 ? 1 - root.next-up.remaining / root.next-up.total : 0;
+    // Part of the countdown elapsed once the current step ends, from 0 to 1: each step animates
+    // to it, so the line is full when the episode starts.
+    property <float> elapsed: root.next-up.total > 0 ? (root.next-up.total - root.next-up.remaining + 1) / root.next-up.total : 0;
 
     accessible-role: groupbox;
     accessible-label: @tr("Next episode");
@@ -110,7 +111,7 @@ export component NextEpisodeToast inherits Rectangle {
             height: Theme.countdown-height;
             background: Theme.progress-track;
 
-            Rectangle {
+            fill := Rectangle {
                 x: 0;
                 width: parent.width * root.elapsed;
                 background: Theme.accent;
