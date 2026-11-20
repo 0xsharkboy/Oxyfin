@@ -39,7 +39,8 @@ mod version;
 
 pub use client_info::ClientInfo;
 pub use discovery::{
-    DISCOVERY_MESSAGE, DISCOVERY_PORT, DiscoveredServer, default_targets, discover,
+    DISCOVERY_MESSAGE, DISCOVERY_PORT, DiscoveredServer, MAX_DISCOVERED_SERVERS, default_targets,
+    discover, discovered_version,
 };
 pub use error::{Error, Result};
 pub use ids::{ItemId, MediaSourceId, PlaySessionId, UserId};
