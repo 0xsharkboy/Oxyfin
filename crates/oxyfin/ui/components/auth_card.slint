@@ -25,7 +25,8 @@ export component Brand inherits HorizontalLayout {
     }
 }
 
-// Screen of the sign-in flow: the brand and a centered card over the glow.
+// Screen of the sign-in flow: the brand and a centered card over the glow, scrolling when the
+// window is too short for the card.
 export component AuthPage inherits Rectangle {
     in property <length> card-width: 440px;
 
@@ -37,30 +38,39 @@ export component AuthPage inherits Rectangle {
         background: Theme.sign-in-glow;
     }
 
-    VerticalLayout {
-        alignment: center;
-        spacing: Theme.space-2xl;
+    flick := Flickable {
+        content-width: self.width;
+        content-height: max(column.preferred-height, self.height);
 
-        Brand { }
-
-        HorizontalLayout {
+        column := VerticalLayout {
+            width: flick.content-width;
+            height: flick.content-height;
             alignment: center;
+            padding-top: Theme.space-xl;
+            padding-bottom: Theme.space-xl;
+            spacing: Theme.space-2xl;
 
-            Rectangle {
-                width: root.card-width;
-                background: Theme.bg-elevated;
-                border-radius: Theme.radius-lg;
-                border-width: Theme.border-thin;
-                border-color: Theme.border-default;
-                drop-shadow-blur: Theme.space-xl;
-                drop-shadow-offset-y: Theme.space-sm;
-                drop-shadow-color: Theme.card-shadow;
+            Brand { }
 
-                VerticalLayout {
-                    padding: Theme.space-2xl;
-                    spacing: Theme.space-xl;
+            HorizontalLayout {
+                alignment: center;
 
-                    @children
+                Rectangle {
+                    width: root.card-width;
+                    background: Theme.bg-elevated;
+                    border-radius: Theme.radius-lg;
+                    border-width: Theme.border-thin;
+                    border-color: Theme.border-default;
+                    drop-shadow-blur: Theme.space-xl;
+                    drop-shadow-offset-y: Theme.space-sm;
+                    drop-shadow-color: Theme.card-shadow;
+
+                    VerticalLayout {
+                        padding: Theme.space-2xl;
+                        spacing: Theme.space-xl;
+
+                        @children
+                    }
                 }
             }
         }

@@ -24,3 +24,8 @@ pub fn reply(address: &str) -> Vec<u8> {
     format!(r#"{{"Address":"{address}","Id":"maison-id","Name":"Maison","EndpointAddress":null}}"#)
         .into_bytes()
 }
+
+/// The answer of a server with this `id` and `name` at `address`.
+pub fn reply_as(id: &str, name: &str, address: &str) -> Vec<u8> {
+    format!(r#"{{"Address":"{address}","Id":"{id}","Name":"{name}"}}"#).into_bytes()
+}
