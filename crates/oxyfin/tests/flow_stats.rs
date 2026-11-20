@@ -150,6 +150,71 @@ fn key_i_toggles_stats() {
 }
 
 #[test]
+fn stats_are_asked_at_once_when_a_new_item_is_ready() {
+    let (window, sent) = player_window();
+    press(&window, "i");
+    player::apply(&window, PlaybackEvent::Stats(Box::new(full_report())));
+    assert_eq!(requests(&sent), 1);
+
+    player::apply(
+        &window,
+        PlaybackEvent::Loading {
+            item: "next".into(),
+            title: oxyfin_core::PlaybackTitle {
+                title: "Next".into(),
+                series_name: None,
+                episode_label: None,
+                artwork: None,
+            },
+        },
+    );
+    assert!(window.get_player_stats().row_count() == 0, "cleared");
+    player::apply(
+        &window,
+        PlaybackEvent::Ready {
+            duration: Some(Duration::from_secs(60)),
+            audio: Vec::new(),
+            subtitles: Vec::new(),
+            has_previous: true,
+            has_next: false,
+        },
+    );
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(10));
+    assert_eq!(requests(&sent), 2, "asked on ready, not a second later");
+
+    press(&window, "i");
+    player::apply(
+        &window,
+        PlaybackEvent::Loading {
+            item: "other".into(),
+            title: oxyfin_core::PlaybackTitle {
+                title: "Other".into(),
+                series_name: None,
+                episode_label: None,
+                artwork: None,
+            },
+        },
+    );
+    player::apply(
+        &window,
+        PlaybackEvent::Ready {
+            duration: Some(Duration::from_secs(60)),
+            audio: Vec::new(),
+            subtitles: Vec::new(),
+            has_previous: true,
+            has_next: false,
+        },
+    );
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(10));
+    assert_eq!(requests(&sent), 2, "not asked while hidden");
+
+    press(&window, "i");
+    assert!(shows_stats(&window));
+    player::reset(&window);
+    assert!(!shows_stats(&window), "a new playback starts without them");
+}
+
+#[test]
 fn escape_closes_stats_before_leaving() {
     let (window, sent) = player_window();
     press(&window, "i");

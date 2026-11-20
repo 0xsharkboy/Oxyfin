@@ -188,6 +188,7 @@ pub fn reset(window: &AppWindow) {
     window.set_player_scrubbing(false);
     clear_chapters(window);
     window.set_player_stats(ModelRc::default());
+    window.set_player_stats_visible(false);
     clear_preview(window);
     show_segment(window, None);
     show_progress(window, Duration::ZERO, None);
@@ -259,6 +260,10 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             window.set_player_duration(duration.map_or(0.0, |duration| duration.as_secs_f32()));
             window.set_player_total(clock(duration.unwrap_or_default()));
             show_marks(window);
+            // The statistics were cleared on loading: ask at once rather than at the next tick.
+            if window.get_player_stats_visible() {
+                window.invoke_player_command_stats();
+            }
         }
         PlaybackEvent::Position(position) => {
             window.set_player_reported_position(position.as_secs_f32());
