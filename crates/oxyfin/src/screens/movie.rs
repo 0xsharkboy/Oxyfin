@@ -9,7 +9,8 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::app::App;
 use crate::images::load_into;
-use crate::present::{cast_line, clock, core_error_message, image_size};
+use crate::present::{clock, core_error_message, image_size};
+use crate::screens::cast::cast_cards;
 use crate::screens::home::{banner_artwork, banner_box};
 use crate::screens::similar::SimilarRow;
 use crate::state::{GenerationId, Msg, Screen};
@@ -102,6 +103,7 @@ impl MovieController {
         self.images_requested.set(false);
         self.similar.clear(app, AppWindow::set_movie_similar);
         if let Some(window) = app.window() {
+            window.set_movie_people(ModelRc::default());
             window.set_movie_loaded(false);
             window.set_movie_loading(false);
             window.set_movie_error(SharedString::default());
@@ -174,6 +176,7 @@ impl MovieController {
         if self.images_requested.replace(true) {
             return;
         }
+        window.set_movie_people(cast_cards(app, id, window, &details.cast));
         let Some((_, _, images)) = app.services() else {
             return;
         };
@@ -296,7 +299,6 @@ fn movie_data(details: &MovieDetails) -> MovieData {
         official_rating: details.official_rating.clone().unwrap_or_default().into(),
         genres: ModelRc::new(VecModel::from(genres)),
         overview: details.overview.clone().unwrap_or_default().into(),
-        cast: cast_line(&details.cast).into(),
         watched: summary.user.played,
         favorite: summary.user.favorite,
         can_resume: details.can_resume,

@@ -193,13 +193,47 @@ impl ItemSummary {
     }
 }
 
+/// Credit of a person on an item.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PersonKind {
+    /// An actor, a guest star or a voice.
+    Actor,
+    /// A director.
+    Director,
+    /// A writer.
+    Writer,
+    /// A composer.
+    Composer,
+    /// A producer.
+    Producer,
+    /// Any other credit.
+    Other,
+}
+
+impl PersonKind {
+    fn from_type(kind: Option<&str>) -> Self {
+        match kind.unwrap_or_default() {
+            "Actor" | "GuestStar" => Self::Actor,
+            "Director" => Self::Director,
+            "Writer" => Self::Writer,
+            "Composer" => Self::Composer,
+            "Producer" => Self::Producer,
+            _ => Self::Other,
+        }
+    }
+}
+
 /// A person credited on an item.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Person {
+    /// Identifier of the person, when the server knows one.
+    pub id: Option<ItemId>,
     /// Name of the person.
     pub name: String,
     /// Character played, for actors.
     pub role: Option<String>,
+    /// Kind of credit.
+    pub kind: PersonKind,
     /// Portrait of the person.
     pub image: Option<ImageRef>,
 }
@@ -207,8 +241,10 @@ pub struct Person {
 impl Person {
     fn from_dto(dto: &BaseItemPerson) -> Self {
         Self {
+            id: dto.id.clone(),
             name: dto.name.clone(),
-            role: dto.role.clone().filter(|role| !role.is_empty()),
+            role: non_empty(dto.role.as_deref()),
+            kind: PersonKind::from_type(dto.r#type.as_deref()),
             image: dto
                 .id
                 .as_ref()
@@ -217,8 +253,80 @@ impl Person {
     }
 }
 
-fn cast(dto: &BaseItemDto) -> Vec<Person> {
-    dto.people.iter().map(Person::from_dto).collect()
+/// Number of people listed on a detail page.
+const CAST_LIMIT: usize = 20;
+
+fn non_empty(text: Option<&str>) -> Option<String> {
+    text.map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_owned)
+}
+
+/// Actors in the order of the server, then directors, writers, composers, producers and the
+/// other credits.
+fn cast_and_crew(dto: &BaseItemDto) -> Vec<Person> {
+    let mut people: Vec<Person> = dto.people.iter().map(Person::from_dto).collect();
+    people.sort_by_key(|person| person.kind as u8);
+    people.truncate(CAST_LIMIT);
+    people
+}
+
+/// Biography and portrait of a person.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PersonDetails {
+    /// Identifier of the person.
+    pub id: ItemId,
+    /// Name of the person.
+    pub name: String,
+    /// Biography.
+    pub overview: Option<String>,
+    /// Date of birth, as `YYYY-MM-DD`.
+    pub birth: Option<String>,
+    /// Place of birth.
+    pub birth_place: Option<String>,
+    /// Portrait of the person.
+    pub image: Option<ImageRef>,
+}
+
+impl PersonDetails {
+    /// Converts the DTO of a person.
+    pub fn from_dto(dto: &BaseItemDto) -> Self {
+        Self {
+            id: dto.id.clone(),
+            name: dto.name.clone().unwrap_or_default(),
+            overview: non_empty(dto.overview.as_deref()),
+            birth: dto
+                .premiere_date
+                .as_deref()
+                .and_then(|date| date.get(..10))
+                .filter(|date| date.len() == 10)
+                .map(str::to_owned),
+            birth_place: non_empty(dto.production_locations.first().map(String::as_str)),
+            image: own_image(dto, ImageType::Primary),
+        }
+    }
+}
+
+/// A title crediting a person, with the role the person plays in it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PersonTitle {
+    /// The title.
+    pub summary: ItemSummary,
+    /// Character played by the person, when known.
+    pub role: Option<String>,
+}
+
+impl PersonTitle {
+    /// Converts a DTO listed with its people; `None` for kinds the UI does not display.
+    pub fn from_dto(dto: &BaseItemDto, person: &ItemId) -> Option<Self> {
+        let summary = ItemSummary::from_dto(dto)?;
+        let role = dto
+            .people
+            .iter()
+            .filter(|credit| credit.id.as_ref() == Some(person))
+            .find_map(|credit| non_empty(credit.role.as_deref()));
+        Some(Self { summary, role })
+    }
 }
 
 /// Full description of a movie or a standalone video.
@@ -250,7 +358,7 @@ impl MovieDetails {
             summary,
             overview: dto.overview.clone(),
             genres: dto.genres.clone(),
-            cast: cast(dto),
+            cast: cast_and_crew(dto),
             can_resume,
             community_rating: dto.community_rating,
             official_rating: dto.official_rating.clone(),
@@ -379,7 +487,7 @@ impl SeriesDetails {
             summary,
             overview: dto.overview.clone(),
             genres: dto.genres.clone(),
-            cast: cast(dto),
+            cast: cast_and_crew(dto),
             seasons,
             next_episode,
             community_rating: dto.community_rating,

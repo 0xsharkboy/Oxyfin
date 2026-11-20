@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-20 06:53+0000\n"
+"POT-Creation-Date: 2026-11-20 07:32+0000\n"
 "PO-Revision-Date: 2026-11-15 12:00+0000\n"
 "Last-Translator: Oxyfin contributors\n"
 "Language-Team: French\n"
@@ -37,49 +37,44 @@ msgctxt "ChapterMenu"
 msgid "CHAPTERS"
 msgstr "CHAPITRES"
 
-#: crates/oxyfin/ui/components/detail_header.slint:56
+#: crates/oxyfin/ui/components/detail_header.slint:54
 msgctxt "DetailHeader"
 msgid "{}h {}m"
 msgstr "{} h {} min"
 
-#: crates/oxyfin/ui/components/detail_header.slint:56
+#: crates/oxyfin/ui/components/detail_header.slint:54
 msgctxt "DetailHeader"
 msgid "{}m"
 msgstr "{} min"
 
-#: crates/oxyfin/ui/components/detail_header.slint:94
+#: crates/oxyfin/ui/components/detail_header.slint:92
 msgctxt "DetailHeader"
 msgid "Back"
 msgstr "Retour"
 
-#: crates/oxyfin/ui/components/detail_header.slint:140
+#: crates/oxyfin/ui/components/detail_header.slint:138
 msgctxt "DetailHeader"
 msgid "{n} season"
 msgid_plural "{n} seasons"
 msgstr[0] "{n} saison"
 msgstr[1] "{n} saisons"
 
-#: crates/oxyfin/ui/components/detail_header.slint:191
-msgctxt "DetailHeader"
-msgid "Starring {}"
-msgstr "Avec {}"
-
-#: crates/oxyfin/ui/components/detail_header.slint:205
+#: crates/oxyfin/ui/components/detail_header.slint:197
 msgctxt "DetailHeader"
 msgid "Mark as unwatched"
 msgstr "Marquer comme non vu"
 
-#: crates/oxyfin/ui/components/detail_header.slint:205
+#: crates/oxyfin/ui/components/detail_header.slint:197
 msgctxt "DetailHeader"
 msgid "Mark as watched"
 msgstr "Marquer comme vu"
 
-#: crates/oxyfin/ui/components/detail_header.slint:216
+#: crates/oxyfin/ui/components/detail_header.slint:208
 msgctxt "DetailHeader"
 msgid "Remove from favorites"
 msgstr "Retirer des favoris"
 
-#: crates/oxyfin/ui/components/detail_header.slint:216
+#: crates/oxyfin/ui/components/detail_header.slint:208
 msgctxt "DetailHeader"
 msgid "Add to favorites"
 msgstr "Ajouter aux favoris"
@@ -133,6 +128,31 @@ msgstr "Notification"
 msgctxt "NoticeBanner"
 msgid "Close"
 msgstr "Fermer"
+
+#: crates/oxyfin/ui/components/person_card.slint:144
+msgctxt "CastRow"
+msgid "Director"
+msgstr "Réalisation"
+
+#: crates/oxyfin/ui/components/person_card.slint:147
+msgctxt "CastRow"
+msgid "Writer"
+msgstr "Scénario"
+
+#: crates/oxyfin/ui/components/person_card.slint:150
+msgctxt "CastRow"
+msgid "Composer"
+msgstr "Musique"
+
+#: crates/oxyfin/ui/components/person_card.slint:153
+msgctxt "CastRow"
+msgid "Producer"
+msgstr "Production"
+
+#: crates/oxyfin/ui/components/person_card.slint:159
+msgctxt "CastRow"
+msgid "Cast and crew"
+msgstr "Distribution et équipe"
 
 #: crates/oxyfin/ui/components/player_controls.slint:172
 msgctxt "PlayerControls"
@@ -828,38 +848,175 @@ msgctxt "LibraryScreen"
 msgid "Nothing here yet"
 msgstr "Rien ici pour l'instant"
 
-#: crates/oxyfin/ui/screens/movie.slint:51
+#: crates/oxyfin/ui/screens/movie.slint:54
 msgctxt "MovieScreen"
 msgid "Movie"
 msgstr "Film"
 
-#: crates/oxyfin/ui/screens/movie.slint:121
+#: crates/oxyfin/ui/screens/movie.slint:126
 msgctxt "MovieScreen"
 msgid "Resume from {}"
 msgstr "Reprendre à {}"
 
-#: crates/oxyfin/ui/screens/movie.slint:128
+#: crates/oxyfin/ui/screens/movie.slint:133
 msgctxt "MovieScreen"
 msgid "Play"
 msgstr "Lire"
 
-#: crates/oxyfin/ui/screens/movie.slint:142
+#: crates/oxyfin/ui/screens/movie.slint:159
 msgctxt "MovieScreen"
 msgid "More like this"
 msgstr "Titres similaires"
 
-#: crates/oxyfin/ui/screens/movie.slint:161
+#: crates/oxyfin/ui/screens/movie.slint:178
 msgctxt "MovieScreen"
 msgid "Back"
 msgstr "Retour"
 
-#: crates/oxyfin/ui/screens/movie.slint:168
+#: crates/oxyfin/ui/screens/movie.slint:185
 msgctxt "MovieScreen"
 msgid "Loading"
 msgstr "Chargement"
 
-#: crates/oxyfin/ui/screens/movie.slint:180
+#: crates/oxyfin/ui/screens/movie.slint:197
 msgctxt "MovieScreen"
+msgid "Retry"
+msgstr "Réessayer"
+
+#: crates/oxyfin/ui/screens/person.slint:57
+msgctxt "PersonScreen"
+msgid "January"
+msgstr "janvier"
+
+#: crates/oxyfin/ui/screens/person.slint:60
+msgctxt "PersonScreen"
+msgid "February"
+msgstr "février"
+
+#: crates/oxyfin/ui/screens/person.slint:63
+msgctxt "PersonScreen"
+msgid "March"
+msgstr "mars"
+
+#: crates/oxyfin/ui/screens/person.slint:66
+msgctxt "PersonScreen"
+msgid "April"
+msgstr "avril"
+
+#: crates/oxyfin/ui/screens/person.slint:69
+msgctxt "PersonScreen"
+msgid "May"
+msgstr "mai"
+
+#: crates/oxyfin/ui/screens/person.slint:72
+msgctxt "PersonScreen"
+msgid "June"
+msgstr "juin"
+
+#: crates/oxyfin/ui/screens/person.slint:75
+msgctxt "PersonScreen"
+msgid "July"
+msgstr "juillet"
+
+#: crates/oxyfin/ui/screens/person.slint:78
+msgctxt "PersonScreen"
+msgid "August"
+msgstr "août"
+
+#: crates/oxyfin/ui/screens/person.slint:81
+msgctxt "PersonScreen"
+msgid "September"
+msgstr "septembre"
+
+#: crates/oxyfin/ui/screens/person.slint:84
+msgctxt "PersonScreen"
+msgid "October"
+msgstr "octobre"
+
+#: crates/oxyfin/ui/screens/person.slint:87
+msgctxt "PersonScreen"
+msgid "November"
+msgstr "novembre"
+
+#: crates/oxyfin/ui/screens/person.slint:89
+msgctxt "PersonScreen"
+msgid "December"
+msgstr "décembre"
+
+#: crates/oxyfin/ui/screens/person.slint:94
+msgctxt "PersonScreen"
+msgid "Born in {}"
+msgstr "Né(e) à {}"
+
+#: crates/oxyfin/ui/screens/person.slint:97
+msgctxt "PersonScreen"
+msgid "{0} {1} {2}"
+msgstr "{0} {1} {2}"
+
+#: crates/oxyfin/ui/screens/person.slint:98
+msgctxt "PersonScreen"
+msgid "Born {}"
+msgstr "Né(e) le {}"
+
+#: crates/oxyfin/ui/screens/person.slint:98
+msgctxt "PersonScreen"
+msgid "Born {} in {}"
+msgstr "Né(e) le {} à {}"
+
+#: crates/oxyfin/ui/screens/person.slint:106
+msgctxt "PersonScreen"
+msgid "{n} title in your library"
+msgid_plural "{n} titles in your library"
+msgstr[0] "{n} titre dans votre bibliothèque"
+msgstr[1] "{n} titres dans votre bibliothèque"
+
+#: crates/oxyfin/ui/screens/person.slint:118
+msgctxt "PersonScreen"
+msgid "Person"
+msgstr "Personne"
+
+#: crates/oxyfin/ui/screens/person.slint:163
+msgctxt "PersonScreen"
+msgid "Back"
+msgstr "Retour"
+
+#: crates/oxyfin/ui/screens/person.slint:220
+msgctxt "PersonScreen"
+msgid "Read less"
+msgstr "Réduire"
+
+#: crates/oxyfin/ui/screens/person.slint:220
+msgctxt "PersonScreen"
+msgid "Read more"
+msgstr "Lire la suite"
+
+#: crates/oxyfin/ui/screens/person.slint:241
+msgctxt "PersonScreen"
+msgid "All ({})"
+msgstr "Tous ({})"
+
+#: crates/oxyfin/ui/screens/person.slint:248
+msgctxt "PersonScreen"
+msgid "Movies ({})"
+msgstr "Films ({})"
+
+#: crates/oxyfin/ui/screens/person.slint:255
+msgctxt "PersonScreen"
+msgid "Shows ({})"
+msgstr "Séries ({})"
+
+#: crates/oxyfin/ui/screens/person.slint:270
+msgctxt "PersonScreen"
+msgid "Titles"
+msgstr "Titres"
+
+#: crates/oxyfin/ui/screens/person.slint:294
+msgctxt "PersonScreen"
+msgid "Loading"
+msgstr "Chargement"
+
+#: crates/oxyfin/ui/screens/person.slint:306
+msgctxt "PersonScreen"
 msgid "Retry"
 msgstr "Réessayer"
 
@@ -989,42 +1146,42 @@ msgctxt "SearchScreen"
 msgid "Search movies and shows"
 msgstr "Rechercher des films et des séries"
 
-#: crates/oxyfin/ui/screens/series.slint:79
+#: crates/oxyfin/ui/screens/series.slint:82
 msgctxt "SeriesScreen"
 msgid "Series"
 msgstr "Série"
 
-#: crates/oxyfin/ui/screens/series.slint:149
+#: crates/oxyfin/ui/screens/series.slint:154
 msgctxt "SeriesScreen"
 msgid "Resume {}"
 msgstr "Reprendre {}"
 
-#: crates/oxyfin/ui/screens/series.slint:149
+#: crates/oxyfin/ui/screens/series.slint:154
 msgctxt "SeriesScreen"
 msgid "Play {}"
 msgstr "Lire {}"
 
-#: crates/oxyfin/ui/screens/series.slint:149
+#: crates/oxyfin/ui/screens/series.slint:154
 msgctxt "SeriesScreen"
 msgid "Play"
 msgstr "Lire"
 
-#: crates/oxyfin/ui/screens/series.slint:199
+#: crates/oxyfin/ui/screens/series.slint:204
 msgctxt "SeriesScreen"
 msgid "Loading"
 msgstr "Chargement"
 
-#: crates/oxyfin/ui/screens/series.slint:211
+#: crates/oxyfin/ui/screens/series.slint:216
 msgctxt "SeriesScreen"
 msgid "Retry"
 msgstr "Réessayer"
 
-#: crates/oxyfin/ui/screens/series.slint:224
+#: crates/oxyfin/ui/screens/series.slint:240
 msgctxt "SeriesScreen"
 msgid "More like this"
 msgstr "Titres similaires"
 
-#: crates/oxyfin/ui/screens/series.slint:243
+#: crates/oxyfin/ui/screens/series.slint:259
 msgctxt "SeriesScreen"
 msgid "Back"
 msgstr "Retour"

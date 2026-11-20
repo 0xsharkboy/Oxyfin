@@ -5,12 +5,16 @@ use std::time::Duration;
 
 use oxyfin_core::{
     AudioOption, Chapter, CoreError, Episode, HdrFormat, HdrInfo, ImageSize, ItemKind, ItemSummary,
-    Person, PlayMethod, PlaybackError, PlaybackTitle, SeriesDetails, StatsReport, SubtitleOption,
+    Person, PersonKind, PersonTitle, PlayMethod, PlaybackError, PlaybackTitle, SeriesDetails,
+    StatsReport, SubtitleOption,
 };
 use slint::{ModelRc, SharedString, VecModel};
 
 use crate::state::Screen;
-use crate::{CardData, ChapterRow, EpisodeData, Message, StatRow, StatSection, TrackRow};
+use crate::{
+    CardData, ChapterRow, EpisodeData, Message, PersonCardData, PersonJob, StatRow, StatSection,
+    TrackRow,
+};
 
 /// Message and detail to show for a core error.
 ///
@@ -83,16 +87,59 @@ pub fn detail_target(item: &ItemSummary) -> Option<Screen> {
     }
 }
 
-/// Number of actors named in the "Starring" line.
-const STARRING: usize = 4;
+/// Initials of `name`: the first letters of its first and last words, in capitals.
+pub fn initials(name: &str) -> String {
+    let mut words = name
+        .split_whitespace()
+        .filter_map(|word| word.chars().find(|c| c.is_alphanumeric()));
+    let first = words.next();
+    let last = words.next_back();
+    first
+        .into_iter()
+        .chain(last)
+        .flat_map(char::to_uppercase)
+        .collect()
+}
 
-/// The leading names of `cast`, separated by commas; empty without cast.
-pub fn cast_line(cast: &[Person]) -> String {
-    cast.iter()
-        .take(STARRING)
-        .map(|person| person.name.as_str())
-        .collect::<Vec<_>>()
-        .join(", ")
+/// Year, month and day of a `YYYY-MM-DD` date; `None` when it is not one.
+pub fn date_parts(date: &str) -> Option<(i32, i32, i32)> {
+    let mut parts = date.splitn(3, '-').map(str::parse::<i32>);
+    let year = parts.next()?.ok()?;
+    let month = parts.next()?.ok()?;
+    let day = parts.next()?.ok()?;
+    (year > 0 && (1..=12).contains(&month) && (1..=31).contains(&day)).then_some((year, month, day))
+}
+
+/// Card of a person of the cast and crew. The photo is loaded later.
+pub fn person_card(person: &Person) -> PersonCardData {
+    PersonCardData {
+        id: person
+            .id
+            .as_ref()
+            .map(|id| id.as_str().into())
+            .unwrap_or_default(),
+        name: person.name.as_str().into(),
+        initials: initials(&person.name).into(),
+        role: person.role.clone().unwrap_or_default().into(),
+        job: match person.kind {
+            PersonKind::Actor => PersonJob::Actor,
+            PersonKind::Director => PersonJob::Director,
+            PersonKind::Writer => PersonJob::Writer,
+            PersonKind::Composer => PersonJob::Composer,
+            PersonKind::Producer => PersonJob::Producer,
+            PersonKind::Other => PersonJob::Other,
+        },
+        image: Default::default(),
+        has_image: false,
+    }
+}
+
+/// Card of a title on a person page: its year, then the role of the person when known.
+pub fn person_title_card(title: &PersonTitle) -> CardData {
+    let mut data = card(&title.summary);
+    let year = title.summary.year.map(|year| year.to_string());
+    data.subtitle = join_detail(year.into_iter().chain(title.role.clone()));
+    data
 }
 
 /// Index of the season shown first: the one of the next episode to watch, else the first.
@@ -593,7 +640,7 @@ fn codec_name(codec: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oxyfin_core::{Person, Season, SeriesDetails, UserState};
+    use oxyfin_core::{Person, PersonKind, PersonTitle, Season, SeriesDetails, UserState};
 
     fn summary(kind: ItemKind) -> ItemSummary {
         ItemSummary {
@@ -869,23 +916,69 @@ mod tests {
         assert_eq!(subtitle, "Pilot");
     }
 
-    fn person(name: &str) -> Person {
-        Person {
-            name: name.into(),
-            role: None,
-            image: None,
+    #[test]
+    fn initials_take_the_first_and_last_words() {
+        assert_eq!(initials("Maren Holt"), "MH");
+        assert_eq!(initials("Song Kang-ho"), "SK");
+        assert_eq!(initials("Jean-Pierre de la Tour"), "JT");
+        assert_eq!(initials("cher"), "C");
+        assert_eq!(initials("  "), "");
+        assert_eq!(initials("\u{c9}mile Zola"), "\u{c9}Z");
+    }
+
+    #[test]
+    fn birth_dates_split_into_parts() {
+        assert_eq!(date_parts("1984-03-12"), Some((1984, 3, 12)));
+        assert_eq!(date_parts("1984-13-12"), None);
+        assert_eq!(date_parts("1984-03"), None);
+        assert_eq!(date_parts("unknown"), None);
+    }
+
+    fn summary_titled(kind: ItemKind, year: Option<i32>) -> ItemSummary {
+        ItemSummary {
+            year,
+            ..summary(kind)
         }
     }
 
     #[test]
-    fn cast_line_lists_the_first_four_names() {
-        let cast: Vec<Person> = ["A", "B", "C", "D", "E", "F"]
-            .into_iter()
-            .map(person)
-            .collect();
-        assert_eq!(cast_line(&cast), "A, B, C, D");
-        assert_eq!(cast_line(&cast[..2]), "A, B");
-        assert_eq!(cast_line(&[]), "");
+    fn person_titles_show_the_year_and_role() {
+        let title = |year, role: Option<&str>| PersonTitle {
+            summary: summary_titled(ItemKind::Movie, year),
+            role: role.map(str::to_owned),
+        };
+        let subtitle = |title: PersonTitle| person_title_card(&title).subtitle.to_string();
+        assert_eq!(
+            subtitle(title(Some(2003), Some("Detective"))),
+            "2003 \u{b7} Detective"
+        );
+        assert_eq!(subtitle(title(Some(2003), None)), "2003");
+        assert_eq!(subtitle(title(None, Some("Detective"))), "Detective");
+        assert_eq!(subtitle(title(None, None)), "");
+    }
+
+    #[test]
+    fn person_cards_keep_the_role_or_the_job() {
+        let person = Person {
+            id: None,
+            name: "Karl Vinter".into(),
+            role: None,
+            kind: PersonKind::Director,
+            image: None,
+        };
+        let card = person_card(&person);
+        assert_eq!(card.id, "");
+        assert_eq!(card.initials, "KV");
+        assert_eq!(card.role, "");
+        assert_eq!(card.job, PersonJob::Director);
+        let actor = Person {
+            id: Some("a".into()),
+            role: Some("Hero".into()),
+            kind: PersonKind::Actor,
+            ..person
+        };
+        let card = person_card(&actor);
+        assert_eq!((card.id.as_str(), card.role.as_str()), ("a", "Hero"));
     }
 
     fn loaded_row(id: &str) -> EpisodeData {

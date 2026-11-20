@@ -215,10 +215,11 @@ fn a_series_opens_with_seasons_and_episodes() {
             wait_visible(&window, label).await?;
         }
         wait_visible(&window, "A generated test show.").await?;
-        wait_visible(&window, "Starring Gia Gate, Hal Hash").await?;
         wait_role(&window, "Resume S02E05", AccessibleRole::Button).await?;
 
         scroll_down(&window);
+        wait_role(&window, "Cast and crew", AccessibleRole::List).await?;
+        wait_role(&window, "Gia Gate", AccessibleRole::Button).await?;
         let season_2 = wait_role(&window, "Season 2", AccessibleRole::Button).await?;
         if season_2.accessible_checked() != Some(true) {
             return Err("Season 2 is not the chosen pill".into());

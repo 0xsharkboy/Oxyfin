@@ -1,10 +1,12 @@
 //! Browsing the library: home rows, listings, search, details and user state.
 
-use oxyfin_api::{BaseItemDto, BaseItemKind, ItemId, ItemSortBy, ItemsQuery, Session, SortOrder};
+use oxyfin_api::{
+    BaseItemDto, BaseItemKind, ItemFields, ItemId, ItemSortBy, ItemsQuery, Session, SortOrder,
+};
 
 use crate::models::{
-    Episode, ItemKind, ItemSummary, Library, LibraryKind, MovieDetails, Page, Season,
-    SeriesDetails, UserState,
+    Episode, ItemKind, ItemSummary, Library, LibraryKind, MovieDetails, Page, PersonDetails,
+    PersonTitle, Season, SeriesDetails, UserState,
 };
 use crate::{CoreError, Result};
 
@@ -300,6 +302,31 @@ impl Catalog {
     pub async fn similar(&self, id: &ItemId, limit: u32) -> Result<Vec<ItemSummary>> {
         let result = self.session.similar(id, limit).await?;
         Ok(summaries(&result.items))
+    }
+
+    /// Fetches the biography and portrait of a person.
+    pub async fn person(&self, id: &ItemId) -> Result<PersonDetails> {
+        let dto = self.session.item(id).await?;
+        Ok(PersonDetails::from_dto(&dto))
+    }
+
+    /// Lists the movies and series of the library crediting the person `id`, newest first.
+    pub async fn person_titles(&self, id: &ItemId) -> Result<Vec<PersonTitle>> {
+        let query = ItemsQuery {
+            person_ids: vec![id.clone()],
+            include_item_types: vec![BaseItemKind::Movie, BaseItemKind::Series],
+            recursive: true,
+            sort_by: vec![ItemSortBy::PremiereDate],
+            sort_order: Some(SortOrder::Descending),
+            fields: vec![ItemFields::People],
+            ..ItemsQuery::default()
+        };
+        let result = self.session.items(&query).await?;
+        Ok(result
+            .items
+            .iter()
+            .filter_map(|dto| PersonTitle::from_dto(dto, id))
+            .collect())
     }
 
     /// Fetches the details of a movie.

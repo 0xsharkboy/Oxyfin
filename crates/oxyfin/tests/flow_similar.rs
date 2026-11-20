@@ -164,20 +164,32 @@ fn row_cards(window: &AppWindow, row: &ElementHandle) -> Result<Vec<String>, Str
 
 /// Scrolls to the row, checks its two cards and clicks the one titled `title`.
 async fn click_similar(window: &AppWindow, title: &str) -> Result<(), String> {
-    let row = wait_role(window, ROW, AccessibleRole::List).await?;
-    let play = wait_role(window, "Play", AccessibleRole::Button).await?;
-    if row.absolute_position().y < play.absolute_position().y + play.size().height {
-        return Err("the row is not below the header".into());
-    }
+    // Rows below the window are only built once scrolled near.
     scroll_down(window);
     pause(Duration::from_millis(50)).await;
+    let row = wait_role(window, ROW, AccessibleRole::List).await?;
+    let play = ElementHandle::find_by_accessible_label(window, "Play")
+        .find(|play| play.accessible_role() == Some(AccessibleRole::Button));
+    if let Some(play) = play
+        && row.absolute_position().y < play.absolute_position().y + play.size().height
+    {
+        return Err("the row is not below the header".into());
+    }
+    let bottom = window.window().size().height as f32 / window.window().scale_factor();
+    for _ in 0..5 {
+        let card = wait_role(window, title, AccessibleRole::Button).await?;
+        if card.absolute_position().y + card.size().height / 2. <= bottom {
+            break;
+        }
+        scroll_down(window);
+        pause(Duration::from_millis(50)).await;
+    }
     let row = wait_role(window, ROW, AccessibleRole::List).await?;
     let cards = row_cards(window, &row)?;
     if cards != ["Second Feature (2021)", "Third Feature (2022)"] {
         return Err(format!("unexpected cards: {cards:?}"));
     }
     let card = wait_role(window, title, AccessibleRole::Button).await?;
-    let bottom = window.window().size().height as f32 / window.window().scale_factor();
     if card.absolute_position().y + card.size().height / 2. > bottom {
         return Err("the card is below the window".into());
     }
@@ -203,6 +215,9 @@ async fn wait_answer(what: &str, calls: &Arc<AtomicUsize>) -> Result<(), String>
 }
 
 fn no_row_nor_notice(window: &AppWindow) -> Result<(), String> {
+    for _ in 0..3 {
+        scroll_down(window);
+    }
     if exists(window, ROW) {
         return Err("a row without items is shown".into());
     }

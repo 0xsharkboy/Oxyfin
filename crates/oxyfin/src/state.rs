@@ -57,6 +57,8 @@ pub enum Screen {
     Movie(String),
     /// Detail page of a series, by item identifier.
     Series(String),
+    /// Page of a person of the cast and crew, by person identifier.
+    Person(String),
     /// Video player.
     Player,
     /// Settings.
@@ -85,11 +87,15 @@ impl Screen {
                 | Screen::Search
                 | Screen::Movie(_)
                 | Screen::Series(_)
+                | Screen::Person(_)
         )
     }
 
     fn is_detail(&self) -> bool {
-        matches!(self, Screen::Movie(_) | Screen::Series(_))
+        matches!(
+            self,
+            Screen::Movie(_) | Screen::Series(_) | Screen::Person(_)
+        )
     }
 }
 
@@ -123,7 +129,7 @@ pub enum Msg {
     CloseQuickConnect,
     /// The user picked a tab of the top bar.
     OpenTab(Tab),
-    /// The user opened a detail page: only `Screen::Movie` or `Screen::Series`.
+    /// The user opened a detail page: only `Screen::Movie`, `Screen::Series` or `Screen::Person`.
     OpenItem(Screen),
     /// A watched or favorite change succeeded on a detail page: the screens below are stale.
     ItemChanged(Screen),
@@ -735,6 +741,29 @@ mod tests {
             vec![Effect::Show(series("s")), Effect::Refresh(series("s"))]
         );
         assert_eq!(s.stack(), [Screen::Home, series("s")]);
+    }
+
+    #[test]
+    fn person_opens_over_a_detail_and_back_discards_it() {
+        let (mut s, _) = signed_in();
+        s.update(Msg::OpenItem(movie("m")));
+        let person = Screen::Person("p".into());
+        assert_eq!(
+            s.update(Msg::OpenItem(person.clone())),
+            vec![Effect::Show(person.clone())]
+        );
+        assert_eq!(
+            s.update(Msg::OpenItem(movie("n"))),
+            vec![Effect::Show(movie("n"))]
+        );
+        assert_eq!(
+            s.update(Msg::Back),
+            vec![Effect::Discard(movie("n")), Effect::Show(person.clone())]
+        );
+        assert_eq!(
+            s.update(Msg::Back),
+            vec![Effect::Discard(person), Effect::Show(movie("m"))]
+        );
     }
 
     #[test]

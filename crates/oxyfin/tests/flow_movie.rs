@@ -103,7 +103,8 @@ fn a_movie_opens_with_its_details_and_actions() {
             wait_visible(&window, label).await?;
         }
         wait_visible(&window, "A generated test movie.").await?;
-        wait_visible(&window, "Starring Ada Actor, Ben Bit, Cleo Code, Dan Data").await?;
+        wait_role(&window, "Cast and crew", AccessibleRole::List).await?;
+        wait_role(&window, "Ada Actor", AccessibleRole::Button).await?;
         wait_role(&window, "Resume from 0:03", AccessibleRole::Button).await?;
         wait_role(&window, "Play", AccessibleRole::Button).await?;
 

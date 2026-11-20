@@ -40,8 +40,6 @@ export component DetailHeader inherits Rectangle {
     in property <int> season-count;
     in property <[string]> genres;
     in property <string> overview;
-    // The leading cast, already joined; empty when there is none.
-    in property <string> cast;
     in property <bool> watched;
     in property <bool> favorite;
     // True while a watched or favorite change is being saved.
@@ -183,12 +181,6 @@ export component DetailHeader inherits Rectangle {
 
                 if root.overview != "": BodyText {
                     text: root.overview;
-                    color: Theme.text-secondary;
-                    wrap: word-wrap;
-                    max-width: 640px;
-                }
-                if root.cast != "": BodyText {
-                    text: @tr("Starring {}", root.cast);
                     color: Theme.text-secondary;
                     wrap: word-wrap;
                     max-width: 640px;

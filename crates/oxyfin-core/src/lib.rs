@@ -73,7 +73,7 @@ pub use error::{CoreError, Result};
 pub use images::{CacheBudgets, DEFAULT_DISK_BUDGET, DEFAULT_MEMORY_BUDGET, ImageCache, ImageSize};
 pub use models::{
     Episode, ImageRef, ItemKind, ItemSummary, Library, LibraryKind, MovieDetails, Page, Person,
-    Season, SeriesDetails, UserState,
+    PersonDetails, PersonKind, PersonTitle, Season, SeriesDetails, UserState,
 };
 pub use paths::Paths;
 pub use playback::{

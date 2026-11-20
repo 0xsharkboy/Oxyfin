@@ -326,6 +326,7 @@ async fn items_query_serializes_parameters() {
         limit: Some(50),
         fields: vec![ItemFields::Overview, ItemFields::Genres],
         ids: Vec::new(),
+        person_ids: Vec::new(),
     };
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
@@ -421,6 +422,37 @@ async fn items_query_sends_ids() {
 async fn items_query_omits_empty_ids() {
     let pairs = query_pairs_for(&ItemsQuery::default()).await;
     assert!(pairs.iter().all(|(k, _)| k != "ids"), "{pairs:?}");
+}
+
+#[tokio::test]
+async fn items_query_person_ids() {
+    let pairs = query_pairs_for(&ItemsQuery {
+        person_ids: vec!["a".into(), "b".into()],
+        ..ItemsQuery::default()
+    })
+    .await;
+    assert!(
+        pairs.contains(&("personIds".to_string(), "a,b".to_string())),
+        "{pairs:?}"
+    );
+    let pairs = query_pairs_for(&ItemsQuery::default()).await;
+    assert!(pairs.iter().all(|(k, _)| k != "personIds"), "{pairs:?}");
+}
+
+#[test]
+fn person_item_decodes_birth_place() {
+    let item: BaseItemDto = serde_json::from_value(json!({
+        "Id": "p",
+        "Type": "Person",
+        "PremiereDate": "1967-01-17T00:00:00.0000000Z",
+        "ProductionLocations": ["Gimhae, South Korea"]
+    }))
+    .unwrap();
+    assert_eq!(item.production_locations, ["Gimhae, South Korea"]);
+    let item: BaseItemDto =
+        serde_json::from_value(json!({"Id": "p", "Type": "Person", "ProductionLocations": null}))
+            .unwrap();
+    assert!(item.production_locations.is_empty());
 }
 
 #[test]
