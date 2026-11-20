@@ -11,7 +11,7 @@ use common::{
 use oxyfin_api::{ImageType, ItemId, MediaSourceId};
 use oxyfin_core::{
     Chapter, ImageRef, PROGRESS_INTERVAL, PlayMethod, PlayMode, PlaybackCommand,
-    PlaybackController, PlaybackError, PlaybackEvent, PlaybackHandle, PlaybackStats,
+    PlaybackController, PlaybackError, PlaybackEvent, PlaybackHandle, PlaybackPrefs, PlaybackStats,
     PlaybackTimings, PlayerEventSink, QUALITIES, Quality, SHUTDOWN_TIMEOUT, SegmentKind,
     SkippableSegment, SubtitleBackground, SubtitleSize, SubtitleStyle, Trickplay, UNLOAD_GRACE,
     chapter_at, next_chapter, player_events, previous_chapter, start_at,
@@ -1107,9 +1107,9 @@ fn neighbours_of(ready: &PlaybackEvent) -> (bool, bool) {
 fn countdowns(seen: &[PlaybackEvent]) -> Vec<(String, u32)> {
     seen.iter()
         .filter_map(|e| match e {
-            PlaybackEvent::NextUpCountdown { episode, remaining } => {
-                Some((episode.id.to_string(), *remaining))
-            }
+            PlaybackEvent::NextUpCountdown {
+                episode, remaining, ..
+            } => Some((episode.id.to_string(), *remaining)),
             _ => None,
         })
         .collect()
@@ -3147,4 +3147,315 @@ async fn request_stats_without_media_reports_nothing() {
         !seen.iter().any(|e| matches!(e, PlaybackEvent::Stats(_))),
         "{seen:?}"
     );
+}
+
+fn prefs(change: impl FnOnce(&mut PlaybackPrefs)) -> PlaybackPrefs {
+    let mut prefs = PlaybackPrefs::default();
+    change(&mut prefs);
+    prefs
+}
+
+#[test]
+fn default_prefs_follow_the_spec() {
+    let prefs = PlaybackPrefs::default();
+    assert!(prefs.autoplay_next);
+    assert_eq!(prefs.countdown, Duration::from_secs(10));
+    assert!(!prefs.skip_intros);
+    assert!(!prefs.skip_recaps);
+    assert!(prefs.remember_tracks);
+}
+
+#[tokio::test]
+async fn countdown_uses_configured_length() {
+    let mut h = harness(episode_timings(Duration::from_secs(3600))).await;
+    h.handle.send(PlaybackCommand::SetPrefs(prefs(|p| {
+        p.countdown = Duration::from_secs(5);
+    })));
+    h.start_item(EPISODES[1], TEN_MINUTES).await;
+    h.end_at(Duration::from_secs(599));
+    let first = wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::NextUpCountdown { .. })
+    })
+    .await;
+    let PlaybackEvent::NextUpCountdown {
+        episode,
+        remaining,
+        total,
+    } = first
+    else {
+        unreachable!()
+    };
+    assert_eq!(episode.id.as_str(), EPISODES[2]);
+    assert_eq!((remaining, total), (5, 5));
+}
+
+#[tokio::test]
+async fn ask_mode_never_autoplays() {
+    let mut h = harness(episode_timings(Duration::from_millis(20))).await;
+    h.handle.send(PlaybackCommand::SetPrefs(prefs(|p| {
+        p.autoplay_next = false;
+    })));
+    h.start_item(EPISODES[1], TEN_MINUTES).await;
+    h.end_at(Duration::from_secs(599));
+    let seen = events_until(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::NextUpReady { .. })
+    })
+    .await;
+    assert!(seen.contains(&PlaybackEvent::Ended), "{seen:?}");
+    let Some(PlaybackEvent::NextUpReady { episode }) = seen.last() else {
+        unreachable!()
+    };
+    assert_eq!(episode.id.as_str(), EPISODES[2]);
+    // More than three steps of the countdown.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(h.loads().len(), 1);
+    let mut later = Vec::new();
+    while let Ok(event) = h.events.try_recv() {
+        later.push(event);
+    }
+    assert!(countdowns(&later).is_empty(), "{later:?}");
+    assert!(
+        !later
+            .iter()
+            .any(|e| matches!(e, PlaybackEvent::Loading { .. })),
+        "{later:?}"
+    );
+
+    h.handle.send(PlaybackCommand::PlayNextNow);
+    wait_event(
+        &mut h.events,
+        |e| matches!(e, PlaybackEvent::Loading { item, .. } if *item == ItemId::from(EPISODES[2])),
+    )
+    .await;
+    wait_loads(&h, 2).await;
+}
+
+#[tokio::test]
+async fn ask_mode_close_cancels_the_offer() {
+    let mut h = harness(episode_timings(Duration::from_millis(20))).await;
+    h.handle.send(PlaybackCommand::SetPrefs(prefs(|p| {
+        p.autoplay_next = false;
+    })));
+    h.start_item(EPISODES[1], TEN_MINUTES).await;
+    h.end_at(Duration::from_secs(599));
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::NextUpReady { .. })
+    })
+    .await;
+    h.handle.send(PlaybackCommand::CancelNextUp);
+    wait_event(&mut h.events, |e| *e == PlaybackEvent::NextUpCancelled).await;
+    h.handle.send(PlaybackCommand::PlayNextNow);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(h.loads().len(), 1);
+}
+
+const SEGMENTED: &str = "/MediaSegments/76282b1c408f374beeee50519e9157a4";
+
+/// Plays the movie with `segments` and `prefs`, loaded and waiting for its segments.
+async fn segmented(segments: Vec<Value>, prefs: PlaybackPrefs) -> Harness {
+    let mock = MockServer::start().await;
+    mount_segments(&mock, MOVIE_ID, segments_body(segments)).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.handle.send(PlaybackCommand::SetPrefs(prefs));
+    h.play(PlayMode::FromStart).await;
+    h.file_loaded_events().await;
+    wait_requests(&h.mock, SEGMENTED, 1).await;
+    h
+}
+
+fn seeks_to(h: &Harness, target: Duration) -> usize {
+    h.player
+        .calls()
+        .iter()
+        .filter(|call| **call == Call::Seek(SeekTarget::Absolute(target)))
+        .count()
+}
+
+/// Lands a seek of the player at `position`.
+fn land(h: &Harness, position: Duration) {
+    h.sink.send(PlayerEvent::Seeking);
+    h.sink.send(PlayerEvent::Position(position));
+    h.sink.send(PlayerEvent::Seeked);
+}
+
+fn skipped(seen: &[PlaybackEvent]) -> Vec<(SegmentKind, Duration)> {
+    seen.iter()
+        .filter_map(|e| match e {
+            PlaybackEvent::SegmentSkipped { kind, from } => Some((*kind, *from)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn secs(secs: u64) -> Duration {
+    Duration::from_secs(secs)
+}
+
+#[tokio::test]
+async fn auto_skip_intro_once() {
+    let mut h = segmented(
+        vec![segment_json("Intro", secs(5), secs(9))],
+        prefs(|p| p.skip_intros = true),
+    )
+    .await;
+    h.sink.send(PlayerEvent::Position(secs(1)));
+    h.sink.send(PlayerEvent::Position(secs(5)));
+    let seen = events_until(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::SegmentSkipped { .. })
+    })
+    .await;
+    assert_eq!(skipped(&seen), vec![(SegmentKind::Intro, secs(5))]);
+    assert!(segment_events(&seen).is_empty(), "{seen:?}");
+    h.player
+        .wait_call(|c| *c == Call::Seek(SeekTarget::Absolute(secs(9))))
+        .await;
+    // A position reported before the seek lands neither skips again nor offers the button.
+    h.sink
+        .send(PlayerEvent::Position(Duration::from_millis(5_250)));
+    land(&h, secs(9));
+    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Seeked)).await;
+
+    let target = SeekTarget::Absolute(secs(6));
+    h.handle.send(PlaybackCommand::Seek(target));
+    h.player.wait_call(|c| *c == Call::Seek(target)).await;
+    land(&h, secs(6));
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::Seeked)).await;
+    assert_eq!(segment_events(&seen), vec![Some(intro(5, 9))], "{seen:?}");
+    let seen = h.stop().await;
+    assert!(skipped(&seen).is_empty(), "{seen:?}");
+    assert_eq!(seeks_to(&h, secs(9)), 1);
+}
+
+#[tokio::test]
+async fn undo_skip_returns_and_disables() {
+    let mut h = segmented(
+        vec![segment_json("Intro", secs(5), secs(9))],
+        prefs(|p| p.skip_intros = true),
+    )
+    .await;
+    h.sink.send(PlayerEvent::Position(secs(5)));
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::SegmentSkipped { .. })
+    })
+    .await;
+    land(&h, secs(9));
+    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Seeked)).await;
+
+    h.handle.send(PlaybackCommand::UndoSkip);
+    h.player
+        .wait_call(|c| *c == Call::Seek(SeekTarget::Absolute(secs(5))))
+        .await;
+    land(&h, secs(5));
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::Seeked)).await;
+    assert_eq!(segment_events(&seen), vec![Some(intro(5, 9))], "{seen:?}");
+    h.sink.send(PlayerEvent::Position(secs(6)));
+    let seen = h.stop().await;
+    assert!(skipped(&seen).is_empty(), "{seen:?}");
+    assert_eq!(seeks_to(&h, secs(9)), 1);
+}
+
+#[tokio::test]
+async fn undo_after_back_to_back_skips_returns_to_the_last_one() {
+    let mut h = segmented(
+        vec![
+            segment_json("Recap", secs(0), secs(4)),
+            segment_json("Intro", secs(4), secs(8)),
+        ],
+        prefs(|p| {
+            p.skip_intros = true;
+            p.skip_recaps = true;
+        }),
+    )
+    .await;
+    h.sink.send(PlayerEvent::Position(secs(1)));
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::SegmentSkipped { .. })
+    })
+    .await;
+    land(&h, secs(4));
+    let seen = events_until(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::SegmentSkipped { .. })
+    })
+    .await;
+    assert_eq!(skipped(&seen), vec![(SegmentKind::Intro, secs(4))]);
+    land(&h, secs(8));
+    wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Seeked)).await;
+    h.handle.send(PlaybackCommand::UndoSkip);
+    h.player
+        .wait_call(|c| *c == Call::Seek(SeekTarget::Absolute(secs(4))))
+        .await;
+    assert_eq!(seeks_to(&h, secs(1)), 0);
+}
+
+#[tokio::test]
+async fn recap_flag_covers_preview() {
+    let mut h = segmented(
+        vec![
+            segment_json("Preview", secs(2), secs(5)),
+            segment_json("Intro", secs(6), secs(9)),
+        ],
+        prefs(|p| p.skip_recaps = true),
+    )
+    .await;
+    h.sink.send(PlayerEvent::Position(secs(2)));
+    wait_event(&mut h.events, |e| {
+        *e == PlaybackEvent::SegmentSkipped {
+            kind: SegmentKind::Preview,
+            from: secs(2),
+        }
+    })
+    .await;
+    h.player
+        .wait_call(|c| *c == Call::Seek(SeekTarget::Absolute(secs(5))))
+        .await;
+    land(&h, secs(6));
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::Seeked)).await;
+    assert_eq!(segment_events(&seen), vec![Some(intro(6, 9))], "{seen:?}");
+    assert!(skipped(&seen).is_empty(), "{seen:?}");
+}
+
+#[tokio::test]
+async fn credits_never_auto_skipped() {
+    let mut h = segmented(
+        vec![segment_json("Outro", secs(2), secs(9))],
+        prefs(|p| {
+            p.skip_intros = true;
+            p.skip_recaps = true;
+        }),
+    )
+    .await;
+    h.sink.send(PlayerEvent::Position(secs(3)));
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::Segment(_))).await;
+    assert_eq!(
+        segment_events(&seen),
+        vec![Some(SkippableSegment {
+            kind: SegmentKind::Credits,
+            start: secs(2),
+            end: secs(9),
+        })]
+    );
+    let seen = h.stop().await;
+    assert!(skipped(&seen).is_empty(), "{seen:?}");
+    assert!(
+        !h.player.calls().iter().any(|c| matches!(c, Call::Seek(_))),
+        "{:?}",
+        h.player.calls()
+    );
+}
+
+#[tokio::test]
+async fn skip_button_mode_never_seeks() {
+    let mut h = segmented(
+        vec![segment_json("Intro", secs(2), secs(9))],
+        PlaybackPrefs::default(),
+    )
+    .await;
+    h.sink.send(PlayerEvent::Position(secs(3)));
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::Segment(Some(_)))
+    })
+    .await;
+    let seen = h.stop().await;
+    assert!(skipped(&seen).is_empty(), "{seen:?}");
+    assert!(!h.player.calls().iter().any(|c| matches!(c, Call::Seek(_))));
 }

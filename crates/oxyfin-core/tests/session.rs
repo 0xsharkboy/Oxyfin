@@ -7,8 +7,9 @@ use std::time::Duration;
 
 use common::{FailingStore, fixture, manager, memory_vault};
 use oxyfin_core::{
-    CoreError, MemoryStore, Paths, QUALITIES, Quality, SecretStore, SessionManager, SignedIn,
-    SubtitleBackground, SubtitleSize, SubtitleStyle, TokenStorage, TokenVault, account_key,
+    CoreError, MemoryStore, Paths, PlaybackPrefs, QUALITIES, Quality, SecretStore, SessionManager,
+    SignedIn, SubtitleBackground, SubtitleSize, SubtitleStyle, TokenStorage, TokenVault,
+    account_key,
 };
 use serde_json::json;
 use tempfile::TempDir;
@@ -580,4 +581,61 @@ async fn start_fullscreen_is_saved_across_launches() {
 
     let next = manager(&mock, &dir, memory_vault());
     assert!(next.start_fullscreen());
+}
+
+#[tokio::test]
+async fn playback_prefs_persist() {
+    let mock = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let first = manager(&mock, &dir, memory_vault());
+    assert_eq!(first.playback_prefs(), PlaybackPrefs::default());
+    let prefs = PlaybackPrefs {
+        autoplay_next: false,
+        countdown: Duration::from_secs(30),
+        skip_intros: true,
+        skip_recaps: true,
+        remember_tracks: false,
+    };
+    first.set_playback_prefs(prefs).unwrap();
+    assert_eq!(first.playback_prefs(), prefs);
+
+    let next = manager(&mock, &dir, memory_vault());
+    assert_eq!(next.playback_prefs(), prefs);
+}
+
+#[tokio::test]
+async fn unreadable_prefs_fall_back() {
+    let mock = MockServer::start().await;
+    for (playback, expected) in [
+        (r#""fast""#, PlaybackPrefs::default()),
+        (r#"{"autoplay_next":"no"}"#, PlaybackPrefs::default()),
+        (
+            r#"{"countdown":7,"skip_intros":true}"#,
+            PlaybackPrefs {
+                skip_intros: true,
+                ..PlaybackPrefs::default()
+            },
+        ),
+        (r#"{"countdown":0}"#, PlaybackPrefs::default()),
+        (
+            r#"{"countdown":15}"#,
+            PlaybackPrefs {
+                countdown: Duration::from_secs(15),
+                ..PlaybackPrefs::default()
+            },
+        ),
+    ] {
+        let dir = TempDir::new().unwrap();
+        let paths = Paths::under(dir.path());
+        std::fs::create_dir_all(&paths.config_dir).unwrap();
+        std::fs::write(
+            paths.config_dir.join("config.json"),
+            format!(r#"{{"device_id":"abc","quality":"Original","playback":{playback}}}"#),
+        )
+        .unwrap();
+        let manager = manager(&mock, &dir, memory_vault());
+        assert_eq!(manager.playback_prefs(), expected, "with {playback}");
+        assert_eq!(manager.quality(), Quality::Original, "with {playback}");
+        assert!(!paths.config_dir.join("config.json.bad").exists());
+    }
 }

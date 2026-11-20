@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use oxyfin_api::{MediaSegmentDto, MediaSegmentType};
+use oxyfin_api::{ItemId, MediaSegmentDto, MediaSegmentType};
 
 /// A segment stops being offered this long before its end, so a seek to the
 /// end that lands a frame short does not offer it again.
@@ -31,6 +31,45 @@ pub struct SkippableSegment {
     /// End of the segment, where skipping it seeks to. Never past the
     /// duration of the item, when known.
     pub end: Duration,
+}
+
+/// The segments of one item already skipped without asking: each is skipped
+/// once, and only offered afterwards.
+#[derive(Debug, Default)]
+pub(super) struct SkipMemory {
+    item: Option<ItemId>,
+    /// Segments skipped, or whose skip was undone.
+    done: Vec<(SegmentKind, Duration)>,
+    /// Where the last skip happened, until undone.
+    last: Option<Duration>,
+}
+
+impl SkipMemory {
+    /// Forgets every skip unless `item` is the item remembered and `keep` is set.
+    pub(super) fn start(&mut self, item: &ItemId, keep: bool) {
+        if !keep || self.item.as_ref() != Some(item) {
+            *self = Self {
+                item: Some(item.clone()),
+                ..Self::default()
+            };
+        }
+    }
+
+    /// Whether `segment` was not skipped yet.
+    pub(super) fn fresh(&self, segment: &SkippableSegment) -> bool {
+        !self.done.contains(&(segment.kind, segment.start))
+    }
+
+    /// Records that `segment` was skipped from `from`.
+    pub(super) fn skipped(&mut self, segment: &SkippableSegment, from: Duration) {
+        self.done.push((segment.kind, segment.start));
+        self.last = Some(from);
+    }
+
+    /// Where the last skip happened, forgotten once returned.
+    pub(super) fn undo(&mut self) -> Option<Duration> {
+        self.last.take()
+    }
 }
 
 /// The segments of `segments` worth skipping, ordered by start. Unknown

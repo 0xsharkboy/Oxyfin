@@ -6,7 +6,7 @@ use std::fs;
 use serde::{Deserialize, Serialize};
 
 use crate::subtitles::lenient;
-use crate::{CoreError, Paths, Quality, Result, SubtitleStyle};
+use crate::{CoreError, Paths, PlaybackPrefs, Quality, Result, SubtitleStyle};
 
 const FILE_NAME: &str = "config.json";
 
@@ -52,6 +52,10 @@ pub struct Config {
     /// Whether the window opens fullscreen.
     #[serde(default)]
     pub start_fullscreen: bool,
+    /// What the user chose for the end of an episode and for skippable
+    /// segments. Unreadable content falls back to the defaults.
+    #[serde(default, deserialize_with = "lenient")]
+    pub playback: PlaybackPrefs,
 }
 
 fn storage<E: std::fmt::Display>(error: E) -> CoreError {
@@ -68,6 +72,7 @@ impl Config {
             subtitles: SubtitleStyle::default(),
             quality: Quality::Original,
             start_fullscreen: false,
+            playback: PlaybackPrefs::default(),
         }
     }
 

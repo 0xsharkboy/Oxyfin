@@ -370,6 +370,7 @@ impl App {
                         self.manager.subtitle_style(),
                     ));
                     handle.send(PlaybackCommand::SetQuality(self.manager.quality()));
+                    handle.send(PlaybackCommand::SetPrefs(self.manager.playback_prefs()));
                     self.pending_stops.set(0);
                     self.relay(id, updates);
                     *self.video.borrow_mut() = Some((id, Arc::clone(&player)));
@@ -447,7 +448,9 @@ impl App {
         if stopped {
             self.sheets.borrow_mut().clear();
         }
-        if let PlaybackEvent::NextUpCountdown { episode, .. } = &event {
+        if let PlaybackEvent::NextUpCountdown { episode, .. }
+        | PlaybackEvent::NextUpReady { episode } = &event
+        {
             self.load_next_up_image(&window, episode);
         }
         #[cfg(target_os = "linux")]
@@ -659,6 +662,22 @@ impl App {
         }
     }
 
+    /// Saves the playback choices the settings picked and applies them to the
+    /// current playback; the settings then show what is saved.
+    fn set_playback_prefs(&self, choice: &crate::PlaybackChoice) {
+        let prefs = settings::playback_prefs(choice, self.manager.playback_prefs());
+        match self.manager.set_playback_prefs(prefs) {
+            Ok(()) => self.send_playback(PlaybackCommand::SetPrefs(prefs)),
+            Err(error) => {
+                log::error!("cannot save the playback choices: {error}");
+                self.notify(Message::StorageError);
+            }
+        }
+        if let Some(window) = self.window() {
+            window.set_settings_playback(settings::playback_choice(self.manager.playback_prefs()));
+        }
+    }
+
     /// Shows `message` in the notice banner, replacing the one shown. Messages
     /// that need no action leave after [`NOTICE_DURATION`]; the others stay
     /// until the user closes them.
@@ -828,6 +847,12 @@ impl App {
         window.on_settings_start_fullscreen_changed(move |on| {
             if let Some(app) = this.upgrade() {
                 app.set_start_fullscreen(on);
+            }
+        });
+        let this = self.this.clone();
+        window.on_settings_playback_changed(move |choice| {
+            if let Some(app) = this.upgrade() {
+                app.set_playback_prefs(&choice);
             }
         });
         window.on_dismiss_notice(with(|app| app.dismiss_notice()));
@@ -1057,6 +1082,9 @@ impl App {
                             self.manager.subtitle_style(),
                         ));
                         window.set_settings_start_fullscreen(self.manager.start_fullscreen());
+                        window.set_settings_playback(settings::playback_choice(
+                            self.manager.playback_prefs(),
+                        ));
                     }
                     window.set_screen(slint_screen(&screen));
                 }

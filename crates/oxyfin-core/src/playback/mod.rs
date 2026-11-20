@@ -23,8 +23,9 @@ pub use oxyfin_player::{HdrFormat, HdrInfo, PlaybackStats};
 pub use quality::{QUALITIES, Quality};
 pub use segments::{SegmentKind, SkippableSegment};
 pub use types::{
-    NEXT_UP_COUNTDOWN, PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent,
-    PlaybackTimings, PlaybackTitle, SEEK_STEP, SHUTDOWN_TIMEOUT, SPEEDS, StatsReport, UNLOAD_GRACE,
+    COUNTDOWNS, PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent,
+    PlaybackPrefs, PlaybackTimings, PlaybackTitle, SEEK_STEP, SHUTDOWN_TIMEOUT, SPEEDS,
+    StatsReport, UNLOAD_GRACE,
 };
 
 /// An audio track the user can pick.

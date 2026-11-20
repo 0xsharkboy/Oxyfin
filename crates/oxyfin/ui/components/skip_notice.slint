@@ -1,0 +1,61 @@
+import { Theme, SkipKind } from "../theme.slint";
+import { BodyStrongText, BodyText } from "text.slint";
+
+// Pill telling that a segment was skipped without asking, with an action to go back to it.
+export component SkipNotice inherits Rectangle {
+    in property <SkipKind> kind;
+    callback undo();
+
+    property <string> message: root.kind == SkipKind.recap ? @tr("Recap skipped") : root.kind == SkipKind.preview ? @tr("Preview skipped") : @tr("Intro skipped");
+
+    accessible-role: groupbox;
+    accessible-label: root.message;
+
+    width: row.preferred-width;
+    height: row.preferred-height;
+    background: Theme.bg-elevated;
+    border-radius: Theme.radius-full;
+    border-width: Theme.border-thin;
+    border-color: Theme.border-default;
+
+    TouchArea { }
+
+    row := HorizontalLayout {
+        padding-left: Theme.space-lg;
+        padding-right: Theme.space-lg;
+        padding-top: Theme.space-pill-y;
+        padding-bottom: Theme.space-pill-y;
+        spacing: Theme.space-sm;
+
+        BodyText {
+            accessible-role: text;
+            text: root.message;
+            color: Theme.text-secondary;
+            vertical-alignment: center;
+        }
+
+        Rectangle {
+            accessible-role: button;
+            accessible-label: undo-text.text;
+            accessible-action-default => {
+                root.undo();
+            }
+            width: undo-text.preferred-width;
+            height: undo-text.preferred-height;
+
+            undo-text := BodyStrongText {
+                accessible-role: none;
+                text: @tr("Undo");
+                color: undo-touch.has-hover ? Theme.text-primary : Theme.accent;
+                vertical-alignment: center;
+            }
+
+            undo-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    root.undo();
+                }
+            }
+        }
+    }
+}

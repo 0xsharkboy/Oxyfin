@@ -1,5 +1,5 @@
 import { Spinner } from "std-widgets.slint";
-import { Theme, Message, Messages, TrackRow, NextUp, QualityRow, SeekPreview, SkipKind, ChapterRow, StatSection } from "../theme.slint";
+import { Theme, Message, Messages, TrackRow, NextUp, QualityRow, SeekPreview, SkipKind, Skipped, ChapterRow, StatSection } from "../theme.slint";
 import { SeekPreviewPopup } from "../components/seek_preview.slint";
 import { Icons } from "../icons.slint";
 import { Button, ButtonStyle } from "../components/button.slint";
@@ -10,6 +10,7 @@ import { TrackMenu } from "../components/track_menu.slint";
 import { SpeedMenu } from "../components/speed_menu.slint";
 import { ChapterMenu } from "../components/chapter_menu.slint";
 import { NextEpisodeToast } from "../components/next_episode_toast.slint";
+import { SkipNotice } from "../components/skip_notice.slint";
 import { StatsPanel } from "../components/stats_panel.slint";
 
 export enum PlayerMenu { none, tracks, speed, chapters }
@@ -51,6 +52,8 @@ export component PlayerScreen inherits Rectangle {
     in property <NextUp> next-up;
     in property <SkipKind> skip-kind;
     in property <float> skip-end;
+    // The last segment skipped without asking, shown for a moment with a way back.
+    in property <Skipped> skipped;
     in property <bool> fullscreen;
     // Whether the player turned fullscreen on, so Escape leaves it.
     in property <bool> fullscreen-own;
@@ -72,6 +75,7 @@ export component PlayerScreen inherits Rectangle {
     callback command-next();
     callback command-play-next-now();
     callback command-cancel-next-up();
+    callback command-undo-skip();
     callback command-set-speed(speed: float);
     callback command-step-speed(direction: int);
     callback command-set-quality(index: int);
@@ -166,6 +170,13 @@ export component PlayerScreen inherits Rectangle {
         }
     }
 
+    // Serial of the last skip whose notice timed out or was answered.
+    property <int> skip-notice-done: 0;
+    property <bool> skip-notice-visible: root.skipped.kind != SkipKind.none && root.skipped.serial != root.skip-notice-done && !root.toast-visible && !root.loading && !root.has-error;
+    changed skipped => {
+        skip-notice-timer.restart();
+    }
+
     function skip-segment() {
         if root.skip-visible {
             root.command-seek(root.skip-end);
@@ -183,6 +194,14 @@ export component PlayerScreen inherits Rectangle {
         running: root.stats-visible;
         triggered => {
             root.command-stats();
+        }
+    }
+
+    skip-notice-timer := Timer {
+        interval: 5s;
+        running: root.skip-notice-visible;
+        triggered => {
+            root.skip-notice-done = root.skipped.serial;
         }
     }
 
@@ -490,20 +509,41 @@ export component PlayerScreen inherits Rectangle {
                 }
             }
 
-            if root.skip-visible: Button {
+            // The notice of a skip stacks above the skip button of the next segment.
+            VerticalLayout {
                 width: self.preferred-width;
                 height: self.preferred-height;
                 x: parent.width - self.width - Theme.space-2xl;
                 y: (root.controls-visible ? root.menu-bottom : parent.height - Theme.space-2xl) - self.height;
-                focus-on-click: false;
-                style: ButtonStyle.secondary;
-                icon: Icons.skip-next;
-                label: root.skip-kind == SkipKind.intro ? @tr("Skip intro") : root.skip-kind == SkipKind.recap ? @tr("Skip recap") : root.skip-kind == SkipKind.preview ? @tr("Skip preview") : @tr("Skip credits");
-                drop-shadow-offset-y: 8px;
-                drop-shadow-blur: 12px;
-                drop-shadow-color: Theme.menu-shadow;
-                clicked => {
-                    root.skip-segment();
+                spacing: Theme.space-sm;
+
+                if root.skip-notice-visible: HorizontalLayout {
+                    alignment: end;
+
+                    SkipNotice {
+                        kind: root.skipped.kind;
+                        undo => {
+                            root.skip-notice-done = root.skipped.serial;
+                            root.command-undo-skip();
+                        }
+                    }
+                }
+
+                if root.skip-visible: HorizontalLayout {
+                    alignment: end;
+
+                    Button {
+                        focus-on-click: false;
+                        style: ButtonStyle.secondary;
+                        icon: Icons.skip-next;
+                        label: root.skip-kind == SkipKind.intro ? @tr("Skip intro") : root.skip-kind == SkipKind.recap ? @tr("Skip recap") : root.skip-kind == SkipKind.preview ? @tr("Skip preview") : @tr("Skip credits");
+                        drop-shadow-offset-y: 8px;
+                        drop-shadow-blur: 12px;
+                        drop-shadow-color: Theme.menu-shadow;
+                        clicked => {
+                            root.skip-segment();
+                        }
+                    }
                 }
             }
 

@@ -22,9 +22,11 @@ use super::loader::{LoadFailure, LoadMessage, LoadRequest, LoadStage, Loader, Pr
 use super::media_player::{MediaPlayer, PlayerEvents};
 use super::quality::Quality;
 use super::reporter::{ReportKind, Reporter};
+use super::segments::SkipMemory;
 use super::tracks::{Delivery, TrackMap, subtitle_format};
 use super::types::{
-    PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent, PlaybackTimings, StatsReport,
+    PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent, PlaybackPrefs, PlaybackTimings,
+    StatsReport,
 };
 use crate::error::CoreError;
 use crate::models::Episode;
@@ -108,6 +110,10 @@ pub struct PlaybackController {
     audio_delay: i64,
     /// Set by [`PlaybackHandle::shutdown`]: no new item is loaded.
     closing: Arc<AtomicBool>,
+    /// What the user chose for the end of an episode and for segments.
+    prefs: PlaybackPrefs,
+    /// Segments of the current item already skipped without asking.
+    skips: SkipMemory,
 }
 
 impl PlaybackController {
@@ -170,6 +176,8 @@ impl PlaybackController {
             audio_delay: 0,
             pending: None,
             closing: closing.clone(),
+            prefs: PlaybackPrefs::default(),
+            skips: SkipMemory::default(),
         };
         tokio::spawn(controller.run(message_receiver, expired, loads));
         (
@@ -190,7 +198,10 @@ impl PlaybackController {
     ) {
         loop {
             let deadline = self.next_progress;
-            let countdown = self.countdown.as_ref().map(|countdown| countdown.deadline);
+            let countdown = self
+                .countdown
+                .as_ref()
+                .and_then(|countdown| countdown.deadline);
             let grace = self.pending.as_ref().map(|(_, deadline)| *deadline);
             tokio::select! {
                 message = messages.recv() => match message {
@@ -316,16 +327,28 @@ impl PlaybackController {
         }
     }
 
-    /// Emits the segment offered at the current position when it changed.
+    /// Emits the segment offered at the current position when it changed,
+    /// or skips it when the user asked so and it was not skipped yet.
     fn show_segment(&mut self) {
-        let change = self
-            .current
-            .as_mut()
-            .filter(|current| current.loaded)
-            .and_then(Current::update_segment);
-        if let Some(segment) = change {
-            self.emit(PlaybackEvent::Segment(segment));
+        let Some(current) = self.current.as_mut().filter(|current| current.loaded) else {
+            return;
+        };
+        let Some(segment) = current.update_segment() else {
+            return;
+        };
+        let from = current.position;
+        let skip =
+            segment.filter(|entered| self.prefs.skips(entered.kind) && self.skips.fresh(entered));
+        if let Some(entered) = skip
+            && self.seek(SeekTarget::Absolute(entered.end))
+        {
+            self.skips.skipped(&entered, from);
+            return self.emit(PlaybackEvent::SegmentSkipped {
+                kind: entered.kind,
+                from,
+            });
         }
+        self.emit(PlaybackEvent::Segment(segment));
     }
 
     /// Cancels the next episode countdown, if one runs.
@@ -336,7 +359,15 @@ impl PlaybackController {
     }
 
     fn start_countdown(&mut self, episode: Episode) {
-        let (countdown, event) = Countdown::start(episode, self.timings.next_up_countdown_tick);
+        let (countdown, event) = if self.prefs.autoplay_next {
+            Countdown::start(
+                episode,
+                self.prefs.countdown,
+                self.timings.next_up_countdown_tick,
+            )
+        } else {
+            Countdown::wait(episode)
+        };
         self.countdown = Some(countdown);
         self.emit(event);
     }
@@ -355,7 +386,8 @@ impl PlaybackController {
 
     /// Seeks. A backward seek cancels the next episode countdown, and after a
     /// real end it resumes playback, so the server session starts again.
-    fn seek(&mut self, target: SeekTarget) {
+    /// Returns whether the player took the seek.
+    fn seek(&mut self, target: SeekTarget) -> bool {
         let backward = match target {
             SeekTarget::Backward(_) => true,
             SeekTarget::Forward(_) => false,
@@ -368,10 +400,10 @@ impl PlaybackController {
             self.cancel_countdown();
         }
         if !self.call(self.player.seek(target)) {
-            return;
+            return false;
         }
         let Some(current) = self.current.as_mut() else {
-            return;
+            return true;
         };
         current.seek_pending = true;
         if backward && current.ended {
@@ -379,6 +411,7 @@ impl PlaybackController {
             self.report(ReportKind::Start);
             self.schedule_progress();
         }
+        true
     }
 
     fn siblings(&self) -> Option<&Siblings> {
@@ -391,7 +424,9 @@ impl PlaybackController {
             PlaybackCommand::SetPaused(paused) => {
                 self.call(self.player.set_paused(paused));
             }
-            PlaybackCommand::Seek(target) => self.seek(target),
+            PlaybackCommand::Seek(target) => {
+                self.seek(target);
+            }
             PlaybackCommand::SetSpeed(speed) => {
                 self.call(self.player.set_speed(speed));
             }
@@ -462,7 +497,9 @@ impl PlaybackController {
                 };
                 match siblings.previous.as_ref().map(|episode| episode.id.clone()) {
                     Some(previous) => self.play(previous, PlayMode::Auto),
-                    None => self.seek(SeekTarget::Absolute(Duration::ZERO)),
+                    None => {
+                        self.seek(SeekTarget::Absolute(Duration::ZERO));
+                    }
                 }
             }
             PlaybackCommand::Next => {
@@ -480,6 +517,12 @@ impl PlaybackController {
                 }
             }
             PlaybackCommand::CancelNextUp => self.cancel_countdown(),
+            PlaybackCommand::SetPrefs(prefs) => self.prefs = prefs,
+            PlaybackCommand::UndoSkip => {
+                if let Some(from) = self.skips.undo() {
+                    self.seek(SeekTarget::Absolute(from));
+                }
+            }
             PlaybackCommand::RequestStats => self.report_stats(),
         }
     }
@@ -672,6 +715,7 @@ impl PlaybackController {
         if prepared.resume.is_none() {
             self.reset_delays();
         }
+        self.skips.start(&prepared.item, prepared.resume.is_some());
         self.awaiting_unload = false;
         if let Err(error) = self.player.load(&prepared.media) {
             self.load_failed();

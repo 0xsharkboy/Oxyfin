@@ -63,6 +63,7 @@ pub fn concerns(event: &PlaybackEvent) -> bool {
             | PlaybackEvent::Position(_)
             | PlaybackEvent::Paused(_)
             | PlaybackEvent::Ended
+            | PlaybackEvent::NextUpReady { .. }
             | PlaybackEvent::NextUpCancelled
             | PlaybackEvent::Stopped
             | PlaybackEvent::SessionExpired
@@ -133,7 +134,10 @@ impl Playing {
                     self.ended = true;
                     self.countdown = self.has_next;
                 }
-                PlaybackEvent::NextUpCancelled => self.countdown = false,
+                // Waiting for the user, maybe for long: the screen may sleep.
+                PlaybackEvent::NextUpReady { .. } | PlaybackEvent::NextUpCancelled => {
+                    self.countdown = false;
+                }
                 PlaybackEvent::Error(PlaybackError::Command { .. }) => {}
                 PlaybackEvent::Stopped
                 | PlaybackEvent::SessionExpired
@@ -586,6 +590,33 @@ mod tests {
             paused(true),
         ]));
         assert!(!held_after(&[active, ready_with(false), ended]));
+    }
+
+    #[test]
+    fn waiting_for_the_user_to_start_the_next_episode_lets_the_screen_sleep() {
+        let offer = PlaybackEvent::NextUpReady {
+            episode: Box::new(oxyfin_core::Episode {
+                id: ItemId::from("b"),
+                series_id: ItemId::from("s"),
+                series_name: None,
+                season_id: None,
+                title: "B".into(),
+                season_number: None,
+                number: None,
+                label: None,
+                overview: None,
+                thumb: None,
+                duration: None,
+                user: oxyfin_core::UserState::default(),
+            }),
+        };
+        assert!(concerns(&offer));
+        assert!(!held_after(&[
+            Update::Active(true),
+            ready_with(true),
+            event(PlaybackEvent::Ended),
+            event(offer),
+        ]));
     }
 
     #[test]
