@@ -3843,3 +3843,48 @@ async fn remembered_audio_is_asked_of_a_transcode() {
     assert_eq!(audio, [(2, false), (3, true)]);
     assert_eq!(h.loads().len(), 1);
 }
+
+#[tokio::test]
+async fn next_sent_before_a_remembered_audio_request_is_kept() {
+    let episode = EPISODES[0];
+    let route = format!("/Items/{episode}/PlaybackInfo");
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(&route))
+        .and(body_partial_json(json!({ "AudioStreamIndex": 3 })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(episode_transcode(episode, 3)))
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(&route))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(episode_transcode(episode, 2))
+                .set_delay(Duration::from_millis(300)),
+        )
+        .with_priority(2)
+        .mount(&mock)
+        .await;
+    let mut h = harness_in(
+        mock,
+        episode_timings(Duration::from_secs(3600)),
+        remembered_french(),
+    )
+    .await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(episode),
+        mode: PlayMode::FromStart,
+    });
+    wait_requests(&h.mock, &route, 1).await;
+    h.handle.send(PlaybackCommand::Next);
+    h.wait_load(1).await;
+    assert_eq!(bodies(&h.mock, &route).await.len(), 2);
+    h.loaded_with(transcode_tracks()).await;
+    wait_loads(&h, 2).await;
+    assert!(
+        h.loaded_ids()[1].contains(EPISODES[1]),
+        "{:?}",
+        h.loaded_ids()
+    );
+}
