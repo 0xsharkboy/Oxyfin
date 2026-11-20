@@ -93,8 +93,10 @@ export component PersonScreen inherits Rectangle {
         if p.birth-year <= 0 {
             return p.birth-place == "" ? "" : @tr("Born in {}", p.birth-place);
         }
+        // The first day of a month has its own entry, for languages that write it as an ordinal.
+        let day = p.birth-day == 1 ? @tr("First day of a month" => "{}", 1) : "\{p.birth-day}";
         // Day, month name and year of the birth date.
-        let date = @tr("{0} {1} {2}", p.birth-day, root.month-name(p.birth-month), p.birth-year);
+        let date = @tr("{0} {1} {2}", day, root.month-name(p.birth-month), p.birth-year);
         p.birth-place == "" ? @tr("Born {}", date) : @tr("Born {} in {}", date, p.birth-place)
     }
 

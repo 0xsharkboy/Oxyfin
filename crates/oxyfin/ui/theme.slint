@@ -246,6 +246,11 @@ export enum Message {
 }
 
 export global Messages {
+    // The kind named on the cards of the series of a person page.
+    public pure function series-kind() -> string {
+        @tr("Series")
+    }
+
     public pure function server-found(name: string, version: string) -> string {
         if name.is-empty {
             return @tr("Server found (Jellyfin {})", version);

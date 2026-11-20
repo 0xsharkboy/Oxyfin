@@ -1,4 +1,5 @@
-//! Switches the interface to French: the sign-in label, the home page and the movie actions.
+//! Switches the interface to French: the sign-in label, the home page, the movie actions and
+//! a birth date.
 
 mod common;
 
@@ -11,9 +12,10 @@ use oxyfin::{Screen, ServerState};
 use slint::{ComponentHandle, LogicalSize};
 use std::time::Duration;
 use wiremock::Mock;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{method, path, query_param};
 
 const MOVIE: &str = "76282b1c408f374beeee50519e9157a4";
+const ACTOR: &str = "11111111111111111111111111111111";
 
 #[test]
 fn the_interface_follows_the_selected_language() {
@@ -28,6 +30,21 @@ fn the_interface_follows_the_selected_language() {
         Mock::given(method("GET"))
             .and(path(format!("/Items/{MOVIE}")))
             .respond_with(json(fixture("item_movie")))
+            .mount(&mock)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/Items"))
+            .and(query_param("personIds", ACTOR))
+            .respond_with(json(r#"{"Items":[],"TotalRecordCount":0,"StartIndex":0}"#))
+            .with_priority(1)
+            .mount(&mock)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(format!("/Items/{ACTOR}")))
+            .respond_with(json(format!(
+                r#"{{"Id":"{ACTOR}","Name":"Ada Actor","Type":"Person",
+                "PremiereDate":"1984-03-01T00:00:00.0000000Z"}}"#
+            )))
             .mount(&mock)
             .await;
         mock
@@ -97,6 +114,12 @@ fn the_interface_follows_the_selected_language() {
                 }
             }
         }
+        window.window().set_size(LogicalSize::new(1280., 800.));
+        pause(Duration::from_millis(200)).await;
+        window.invoke_movie_open_person(ACTOR.into());
+        wait_until("the person", || window.get_screen() == Screen::Person).await?;
+        // French writes the first day of a month as an ordinal.
+        wait_visible(&window, "Né(e) le 1er mars 1984").await?;
         Ok(())
     });
 }
