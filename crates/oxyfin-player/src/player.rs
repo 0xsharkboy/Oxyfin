@@ -360,16 +360,11 @@ impl Player {
             "hlg" => "HLG",
             _ => return None,
         };
-        let target = self.text("video-target-params/gamma");
-        if target.is_none_or(|gamma| gamma == "pq" || gamma == "hlg") {
-            return Some(format.to_owned());
-        }
-        Some(
-            match self.text("tone-mapping").filter(|curve| curve != "auto") {
-                Some(curve) => format!("{format} → SDR ({curve})"),
-                None => format!("{format} → SDR"),
-            },
-        )
+        let tone_mapped = self
+            .text("video-target-params/gamma")
+            .is_some_and(|gamma| gamma != "pq" && gamma != "hlg");
+        let curve = self.text("tone-mapping");
+        Some(hdr_label(format, tone_mapped, curve.as_deref()))
     }
 
     fn text(&self, name: &str) -> Option<String> {
@@ -532,6 +527,16 @@ fn fit((width, height): (u32, u32), (area_width, area_height): (u32, u32)) -> (u
     )
 }
 
+/// `format`, followed by `, tone mapped` and the curve when the output is SDR, as in the
+/// reference design; mpv's `auto` curve is not named.
+fn hdr_label(format: &str, tone_mapped: bool, curve: Option<&str>) -> String {
+    match (tone_mapped, curve.filter(|curve| *curve != "auto")) {
+        (false, _) => format.to_owned(),
+        (true, Some(curve)) => format!("{format}, tone mapped ({curve})"),
+        (true, None) => format!("{format}, tone mapped"),
+    }
+}
+
 /// Display name of an mpv audio output driver.
 fn output_name(ao: &str) -> String {
     match ao {
@@ -627,6 +632,17 @@ mod tests {
         assert_eq!(fit((1920, 1080), (1280, 720)), (1280, 720));
         assert_eq!(fit((1920, 1036), (1280, 720)), (1280, 691));
         assert_eq!(fit((1440, 1080), (1280, 720)), (960, 720));
+    }
+
+    #[test]
+    fn hdr_label_names_the_tone_mapping_like_the_design() {
+        assert_eq!(hdr_label("HDR10", false, Some("bt.2390")), "HDR10");
+        assert_eq!(
+            hdr_label("HDR10", true, Some("bt.2390")),
+            "HDR10, tone mapped (bt.2390)"
+        );
+        assert_eq!(hdr_label("HLG", true, Some("auto")), "HLG, tone mapped");
+        assert_eq!(hdr_label("HLG", true, None), "HLG, tone mapped");
     }
 
     #[test]
