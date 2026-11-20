@@ -1,5 +1,6 @@
 //! Image loading: bytes from the cache decoded off the Slint thread, then shown as a `slint::Image`.
 
+use std::cell::RefCell;
 use std::collections::{HashSet, VecDeque};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -8,6 +9,7 @@ use crate::app::App;
 use crate::state::{GenerationId, Msg};
 use oxyfin_core::{CoreError, ImageCache, ImageRef, ImageSize, TrickplaySheet};
 use slint::{Rgba8Pixel, SharedPixelBuffer};
+use tokio::task::AbortHandle;
 
 /// Decodes JPEG, PNG or WebP bytes into RGBA pixels; `None` for anything else.
 pub fn decode(bytes: &[u8]) -> Option<SharedPixelBuffer<Rgba8Pixel>> {
@@ -21,7 +23,8 @@ pub fn decode(bytes: &[u8]) -> Option<SharedPixelBuffer<Rgba8Pixel>> {
 
 /// Fetches `image` at `size` and decodes it on the runtime, then calls `apply`
 /// with the result on the Slint thread. A fetch rejected with 401 ends the
-/// session of generation `id`; any other failure shows nothing.
+/// session of generation `id`; any other failure shows nothing. Aborting the
+/// returned handle drops the load and frees its download slot.
 pub fn load_into(
     app: &App,
     id: GenerationId,
@@ -29,7 +32,7 @@ pub fn load_into(
     image: ImageRef,
     size: ImageSize,
     apply: impl FnOnce(slint::Image) + 'static,
-) {
+) -> AbortHandle {
     let images = Arc::clone(images);
     app.spawn(
         async move {
@@ -62,7 +65,27 @@ pub fn load_into(
             Loaded::Expired => app.dispatch(Msg::Expired(id)),
             Loaded::Failed => {}
         },
-    );
+    )
+}
+
+/// The image loads of one page, aborted together when the page shows something else.
+#[derive(Default)]
+pub(crate) struct PageLoads(RefCell<Vec<AbortHandle>>);
+
+impl PageLoads {
+    /// Keeps `load` to abort it with the others.
+    pub(crate) fn track(&self, load: AbortHandle) {
+        let mut loads = self.0.borrow_mut();
+        loads.retain(|kept| !kept.is_finished());
+        loads.push(load);
+    }
+
+    /// Aborts every load still running.
+    pub(crate) fn abort(&self) {
+        for load in self.0.borrow_mut().drain(..) {
+            load.abort();
+        }
+    }
 }
 
 /// The `width` by `height` pixels of `pixels` at `x`, `y`, as an image;
@@ -191,6 +214,27 @@ mod tests {
     use super::*;
     use image::{ImageFormat, Rgba, RgbaImage};
     use std::io::Cursor;
+
+    #[test]
+    fn page_loads_abort_every_running_load() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        let loads = PageLoads::default();
+        let running: Vec<_> = (0..3)
+            .map(|_| runtime.spawn(std::future::pending::<()>()))
+            .collect();
+        for task in &running {
+            loads.track(task.abort_handle());
+        }
+        loads.abort();
+        for task in running {
+            let error = runtime.block_on(task).unwrap_err();
+            assert!(error.is_cancelled());
+        }
+        assert!(loads.0.borrow().is_empty());
+    }
 
     #[test]
     fn crop_copies_the_tile_and_rejects_one_outside() {

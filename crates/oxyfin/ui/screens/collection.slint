@@ -38,6 +38,8 @@ export component CollectionScreen inherits Rectangle {
     in property <[CardData]> items;
     // False once another screen is shown: the page being left must not take the focus back.
     in property <bool> active: true;
+    // Scroll offset, kept by the window while another screen shows; Rust puts it back to the top.
+    in-out property <length> viewport-y <=> flick.content-y;
     callback play();
     callback toggle-watched();
     callback toggle-favorite();
@@ -63,7 +65,6 @@ export component CollectionScreen inherits Rectangle {
     // Another box set may replace this one without a new page, and the clicked card took the focus.
     changed loaded => {
         if !self.loaded && self.active {
-            flick.content-y = 0;
             keys.focus();
         }
     }

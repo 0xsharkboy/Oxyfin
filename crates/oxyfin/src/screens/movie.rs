@@ -5,17 +5,18 @@ use std::rc::Rc;
 
 use oxyfin_api::ItemId;
 use oxyfin_core::{CollectionLink, CoreError, MovieDetails, PlayMode, UserState};
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 
 use crate::app::App;
-use crate::images::load_into;
+use crate::back_cache::Parked;
+use crate::images::{PageLoads, load_into};
 use crate::present::{clock, core_error_message, image_size};
-use crate::screens::cast::cast_cards;
+use crate::screens::cast::{cast_cards, load_photos};
 use crate::screens::home::{banner_artwork, banner_box};
 use crate::screens::library::open_detail;
-use crate::screens::similar::SimilarRow;
+use crate::screens::similar::{ParkedRow, SimilarRow};
 use crate::state::{GenerationId, Msg, Screen};
-use crate::{AppWindow, Messages, MovieData};
+use crate::{AppWindow, Messages, MovieData, PersonCardData};
 
 // Logical size of the poster, as drawn by `DetailHeader`.
 const POSTER_ARTWORK: (f32, f32) = (240.0, 360.0);
@@ -26,48 +27,77 @@ enum Flag {
     Favorite,
 }
 
+/// A movie page kept for Back.
+pub(crate) struct ParkedMovie {
+    details: MovieDetails,
+    people: Rc<VecModel<PersonCardData>>,
+    similar: ParkedRow,
+    collections: Option<Vec<CollectionLink>>,
+    poster: Image,
+    backdrop: Image,
+    viewport_y: f32,
+}
+
+fn has_pixels(image: &Image) -> bool {
+    image.size().width > 0
+}
+
 /// State of the movie page: the movie shown and the answers still expected.
 #[derive(Default)]
 pub(crate) struct MovieController {
     instance: Rc<Cell<u64>>,
     load: Cell<u64>,
     current: RefCell<Option<String>>,
+    depth: Cell<usize>,
     details: RefCell<Option<MovieDetails>>,
     images_requested: Cell<bool>,
+    people: RefCell<Rc<VecModel<PersonCardData>>>,
     similar: SimilarRow,
-    collection: Rc<RefCell<Option<CollectionLink>>>,
+    // `None` until the box sets of the movie are known.
+    collections: Rc<RefCell<Option<Vec<CollectionLink>>>>,
+    loads: PageLoads,
 }
 
 impl MovieController {
-    /// A screen was shown: a movie page loads when it is not the movie already shown.
+    /// A screen was shown: a movie page loads when it is not the page already shown, or comes
+    /// back as it was left when Back returns to it.
     pub(crate) fn shown(&self, app: &Rc<App>, screen: &Screen) {
         let Screen::Movie(id) = screen else { return };
-        if self.current.borrow().as_deref() == Some(id.as_str()) {
+        let depth = app.top_depth();
+        if self.current.borrow().as_deref() == Some(id.as_str()) && self.depth.get() == depth {
             return;
         }
+        self.park(app);
         self.clear(app);
         *self.current.borrow_mut() = Some(id.clone());
-        self.request(app);
+        self.depth.set(depth);
+        match app.unpark(screen) {
+            Some(Parked::Movie(page)) => self.restore(app, *page),
+            _ => self.request(app),
+        }
     }
 
     /// A screen left the stack: the movie page frees its content.
     pub(crate) fn discard(&self, app: &App, screen: &Screen) {
-        if matches!(screen, Screen::Movie(id) if self.current.borrow().as_deref() == Some(id.as_str()))
-        {
+        let current = matches!(screen, Screen::Movie(id) if self.current.borrow().as_deref() == Some(id.as_str()));
+        if current && !app.holds(self.depth.get(), screen) {
             self.clear(app);
         }
     }
 
-    /// The page came back from the player: the position may have changed.
+    /// The page came back from the player or holds stale data: the position may have changed.
     pub(crate) fn refresh(&self, app: &Rc<App>) {
         if self.current.borrow().is_some() {
+            self.similar.reload();
             self.request(app);
         }
     }
 
     /// Asks again after the movie failed to load.
     pub(crate) fn retry(&self, app: &Rc<App>) {
-        self.refresh(app);
+        if self.current.borrow().is_some() {
+            self.request(app);
+        }
     }
 
     /// Plays the movie, resuming it or starting over.
@@ -87,9 +117,13 @@ impl MovieController {
         self.similar.open(app, id);
     }
 
-    /// Opens the page of the box set the movie belongs to.
-    pub(crate) fn open_collection(&self, app: &Rc<App>) {
-        let link = self.collection.borrow().clone();
+    /// Opens the page of the box set `index` of the links of the movie.
+    pub(crate) fn open_collection(&self, app: &Rc<App>, index: usize) {
+        let link = self
+            .collections
+            .borrow()
+            .as_ref()
+            .and_then(|links| links.get(index).cloned());
         if let Some(link) = link {
             open_detail(app, Screen::Collection(link.id.as_str().to_owned()));
         }
@@ -105,17 +139,78 @@ impl MovieController {
         self.toggle(app, Flag::Favorite);
     }
 
+    /// Keeps the loaded page shown for Back, before another movie replaces it.
+    fn park(&self, app: &App) {
+        let Some(movie) = self.current.borrow().clone() else {
+            return;
+        };
+        let (Some(details), Some(window)) = (self.details.borrow().clone(), app.window()) else {
+            return;
+        };
+        let page = ParkedMovie {
+            details,
+            people: Rc::clone(&self.people.borrow()),
+            similar: self.similar.park(),
+            collections: self.collections.borrow().clone(),
+            poster: window.get_movie_poster(),
+            backdrop: window.get_movie_backdrop(),
+            viewport_y: window.get_movie_viewport_y(),
+        };
+        app.park(
+            self.depth.get(),
+            Screen::Movie(movie),
+            Parked::Movie(Box::new(page)),
+        );
+    }
+
+    /// Shows a kept page again without asking the server, loading only what it still misses.
+    fn restore(&self, app: &Rc<App>, page: ParkedMovie) {
+        let (Some((id, ..)), Some(window)) = (app.services(), app.window()) else {
+            return;
+        };
+        let movie = page.details.summary.id.as_str().to_owned();
+        *self.details.borrow_mut() = Some(page.details);
+        *self.people.borrow_mut() = Rc::clone(&page.people);
+        window.set_movie_people(ModelRc::from(page.people));
+        window.set_movie_poster(page.poster.clone());
+        window.set_movie_backdrop(page.backdrop.clone());
+        self.images_requested.set(true);
+        self.publish(app, id, &window);
+        if let Some(details) = self.details.borrow().as_ref() {
+            let people = Rc::clone(&self.people.borrow());
+            load_photos(app, id, &window, &people, &details.cast, &self.loads);
+        }
+        self.load_images(
+            app,
+            id,
+            &window,
+            !has_pixels(&page.poster),
+            !has_pixels(&page.backdrop),
+        );
+        match page.collections {
+            Some(links) => self.show_collections(&window, links),
+            None => self.request_collection(app, id, &ItemId::from(movie.as_str())),
+        }
+        self.similar
+            .restore(app, id, &window, page.similar, AppWindow::set_movie_similar);
+        self.similar
+            .request(app, &movie, AppWindow::set_movie_similar);
+        window.set_movie_viewport_y(page.viewport_y);
+    }
+
     fn clear(&self, app: &App) {
+        self.loads.abort();
         self.instance.set(self.instance.get() + 1);
         self.load.set(self.load.get() + 1);
         self.current.borrow_mut().take();
         self.details.borrow_mut().take();
         self.images_requested.set(false);
+        *self.people.borrow_mut() = Rc::default();
         self.similar.clear(app, AppWindow::set_movie_similar);
-        self.collection.borrow_mut().take();
+        self.collections.borrow_mut().take();
         if let Some(window) = app.window() {
             window.set_movie_people(ModelRc::default());
-            window.set_movie_collection(SharedString::default());
+            window.set_movie_collections(ModelRc::default());
             window.set_movie_loaded(false);
             window.set_movie_loading(false);
             window.set_movie_error(SharedString::default());
@@ -123,6 +218,7 @@ impl MovieController {
             window.set_movie_data(MovieData::default());
             window.set_movie_poster(Default::default());
             window.set_movie_backdrop(Default::default());
+            window.set_movie_viewport_y(0.0);
         }
     }
 
@@ -178,6 +274,8 @@ impl MovieController {
         }
     }
 
+    /// Shows the details; the first time, also starts loading the cast, the box sets and the
+    /// artwork.
     fn publish(&self, app: &Rc<App>, id: GenerationId, window: &AppWindow) {
         let details = self.details.borrow();
         let Some(details) = details.as_ref() else {
@@ -188,42 +286,68 @@ impl MovieController {
         if self.images_requested.replace(true) {
             return;
         }
-        window.set_movie_people(cast_cards(app, id, window, &details.cast));
-        self.request_collection(app, id, &details.summary.id);
-        let Some((_, _, images)) = app.services() else {
+        let people = cast_cards(&details.cast);
+        *self.people.borrow_mut() = Rc::clone(&people);
+        window.set_movie_people(ModelRc::from(Rc::clone(&people)));
+        load_photos(app, id, window, &people, &details.cast, &self.loads);
+        if self.collections.borrow().is_none() {
+            self.request_collection(app, id, &details.summary.id);
+        }
+        self.load_images(app, id, window, true, true);
+    }
+
+    /// Loads the poster and the backdrop of the movie, as asked.
+    fn load_images(
+        &self,
+        app: &Rc<App>,
+        id: GenerationId,
+        window: &AppWindow,
+        poster: bool,
+        backdrop: bool,
+    ) {
+        let details = self.details.borrow();
+        let (Some(details), Some((_, _, images))) = (details.as_ref(), app.services()) else {
             return;
         };
         let scale = window.window().scale_factor();
         let instance = self.instance.get();
-        if let Some(poster) = details.summary.poster.clone() {
+        if let Some(image) = details.summary.poster.clone().filter(|_| poster) {
             let size = image_size(POSTER_ARTWORK.0, POSTER_ARTWORK.1, scale);
             let (target, current) = (window.as_weak(), Rc::clone(&self.instance));
-            load_into(app, id, &images, poster, size, move |image| {
-                if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
-                    window.set_movie_poster(image);
-                }
-            });
+            self.loads
+                .track(load_into(app, id, &images, image, size, move |image| {
+                    if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
+                        window.set_movie_poster(image);
+                    }
+                }));
         }
-        if let Some(backdrop) = banner_artwork(&details.summary) {
+        if let Some(image) = banner_artwork(&details.summary).filter(|_| backdrop) {
             let width = window.window().size().width as f32 / scale;
             let (width, height) = banner_box(width);
             let size = image_size(width, height, scale);
             let (target, current) = (window.as_weak(), Rc::clone(&self.instance));
-            load_into(app, id, &images, backdrop, size, move |image| {
-                if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
-                    window.set_movie_backdrop(image);
-                }
-            });
+            self.loads
+                .track(load_into(app, id, &images, image, size, move |image| {
+                    if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
+                        window.set_movie_backdrop(image);
+                    }
+                }));
         }
     }
 
-    /// Asks for the box sets of `movie`; the first one is linked, a failure hides the link.
+    fn show_collections(&self, window: &AppWindow, links: Vec<CollectionLink>) {
+        let names: Vec<SharedString> = links.iter().map(|link| link.name.as_str().into()).collect();
+        window.set_movie_collections(ModelRc::new(VecModel::from(names)));
+        *self.collections.borrow_mut() = Some(links);
+    }
+
+    /// Asks for the box sets of `movie`, each linked; a failure hides the links.
     fn request_collection(&self, app: &Rc<App>, id: GenerationId, movie: &ItemId) {
         let Some((_, catalog, _)) = app.services() else {
             return;
         };
         let (movie, instance) = (movie.clone(), self.instance.get());
-        let (current, slot) = (Rc::clone(&self.instance), Rc::clone(&self.collection));
+        let current = Rc::clone(&self.instance);
         app.spawn(
             async move { catalog.collections_of(&movie).await },
             move |app, result| {
@@ -232,13 +356,9 @@ impl MovieController {
                 }
                 match result {
                     Ok(links) => {
-                        let Some(link) = links.into_iter().next() else {
-                            return;
-                        };
                         if let Some(window) = app.window() {
-                            window.set_movie_collection(link.name.as_str().into());
+                            app.movie.show_collections(&window, links);
                         }
-                        *slot.borrow_mut() = Some(link);
                     }
                     Err(CoreError::SessionExpired) => app.dispatch(Msg::Expired(id)),
                     Err(error) => log::warn!("cannot load the collections of the movie: {error}"),

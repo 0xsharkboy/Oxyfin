@@ -5,10 +5,11 @@ use std::rc::Rc;
 
 use oxyfin_api::ItemId;
 use oxyfin_core::{CollectionDetails, CoreError, ItemKind, ItemSummary, PlayMode, UserState};
-use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 
 use crate::app::App;
-use crate::images::load_into;
+use crate::back_cache::Parked;
+use crate::images::{PageLoads, load_into};
 use crate::present::{core_error_message, image_size};
 use crate::screens::home::{banner_artwork, banner_box};
 use crate::screens::library::{cards_with_posters, load_posters, open_detail, target_of};
@@ -66,31 +67,87 @@ pub(crate) struct CollectionController {
     instance: Rc<Cell<u64>>,
     load: Cell<u64>,
     current: RefCell<Option<String>>,
+    depth: Cell<usize>,
     details: RefCell<Option<CollectionDetails>>,
     cards: Rc<VecModel<CardData>>,
     images_requested: Cell<bool>,
+    loads: PageLoads,
+}
+
+/// A collection page kept for Back.
+pub(crate) struct ParkedCollection {
+    details: CollectionDetails,
+    cards: Vec<CardData>,
+    poster: Image,
+    backdrop: Image,
+    viewport_y: f32,
 }
 
 impl CollectionController {
-    /// A screen was shown: a collection page loads when it is not the box set already shown.
+    /// A screen was shown: a collection page loads when it is not the page already shown, or
+    /// comes back as it was left when Back returns to it.
     pub(crate) fn shown(&self, app: &Rc<App>, screen: &Screen) {
         let Screen::Collection(id) = screen else {
             return;
         };
-        if self.current.borrow().as_deref() == Some(id.as_str()) {
+        let depth = app.top_depth();
+        if self.current.borrow().as_deref() == Some(id.as_str()) && self.depth.get() == depth {
             return;
         }
+        self.park(app);
         self.clear(app);
         *self.current.borrow_mut() = Some(id.clone());
-        self.request(app);
+        self.depth.set(depth);
+        match app.unpark(screen) {
+            Some(Parked::Collection(page)) => self.restore(app, *page),
+            _ => self.request(app),
+        }
     }
 
     /// A screen left the stack: the collection page frees its content.
     pub(crate) fn discard(&self, app: &App, screen: &Screen) {
-        if matches!(screen, Screen::Collection(id) if self.current.borrow().as_deref() == Some(id.as_str()))
-        {
+        let current = matches!(screen, Screen::Collection(id) if self.current.borrow().as_deref() == Some(id.as_str()));
+        if current && !app.holds(self.depth.get(), screen) {
             self.clear(app);
         }
+    }
+
+    /// Keeps the loaded page shown for Back, before another box set replaces it.
+    fn park(&self, app: &App) {
+        let Some(collection) = self.current.borrow().clone() else {
+            return;
+        };
+        let (Some(details), Some(window)) = (self.details.borrow_mut().take(), app.window()) else {
+            return;
+        };
+        let page = ParkedCollection {
+            details,
+            cards: self.cards.iter().collect(),
+            poster: window.get_collection_poster(),
+            backdrop: window.get_collection_backdrop(),
+            viewport_y: window.get_collection_viewport_y(),
+        };
+        app.park(
+            self.depth.get(),
+            Screen::Collection(collection),
+            Parked::Collection(Box::new(page)),
+        );
+    }
+
+    /// Shows a kept page again without asking the server, loading only what it still misses.
+    fn restore(&self, app: &Rc<App>, page: ParkedCollection) {
+        let (Some((id, ..)), Some(window)) = (app.services(), app.window()) else {
+            return;
+        };
+        *self.details.borrow_mut() = Some(page.details);
+        self.cards.set_vec(page.cards);
+        let artwork = page.poster.size().width > 0 && page.backdrop.size().width > 0;
+        window.set_collection_poster(page.poster);
+        window.set_collection_backdrop(page.backdrop);
+        // A page left before its artwork came asks for it again, from the image cache.
+        self.images_requested.set(artwork);
+        self.publish(app, id, &window);
+        window.set_collection_viewport_y(page.viewport_y);
     }
 
     /// The page came back from the player or from a changed item: the watched state may differ.
@@ -141,6 +198,7 @@ impl CollectionController {
     }
 
     fn clear(&self, app: &App) {
+        self.loads.abort();
         self.instance.set(self.instance.get() + 1);
         self.load.set(self.load.get() + 1);
         self.current.borrow_mut().take();
@@ -156,6 +214,7 @@ impl CollectionController {
             window.set_collection_items(ModelRc::default());
             window.set_collection_poster(Default::default());
             window.set_collection_backdrop(Default::default());
+            window.set_collection_viewport_y(0.0);
         }
     }
 
@@ -219,7 +278,7 @@ impl CollectionController {
         self.cards.set_vec(cards);
         window.set_collection_items(ModelRc::from(Rc::clone(&self.cards)));
         window.set_collection_loaded(true);
-        load_posters(app, id, window, &self.cards, &missing);
+        load_posters(app, id, window, &self.cards, &missing, &self.loads);
         if self.images_requested.replace(true) {
             return;
         }
@@ -231,22 +290,24 @@ impl CollectionController {
         if let Some(poster) = details.summary.poster.clone() {
             let size = image_size(POSTER_ARTWORK.0, POSTER_ARTWORK.1, scale);
             let (target, current) = (window.as_weak(), Rc::clone(&self.instance));
-            load_into(app, id, &images, poster, size, move |image| {
-                if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
-                    window.set_collection_poster(image);
-                }
-            });
+            self.loads
+                .track(load_into(app, id, &images, poster, size, move |image| {
+                    if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
+                        window.set_collection_poster(image);
+                    }
+                }));
         }
         if let Some(backdrop) = banner_artwork(&details.summary) {
             let width = window.window().size().width as f32 / scale;
             let (width, height) = banner_box(width);
             let size = image_size(width, height, scale);
             let (target, current) = (window.as_weak(), Rc::clone(&self.instance));
-            load_into(app, id, &images, backdrop, size, move |image| {
-                if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
-                    window.set_collection_backdrop(image);
-                }
-            });
+            self.loads
+                .track(load_into(app, id, &images, backdrop, size, move |image| {
+                    if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
+                        window.set_collection_backdrop(image);
+                    }
+                }));
         }
     }
 

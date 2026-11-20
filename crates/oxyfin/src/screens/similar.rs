@@ -5,11 +5,12 @@ use std::rc::Rc;
 
 use oxyfin_api::ItemId;
 use oxyfin_core::{CoreError, ItemSummary};
-use slint::{ModelRc, VecModel};
+use slint::{Model, ModelRc, VecModel};
 
 use crate::app::App;
+use crate::images::PageLoads;
 use crate::screens::library::{cards_with_posters, load_posters, open_detail, target_of};
-use crate::state::Msg;
+use crate::state::{GenerationId, Msg};
 use crate::{AppWindow, CardData};
 
 /// Number of similar items asked for.
@@ -18,26 +19,83 @@ const LIMIT: u32 = 12;
 /// Window property a page shows its row in.
 pub(crate) type Publish = fn(&AppWindow, ModelRc<CardData>);
 
-/// Items similar to the item of a detail page, asked for once per page.
+/// A row kept with its page for Back.
+pub(crate) struct ParkedRow {
+    items: Vec<ItemSummary>,
+    cards: Rc<VecModel<CardData>>,
+    answered: bool,
+}
+
+/// Items similar to the item of a detail page, asked for once per page and again when the
+/// page is refreshed.
 #[derive(Default)]
 pub(crate) struct SimilarRow {
     instance: Rc<Cell<u64>>,
     requested: Cell<bool>,
+    answered: Rc<Cell<bool>>,
     items: Rc<RefCell<Vec<ItemSummary>>>,
+    cards: RefCell<Rc<VecModel<CardData>>>,
+    loads: Rc<PageLoads>,
 }
 
 impl SimilarRow {
     /// Forgets the row of the previous item.
     pub(crate) fn clear(&self, app: &App, publish: Publish) {
+        self.loads.abort();
         self.instance.set(self.instance.get() + 1);
         self.requested.set(false);
+        self.answered.set(false);
         self.items.borrow_mut().clear();
+        *self.cards.borrow_mut() = Rc::default();
         if let Some(window) = app.window() {
             publish(&window, ModelRc::default());
         }
     }
 
-    /// Asks for the items similar to `item` unless already asked; a failure leaves the row hidden.
+    /// Hands the row over to be kept with its page; `clear` must follow.
+    pub(crate) fn park(&self) -> ParkedRow {
+        ParkedRow {
+            items: self.items.take(),
+            cards: Rc::clone(&self.cards.borrow()),
+            answered: self.answered.get(),
+        }
+    }
+
+    /// Shows a row kept with its page again, loading the posters it still misses. A row whose
+    /// answer had not come yet is asked for again by the next `request`.
+    pub(crate) fn restore(
+        &self,
+        app: &Rc<App>,
+        id: GenerationId,
+        window: &AppWindow,
+        row: ParkedRow,
+        publish: Publish,
+    ) {
+        self.answered.set(row.answered);
+        self.requested.set(row.answered);
+        let missing: Vec<ItemSummary> = row
+            .items
+            .iter()
+            .filter(|item| {
+                !row.cards
+                    .iter()
+                    .any(|card| card.has_image && card.id == item.id.as_str())
+            })
+            .cloned()
+            .collect();
+        *self.items.borrow_mut() = row.items;
+        publish(window, ModelRc::from(Rc::clone(&row.cards)));
+        load_posters(app, id, window, &row.cards, &missing, &self.loads);
+        *self.cards.borrow_mut() = row.cards;
+    }
+
+    /// Lets the next `request` ask again, keeping the posters already shown.
+    pub(crate) fn reload(&self) {
+        self.requested.set(false);
+    }
+
+    /// Asks for the items similar to `item` unless already asked; a failure leaves the row as
+    /// it was.
     pub(crate) fn request(&self, app: &Rc<App>, item: &str, publish: Publish) {
         if self.requested.replace(true) {
             return;
@@ -47,7 +105,13 @@ impl SimilarRow {
         };
         let item = ItemId::from(item);
         let instance = self.instance.get();
-        let (current, items) = (Rc::clone(&self.instance), Rc::clone(&self.items));
+        let (current, items, loads, answered) = (
+            Rc::clone(&self.instance),
+            Rc::clone(&self.items),
+            Rc::clone(&self.loads),
+            Rc::clone(&self.answered),
+        );
+        let cards = Rc::clone(&self.cards.borrow());
         app.spawn(
             async move { catalog.similar(&item, LIMIT).await },
             move |app, result| {
@@ -57,11 +121,13 @@ impl SimilarRow {
                 match result {
                     Ok(found) => {
                         let Some(window) = app.window() else { return };
-                        let (cards, missing) = cards_with_posters(&found, &[]);
-                        let cards = Rc::new(VecModel::from(cards));
+                        let previous: Vec<CardData> = cards.iter().collect();
+                        let (shown, missing) = cards_with_posters(&found, &previous);
+                        cards.set_vec(shown);
                         *items.borrow_mut() = found;
+                        answered.set(true);
                         publish(&window, ModelRc::from(Rc::clone(&cards)));
-                        load_posters(app, id, &window, &cards, &missing);
+                        load_posters(app, id, &window, &cards, &missing, &loads);
                     }
                     Err(CoreError::SessionExpired) => app.dispatch(Msg::Expired(id)),
                     Err(error) => log::warn!("cannot load similar items: {error}"),

@@ -15,6 +15,7 @@ use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode};
 use tokio::runtime::Handle;
 use tokio::task::{AbortHandle, JoinHandle};
 
+use crate::back_cache::{BackCache, Parked};
 use crate::generation::Generation;
 #[cfg(feature = "mpv")]
 use crate::generation::{Route, route};
@@ -73,6 +74,7 @@ pub struct App {
     pending_stops: Cell<u32>,
     notice_timer: Timer,
     sheets: RefCell<crate::images::SheetCache>,
+    back_cache: RefCell<BackCache<Parked>>,
     #[cfg(feature = "mpv")]
     video: crate::video::VideoSource,
     #[cfg(feature = "mpv")]
@@ -118,6 +120,7 @@ impl App {
             pending_stops: Cell::new(0),
             notice_timer: Timer::default(),
             sheets: RefCell::default(),
+            back_cache: RefCell::default(),
             #[cfg(feature = "mpv")]
             video: Default::default(),
             #[cfg(feature = "mpv")]
@@ -167,6 +170,36 @@ impl App {
 
     pub(crate) fn manager(&self) -> Arc<SessionManager> {
         Arc::clone(&self.manager)
+    }
+
+    /// Depth of the current screen in the stack, 0 for the root.
+    pub(crate) fn top_depth(&self) -> usize {
+        self.state.borrow().stack().len().saturating_sub(1)
+    }
+
+    /// Whether the stack holds `screen` at `depth`.
+    pub(crate) fn holds(&self, depth: usize, screen: &Screen) -> bool {
+        self.state.borrow().stack().get(depth) == Some(screen)
+    }
+
+    /// Keeps `page`, the content of `screen` at `depth`, for Back to show it again; nothing is
+    /// kept for a screen that left that place or without a generation.
+    pub(crate) fn park(&self, depth: usize, screen: Screen, page: Parked) {
+        let Some((generation, ..)) = self.services() else {
+            return;
+        };
+        if self.holds(depth, &screen) {
+            self.back_cache
+                .borrow_mut()
+                .park(depth, screen, generation, page);
+        }
+    }
+
+    /// Takes the page kept for `screen`, the current screen.
+    pub(crate) fn unpark(&self, screen: &Screen) -> Option<Parked> {
+        let (generation, ..) = self.services()?;
+        let depth = self.top_depth();
+        self.back_cache.borrow_mut().take(depth, screen, generation)
     }
 
     /// Identifier, catalog and image cache of the current generation.
@@ -888,7 +921,12 @@ impl App {
         window.on_collection_play(with(|app| app.collection.play(app)));
         window.on_collection_toggle_watched(with(|app| app.collection.toggle_watched(app)));
         window.on_collection_toggle_favorite(with(|app| app.collection.toggle_favorite(app)));
-        window.on_movie_open_collection(with(|app| app.movie.open_collection(app)));
+        let this = self.this.clone();
+        window.on_movie_open_collection(move |index| {
+            if let (Some(app), Ok(index)) = (this.upgrade(), usize::try_from(index)) {
+                app.movie.open_collection(&app, index);
+            }
+        });
         let this = self.this.clone();
         window.on_collection_open(move |id| {
             if let Some(app) = this.upgrade() {
@@ -1096,6 +1134,7 @@ impl App {
                 );
             }
             Effect::EndGeneration { id, end } => {
+                self.back_cache.borrow_mut().clear();
                 self.library.end_generation();
                 let generation = {
                     let mut current = self.generation.borrow_mut();
@@ -1126,6 +1165,9 @@ impl App {
             }
             Effect::Show(screen) => {
                 let previous = self.shown.replace(screen.clone());
+                self.back_cache
+                    .borrow_mut()
+                    .prune(self.state.borrow().stack());
                 if let Some(window) = self.window() {
                     self.notice_on(&window, &screen);
                     if screen == Screen::Player && previous != Screen::Player {

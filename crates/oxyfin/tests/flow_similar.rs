@@ -265,7 +265,12 @@ fn similar_row_opens_item_and_hides_when_empty_or_failed() {
         no_row_nor_notice(&window)?;
 
         press_escape(&window);
-        wait_page(&window, "A generated test movie.").await?;
+        // Back shows the first movie where it was left, scrolled to its row.
+        wait_until("the first movie again", || {
+            window.get_screen() == Screen::Movie
+                && window.get_movie_data().overview == "A generated test movie."
+        })
+        .await?;
         click_similar(&window, "Third Feature (2022)").await?;
         wait_until("the third movie", || {
             calls.third.load(Ordering::SeqCst) == 1

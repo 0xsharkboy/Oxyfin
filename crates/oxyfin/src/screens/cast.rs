@@ -3,10 +3,10 @@
 use std::rc::Rc;
 
 use oxyfin_core::Person;
-use slint::{ComponentHandle, Model, ModelRc, VecModel};
+use slint::{ComponentHandle, Model, VecModel};
 
 use crate::app::App;
-use crate::images::load_into;
+use crate::images::{PageLoads, load_into};
 use crate::present::{image_size, person_card};
 use crate::state::{GenerationId, Msg, Screen};
 use crate::{AppWindow, PersonCardData};
@@ -14,33 +14,41 @@ use crate::{AppWindow, PersonCardData};
 // Logical size of the photo, as drawn by `PersonCard`.
 const PHOTO: f32 = 112.0;
 
-/// Cards of `people`, whose photos load into the cards as they arrive.
-pub(crate) fn cast_cards(
+/// Cards of `people`, without their photos.
+pub(crate) fn cast_cards(people: &[Person]) -> Rc<VecModel<PersonCardData>> {
+    Rc::new(VecModel::from(
+        people.iter().map(person_card).collect::<Vec<_>>(),
+    ))
+}
+
+/// Loads the photos of `people` still missing from `cards`, their cards, as loads of the page
+/// `loads`.
+pub(crate) fn load_photos(
     app: &Rc<App>,
     id: GenerationId,
     window: &AppWindow,
+    cards: &Rc<VecModel<PersonCardData>>,
     people: &[Person],
-) -> ModelRc<PersonCardData> {
-    let cards = Rc::new(VecModel::from(
-        people.iter().map(person_card).collect::<Vec<_>>(),
-    ));
-    if let Some((_, _, images)) = app.services() {
-        let size = image_size(PHOTO, PHOTO, window.window().scale_factor());
-        for (index, person) in people.iter().enumerate() {
-            let Some(photo) = person.image.clone() else {
-                continue;
-            };
-            let cards = Rc::clone(&cards);
-            load_into(app, id, &images, photo, size, move |image| {
-                if let Some(mut data) = cards.row_data(index) {
-                    data.image = image;
-                    data.has_image = true;
-                    cards.set_row_data(index, data);
-                }
-            });
-        }
+    loads: &PageLoads,
+) {
+    let Some((_, _, images)) = app.services() else {
+        return;
+    };
+    let size = image_size(PHOTO, PHOTO, window.window().scale_factor());
+    for (index, person) in people.iter().enumerate() {
+        let loaded = cards.row_data(index).is_none_or(|card| card.has_image);
+        let Some(photo) = person.image.clone().filter(|_| !loaded) else {
+            continue;
+        };
+        let cards = Rc::clone(cards);
+        loads.track(load_into(app, id, &images, photo, size, move |image| {
+            if let Some(mut data) = cards.row_data(index) {
+                data.image = image;
+                data.has_image = true;
+                cards.set_row_data(index, data);
+            }
+        }));
     }
-    ModelRc::from(cards)
 }
 
 /// Opens the page of the person `id`; people without an identifier open nothing.
