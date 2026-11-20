@@ -27,16 +27,19 @@
 //!
 //! ```no_run
 //! # #[cfg(feature = "mpv")]
-//! # async fn wire(session: oxyfin_api::Session, item: oxyfin_api::ItemId) -> Result<(), oxyfin_player::PlayerError> {
+//! # async fn wire(session: oxyfin_api::Session, item: oxyfin_api::ItemId, paths: oxyfin_core::Paths) -> Result<(), oxyfin_player::PlayerError> {
 //! use std::sync::Arc;
 //!
-//! use oxyfin_core::{PlayMode, PlaybackCommand, PlaybackController, PlaybackEvent, player_events};
+//! use oxyfin_core::{
+//!     PlayMode, PlaybackCommand, PlaybackController, PlaybackEvent, TrackMemory, player_events,
+//! };
 //! use oxyfin_player::{Player, PlayerOptions};
 //!
 //! let (sink, events) = player_events();
 //! let player = Arc::new(Player::new(PlayerOptions::default(), move |event| sink.send(event))?);
 //! // Keep `player` to create the `VideoRenderer` in the UI's rendering notifier.
-//! let (handle, mut updates) = PlaybackController::spawn(session, player.clone(), events);
+//! let memory = TrackMemory::load(&paths);
+//! let (handle, mut updates) = PlaybackController::spawn(session, player.clone(), events, memory);
 //!
 //! handle.send(PlaybackCommand::Play { item, mode: PlayMode::Auto });
 //! while let Some(update) = updates.recv().await {
@@ -72,12 +75,13 @@ pub use models::{
 };
 pub use paths::Paths;
 pub use playback::{
-    AudioOption, CHAPTER_RESTART_GRACE, COUNTDOWNS, Chapter, HdrFormat, HdrInfo, MediaPlayer,
-    PROGRESS_INTERVAL, PlayMethod, PlayMode, PlaybackCommand, PlaybackController, PlaybackError,
-    PlaybackEvent, PlaybackHandle, PlaybackPrefs, PlaybackStats, PlaybackTimings, PlaybackTitle,
-    PlayerEventSink, PlayerEvents, QUALITIES, Quality, SEEK_STEP, SHUTDOWN_TIMEOUT, SPEEDS,
-    SegmentKind, SkippableSegment, StatsReport, SubtitleOption, UNLOAD_GRACE, chapter_at,
-    next_chapter, player_events, previous_chapter, start_at,
+    AudioOption, AudioPick, CHAPTER_RESTART_GRACE, COUNTDOWNS, Chapter, HdrFormat, HdrInfo,
+    MediaPlayer, PROGRESS_INTERVAL, PlayMethod, PlayMode, PlaybackCommand, PlaybackController,
+    PlaybackError, PlaybackEvent, PlaybackHandle, PlaybackPrefs, PlaybackStats, PlaybackTimings,
+    PlaybackTitle, PlayerEventSink, PlayerEvents, QUALITIES, Quality, SEEK_STEP, SHUTDOWN_TIMEOUT,
+    SPEEDS, SegmentKind, SkippableSegment, StatsReport, SubtitleOption, SubtitlePick,
+    TRACK_MEMORY_LIMIT, TrackChoice, TrackMemory, UNLOAD_GRACE, best_audio, best_subtitle,
+    chapter_at, next_chapter, player_events, previous_chapter, start_at,
 };
 pub use quick_connect::{QUICK_CONNECT_POLL_INTERVAL, QuickConnect};
 pub use secrets::{

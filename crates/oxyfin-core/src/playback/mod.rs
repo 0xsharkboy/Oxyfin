@@ -10,6 +10,7 @@ mod quality;
 mod queue;
 mod reporter;
 mod segments;
+mod track_memory;
 mod tracks;
 mod types;
 
@@ -22,6 +23,10 @@ pub use oxyfin_api::PlayMethod;
 pub use oxyfin_player::{HdrFormat, HdrInfo, PlaybackStats};
 pub use quality::{QUALITIES, Quality};
 pub use segments::{SegmentKind, SkippableSegment};
+pub use track_memory::{
+    AudioPick, SubtitlePick, TRACK_MEMORY_LIMIT, TrackChoice, TrackMemory, best_audio,
+    best_subtitle,
+};
 pub use types::{
     COUNTDOWNS, PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent,
     PlaybackPrefs, PlaybackTimings, PlaybackTitle, SEEK_STEP, SHUTDOWN_TIMEOUT, SPEEDS,

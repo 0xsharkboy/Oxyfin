@@ -10,14 +10,16 @@ use common::{
 };
 use oxyfin_api::{ImageType, ItemId, MediaSourceId};
 use oxyfin_core::{
-    Chapter, ImageRef, PROGRESS_INTERVAL, PlayMethod, PlayMode, PlaybackCommand,
+    AudioPick, Chapter, ImageRef, PROGRESS_INTERVAL, Paths, PlayMethod, PlayMode, PlaybackCommand,
     PlaybackController, PlaybackError, PlaybackEvent, PlaybackHandle, PlaybackPrefs, PlaybackStats,
     PlaybackTimings, PlayerEventSink, QUALITIES, Quality, SHUTDOWN_TIMEOUT, SegmentKind,
-    SkippableSegment, SubtitleBackground, SubtitleSize, SubtitleStyle, Trickplay, UNLOAD_GRACE,
-    chapter_at, next_chapter, player_events, previous_chapter, start_at,
+    SkippableSegment, SubtitleBackground, SubtitlePick, SubtitleSize, SubtitleStyle, TrackChoice,
+    TrackMemory, Trickplay, UNLOAD_GRACE, chapter_at, next_chapter, player_events,
+    previous_chapter, start_at,
 };
 use oxyfin_player::{PlayerEvent, SeekTarget, Track, TrackId, TrackKind, UnloadReason};
 use serde_json::{Value, json};
+use tempfile::TempDir;
 use tokio::sync::mpsc::UnboundedReceiver;
 use wiremock::matchers::{body_partial_json, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -47,6 +49,8 @@ struct Harness {
     sink: PlayerEventSink,
     handle: PlaybackHandle,
     events: UnboundedReceiver<PlaybackEvent>,
+    /// Holds the track memory file.
+    data: TempDir,
 }
 
 /// Timings with no periodic report, so only explicit triggers send one.
@@ -77,6 +81,12 @@ async fn mount_playback_info(mock: &MockServer, body: Value) {
 
 /// Spawns a controller on `mock`, after mounting the default routes (lowest priority).
 async fn harness_on(mock: MockServer, timings: PlaybackTimings) -> Harness {
+    let data = tempfile::tempdir().unwrap_or_else(|err| panic!("no temporary directory: {err}"));
+    harness_in(mock, timings, data).await
+}
+
+/// Like [`harness_on`], with the track memory stored in `data`.
+async fn harness_in(mock: MockServer, timings: PlaybackTimings, data: TempDir) -> Harness {
     for id in [MOVIE_ID, OTHER_ID] {
         Mock::given(method("GET"))
             .and(path(format!("/Items/{id}")))
@@ -120,6 +130,7 @@ async fn harness_on(mock: MockServer, timings: PlaybackTimings) -> Harness {
         player.clone(),
         player_events,
         timings,
+        TrackMemory::load(&Paths::under(data.path())),
     );
     Harness {
         mock,
@@ -127,6 +138,7 @@ async fn harness_on(mock: MockServer, timings: PlaybackTimings) -> Harness {
         sink,
         handle,
         events,
+        data,
     }
 }
 
@@ -3494,4 +3506,309 @@ async fn a_quality_reload_keeps_the_skips() {
         "{seen:?}"
     );
     assert_eq!(seeks_to(&h, secs(9)), 1);
+}
+
+/// Playback info of an episode with English and French audio (1, 2) and
+/// subtitles (3, 4): the server defaults are English audio, French subtitles.
+fn two_languages() -> Value {
+    let stream = |index: i32, kind: &str, language: Option<&str>| {
+        json!({
+            "Index": index,
+            "Type": kind,
+            "Language": language,
+            "Channels": if kind == "Audio" { json!(2) } else { Value::Null },
+            "IsForced": false,
+            "IsExternal": false,
+            "IsTextSubtitleStream": kind == "Subtitle",
+        })
+    };
+    let mut info = fixture("playback_info");
+    let source = &mut info["MediaSources"][0];
+    source["MediaStreams"] = json!([
+        stream(0, "Video", None),
+        stream(1, "Audio", Some("eng")),
+        stream(2, "Audio", Some("fre")),
+        stream(3, "Subtitle", Some("eng")),
+        stream(4, "Subtitle", Some("fre")),
+    ]);
+    source["DefaultAudioStreamIndex"] = json!(1);
+    source["DefaultSubtitleStreamIndex"] = json!(4);
+    info
+}
+
+/// The tracks mpv reports for [`two_languages`].
+fn two_language_tracks() -> Vec<Track> {
+    vec![
+        track(1, TrackKind::Video, 0, true),
+        track(1, TrackKind::Audio, 1, true),
+        track(2, TrackKind::Audio, 2, false),
+        track(1, TrackKind::Subtitle, 3, false),
+        track(2, TrackKind::Subtitle, 4, false),
+    ]
+}
+
+async fn mount_info_for(mock: &MockServer, id: &str, body: Value) {
+    Mock::given(method("POST"))
+        .and(path(format!("/Items/{id}/PlaybackInfo")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .with_priority(2)
+        .mount(mock)
+        .await;
+}
+
+/// French audio and no subtitle, remembered for [`SERIES_ID`] in a new data directory.
+fn remembered_french() -> TempDir {
+    let data = tempfile::tempdir().unwrap_or_else(|err| panic!("no temporary directory: {err}"));
+    TrackMemory::load(&Paths::under(data.path()))
+        .set(
+            &ItemId::from(SERIES_ID),
+            TrackChoice {
+                audio: Some(AudioPick {
+                    language: Some("fra".to_owned()),
+                    channels: Some(1),
+                }),
+                subtitle: SubtitlePick::Off,
+            },
+        )
+        .unwrap_or_else(|err| panic!("cannot seed the track memory: {err}"));
+    data
+}
+
+impl Harness {
+    /// Sends `command` and waits until the player receives `call` because of it.
+    async fn pick(&self, command: PlaybackCommand, call: Call) {
+        let before = self.player.calls().len();
+        self.handle.send(command);
+        let start = tokio::time::Instant::now();
+        while !self.player.calls()[before..].contains(&call) {
+            assert!(start.elapsed() < common::DEADLINE, "no {call:?}");
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    }
+
+    /// Plays `id`, loads it with `tracks` and returns the player calls made from the load on.
+    async fn load_episode(&mut self, id: &str, tracks: Vec<Track>) -> Vec<Call> {
+        self.play_item(id, PlayMode::FromStart).await;
+        let before = self.player.calls().len();
+        self.loaded_with(tracks).await;
+        self.player.calls()[before..].to_vec()
+    }
+
+    fn memory(&self) -> TrackMemory {
+        TrackMemory::load(&Paths::under(self.data.path()))
+    }
+}
+
+fn selected_audio(calls: &[Call]) -> Vec<Option<TrackId>> {
+    calls
+        .iter()
+        .filter_map(|call| match call {
+            Call::SelectAudio(id) => Some(*id),
+            _ => None,
+        })
+        .collect()
+}
+
+fn selected_subtitles(calls: &[Call]) -> Vec<Option<TrackId>> {
+    calls
+        .iter()
+        .filter_map(|call| match call {
+            Call::SelectSubtitle(id) => Some(*id),
+            _ => None,
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn user_pick_is_remembered_for_series() {
+    let mock = MockServer::start().await;
+    mount_info_for(&mock, EPISODES[1], two_languages()).await;
+    let mut h = harness_on(mock, episode_timings(Duration::from_secs(3600))).await;
+    h.start_item(EPISODES[0], TEN_MINUTES).await;
+    h.pick(
+        PlaybackCommand::SelectAudio(3),
+        Call::SelectAudio(Some(TrackId(2))),
+    )
+    .await;
+    h.pick(
+        PlaybackCommand::SelectSubtitle(None),
+        Call::SelectSubtitle(None),
+    )
+    .await;
+    h.pick(
+        PlaybackCommand::SelectSubtitle(Some(0)),
+        Call::SelectSubtitle(Some(TrackId(1))),
+    )
+    .await;
+    assert_eq!(
+        h.memory().get(&ItemId::from(SERIES_ID)),
+        Some(TrackChoice {
+            audio: Some(AudioPick {
+                language: Some("fra".to_owned()),
+                channels: Some(1),
+            }),
+            subtitle: SubtitlePick::Track {
+                language: Some("eng".to_owned()),
+                forced: false,
+                hearing_impaired: false,
+                external: true,
+            },
+        })
+    );
+
+    let calls = h.load_episode(EPISODES[1], two_language_tracks()).await;
+    assert_eq!(selected_audio(&calls), [Some(TrackId(2))], "{calls:?}");
+    assert_eq!(selected_subtitles(&calls), [Some(TrackId(1))], "{calls:?}");
+}
+
+#[tokio::test]
+async fn an_audio_pick_keeps_the_remembered_subtitle() {
+    let mock = MockServer::start().await;
+    mount_info_for(&mock, EPISODES[1], two_languages()).await;
+    let mut h = harness_in(
+        mock,
+        episode_timings(Duration::from_secs(3600)),
+        remembered_french(),
+    )
+    .await;
+    h.start_item(EPISODES[0], TEN_MINUTES).await;
+    h.pick(
+        PlaybackCommand::SelectAudio(2),
+        Call::SelectAudio(Some(TrackId(1))),
+    )
+    .await;
+    let calls = h.load_episode(EPISODES[1], two_language_tracks()).await;
+    assert_eq!(selected_audio(&calls), [Some(TrackId(1))], "{calls:?}");
+    assert_eq!(selected_subtitles(&calls), [None], "{calls:?}");
+}
+
+#[tokio::test]
+async fn no_matching_language_keeps_the_server_default() {
+    let mut info = two_languages();
+    info["MediaSources"][0]["MediaStreams"][2]["Language"] = json!("jpn");
+    let mock = MockServer::start().await;
+    mount_info_for(&mock, EPISODES[1], info).await;
+    let mut h = harness_on(mock, episode_timings(Duration::from_secs(3600))).await;
+    h.start_item(EPISODES[0], TEN_MINUTES).await;
+    h.pick(
+        PlaybackCommand::SelectAudio(3),
+        Call::SelectAudio(Some(TrackId(2))),
+    )
+    .await;
+    let calls = h.load_episode(EPISODES[1], two_language_tracks()).await;
+    assert_eq!(selected_audio(&calls), [Some(TrackId(1))], "{calls:?}");
+    assert_eq!(selected_subtitles(&calls), [Some(TrackId(2))], "{calls:?}");
+}
+
+#[tokio::test]
+async fn movies_are_not_remembered() {
+    let mut h = harness(episode_timings(Duration::from_secs(3600))).await;
+    h.start().await;
+    h.pick(
+        PlaybackCommand::SelectAudio(3),
+        Call::SelectAudio(Some(TrackId(2))),
+    )
+    .await;
+    let calls = h.load_episode(OTHER_ID, file_tracks()).await;
+    assert_eq!(selected_audio(&calls), [Some(TrackId(1))], "{calls:?}");
+    assert!(!h.data.path().join("data/track-memory.json").exists());
+}
+
+#[tokio::test]
+async fn server_default_when_disabled() {
+    let mock = MockServer::start().await;
+    mount_info_for(&mock, EPISODES[1], two_languages()).await;
+    let mut h = harness_in(
+        mock,
+        episode_timings(Duration::from_secs(3600)),
+        remembered_french(),
+    )
+    .await;
+    h.handle.send(PlaybackCommand::SetPrefs(prefs(|p| {
+        p.remember_tracks = false;
+    })));
+    h.start_item(EPISODES[0], TEN_MINUTES).await;
+    h.pick(
+        PlaybackCommand::SelectSubtitle(Some(0)),
+        Call::SelectSubtitle(Some(TrackId(1))),
+    )
+    .await;
+    let calls = h.load_episode(EPISODES[1], two_language_tracks()).await;
+    assert_eq!(selected_audio(&calls), [Some(TrackId(1))], "{calls:?}");
+    assert_eq!(selected_subtitles(&calls), [Some(TrackId(2))], "{calls:?}");
+    let kept = h.memory().get(&ItemId::from(SERIES_ID));
+    assert_eq!(kept.map(|choice| choice.subtitle), Some(SubtitlePick::Off));
+}
+
+#[tokio::test]
+async fn resume_choice_wins_over_memory() {
+    let mut h = harness_in(
+        MockServer::start().await,
+        episode_timings(Duration::from_secs(3600)),
+        remembered_french(),
+    )
+    .await;
+    h.handle.send(PlaybackCommand::SetPrefs(prefs(|p| {
+        p.remember_tracks = false;
+    })));
+    h.start_item(EPISODES[0], TEN_MINUTES).await;
+    h.handle
+        .send(PlaybackCommand::SetPrefs(PlaybackPrefs::default()));
+    let before = h.player.calls().len();
+    h.handle.send(PlaybackCommand::SetQuality(LOW));
+    h.player.wait_call(|c| *c == Call::Stop).await;
+    h.sink.send(PlayerEvent::Unloaded(UnloadReason::Stopped));
+    h.wait_load(2).await;
+    h.loaded_with(file_tracks()).await;
+    let calls = h.player.calls()[before..].to_vec();
+    assert_eq!(selected_audio(&calls), [Some(TrackId(1))], "{calls:?}");
+    let subtitles = selected_subtitles(&calls);
+    assert!(matches!(subtitles[..], [Some(_)]), "{calls:?}");
+}
+
+/// A transcode of episode `id` carrying the audio stream `audio`.
+fn episode_transcode(id: &str, audio: i32) -> Value {
+    let mut info = transcode_info();
+    info["MediaSources"][0]["TranscodingUrl"] = json!(format!(
+        "/videos/{id}/master.m3u8?MediaSourceId={id}&AudioStreamIndex={audio}&PlaySessionId={PLAY_SESSION_ID}&ApiKey={TEST_TOKEN}&TranscodeReasons=ContainerBitrateExceedsLimit"
+    ));
+    info
+}
+
+#[tokio::test]
+async fn remembered_audio_is_asked_of_a_transcode() {
+    let episode = EPISODES[0];
+    let route = format!("/Items/{episode}/PlaybackInfo");
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(&route))
+        .and(body_partial_json(json!({ "AudioStreamIndex": 3 })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(episode_transcode(episode, 3)))
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    mount_info_for(&mock, episode, episode_transcode(episode, 2)).await;
+    let mut h = harness_in(
+        mock,
+        episode_timings(Duration::from_secs(3600)),
+        remembered_french(),
+    )
+    .await;
+    h.play_item(episode, PlayMode::FromStart).await;
+    let load = h.wait_load(1).await;
+    assert!(
+        load.location.contains("AudioStreamIndex=3"),
+        "{}",
+        load.location
+    );
+    let infos = bodies(&h.mock, &route).await;
+    assert_eq!(infos.len(), 2);
+    assert_eq!(infos[1]["AudioStreamIndex"], json!(3));
+    let ready = h.loaded_with(transcode_tracks()).await;
+    let PlaybackEvent::Ready { audio, .. } = ready else {
+        unreachable!();
+    };
+    let audio: Vec<_> = audio.iter().map(|a| (a.index, a.selected)).collect();
+    assert_eq!(audio, [(2, false), (3, true)]);
+    assert_eq!(h.loads().len(), 1);
 }

@@ -9,7 +9,8 @@ use std::time::Duration;
 use common::{bodies, fixture, session, wait_requests};
 use oxyfin_api::ItemId;
 use oxyfin_core::{
-    PlayMode, PlaybackCommand, PlaybackController, PlaybackEvent, PlaybackTimings, player_events,
+    Paths, PlayMode, PlaybackCommand, PlaybackController, PlaybackEvent, PlaybackTimings,
+    TrackMemory, player_events,
 };
 use oxyfin_player::{Player, PlayerOptions, VideoOutput};
 use serde_json::{Value, json};
@@ -165,6 +166,7 @@ async fn real_player_reports_start() {
         move |event| sink.send(event),
     )
     .unwrap_or_else(|err| panic!("cannot create the player: {err}"));
+    let data = tempfile::tempdir().unwrap_or_else(|err| panic!("no temporary directory: {err}"));
     let (handle, mut events) = PlaybackController::spawn_with_timings(
         session(&mock),
         Arc::new(player),
@@ -173,6 +175,7 @@ async fn real_player_reports_start() {
             progress_interval: Duration::from_secs(3600),
             ..PlaybackTimings::default()
         },
+        TrackMemory::load(&Paths::under(data.path())),
     );
     handle.send(PlaybackCommand::Play {
         item: ItemId::from(MOVIE_ID),

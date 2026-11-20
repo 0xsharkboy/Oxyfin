@@ -27,6 +27,8 @@ pub(super) struct Siblings {
 /// State of the item being played.
 pub(super) struct Current {
     pub(super) item: ItemId,
+    /// The series of the item, when it is an episode.
+    pub(super) series: Option<ItemId>,
     pub(super) source: MediaSourceInfo,
     pub(super) play_session_id: Option<PlaySessionId>,
     pub(super) delivery: Delivery,
@@ -74,6 +76,7 @@ impl Current {
     ) -> Self {
         Self {
             item,
+            series: None,
             source,
             play_session_id,
             delivery: Delivery::Direct,

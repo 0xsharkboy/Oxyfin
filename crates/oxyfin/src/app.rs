@@ -335,7 +335,7 @@ impl App {
         built: Result<(Arc<oxyfin_player::Player>, oxyfin_core::PlayerEvents), String>,
     ) {
         use crate::generation::{Built, Playback};
-        use oxyfin_core::PlaybackController;
+        use oxyfin_core::{PlaybackController, TrackMemory};
 
         if self.creating_player.get() == Some(id) {
             self.creating_player.set(None);
@@ -365,6 +365,7 @@ impl App {
                         generation.session.clone(),
                         player.clone(),
                         events,
+                        TrackMemory::load(&self.paths),
                     );
                     handle.send(PlaybackCommand::SetSubtitleStyle(
                         self.manager.subtitle_style(),

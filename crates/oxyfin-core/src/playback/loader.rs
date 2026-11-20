@@ -47,6 +47,8 @@ pub(super) struct Resume {
 /// An item ready to be loaded into the player.
 pub(super) struct Prepared {
     pub(super) item: ItemId,
+    /// The series of the item, when it is an episode.
+    pub(super) series: Option<ItemId>,
     pub(super) source: MediaSourceInfo,
     pub(super) play_session_id: Option<PlaySessionId>,
     pub(super) media: MediaSource,
@@ -178,6 +180,7 @@ async fn fetch(
         },
     };
     let saved = UserState::from_dto(dto.user_data.as_ref()).position;
+    let series = Episode::from_dto(&dto).map(|episode| episode.series_id);
     send(LoadStage::Loading {
         item: item.clone(),
         title,
@@ -228,6 +231,7 @@ async fn fetch(
     }
     Ok(Prepared {
         item,
+        series,
         source,
         play_session_id: info.play_session_id,
         media,
