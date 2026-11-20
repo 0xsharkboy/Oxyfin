@@ -3,7 +3,15 @@
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
-use oxyfin_api::{DISCOVERY_MESSAGE, DiscoveredServer, discover};
+mod common;
+
+use common::fixture;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
+
+use oxyfin_api::{
+    DISCOVERY_MESSAGE, DiscoveredServer, MAX_DISCOVERED_SERVERS, discover, discovered_version,
+};
 use tokio::net::UdpSocket;
 
 /// Binds a responder that answers each request with `replies`, and returns its address.
@@ -138,4 +146,116 @@ async fn discover_without_targets_returns_at_once() {
 
     assert!(servers.is_empty());
     assert!(start.elapsed() < Duration::from_millis(500));
+}
+
+#[tokio::test]
+async fn discover_stops_at_the_cap() {
+    let replies = (0..MAX_DISCOVERED_SERVERS + 4)
+        .map(|index| reply(&format!("id-{index}"), "Server", "http://10.0.0.1:8096"))
+        .collect();
+    let target = responder(replies).await;
+    let start = Instant::now();
+
+    let servers = discover(Duration::from_secs(2), &[target]).await;
+
+    assert_eq!(servers.len(), MAX_DISCOVERED_SERVERS);
+    assert!(
+        start.elapsed() < Duration::from_secs(1),
+        "{:?}",
+        start.elapsed()
+    );
+}
+
+#[tokio::test]
+async fn discover_ignores_replies_from_another_port() {
+    let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let target = socket.local_addr().unwrap();
+    let other = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    tokio::spawn(async move {
+        let mut buffer = [0u8; 512];
+        while let Ok((_, from)) = socket.recv_from(&mut buffer).await {
+            let answer = reply("id-1", "Elsewhere", "http://10.0.0.1:8096");
+            let _ = other.send_to(&answer, from).await;
+        }
+    });
+
+    let servers = discover(Duration::from_millis(400), &[target]).await;
+
+    assert!(servers.is_empty(), "{servers:?}");
+}
+
+fn found(address: &str) -> DiscoveredServer {
+    DiscoveredServer {
+        id: "id-1".to_owned(),
+        name: "Maison".to_owned(),
+        address: address.to_owned(),
+    }
+}
+
+#[tokio::test]
+async fn discovered_version_sends_no_identity() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/System/Info/Public"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(fixture("12.4.0", "system_info_public")),
+        )
+        .mount(&mock)
+        .await;
+
+    let version = discovered_version(&found(&mock.uri()), Duration::from_secs(1)).await;
+
+    assert_eq!(version.as_deref(), Some("12.4.0"));
+    let requests = mock.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 1);
+    for (name, value) in requests[0].headers.iter() {
+        let value = value.to_str().unwrap_or_default();
+        assert!(
+            !name.as_str().starts_with("x-emby") && !value.contains("MediaBrowser"),
+            "{name}: {value}"
+        );
+    }
+    assert!(!requests[0].headers.contains_key("authorization"));
+}
+
+#[tokio::test]
+async fn discovered_version_follows_no_redirect() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/System/Info/Public"))
+        .respond_with(ResponseTemplate::new(302).insert_header("location", "/elsewhere"))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/elsewhere"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(fixture("12.4.0", "system_info_public")),
+        )
+        .mount(&mock)
+        .await;
+
+    let version = discovered_version(&found(&mock.uri()), Duration::from_secs(1)).await;
+
+    assert_eq!(version, None);
+    assert_eq!(mock.received_requests().await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn discovered_version_gives_up_after_the_timeout() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/System/Info/Public"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(fixture("12.4.0", "system_info_public"))
+                .set_delay(Duration::from_secs(3)),
+        )
+        .mount(&mock)
+        .await;
+    let start = Instant::now();
+
+    let version = discovered_version(&found(&mock.uri()), Duration::from_millis(300)).await;
+
+    assert_eq!(version, None);
+    assert!(start.elapsed() < Duration::from_secs(2));
 }
