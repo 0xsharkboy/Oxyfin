@@ -161,6 +161,7 @@ fn skip_button_seeks_to_the_end_of_the_segment() {
                 title: "Other".into(),
                 series_name: None,
                 episode_label: None,
+                year: None,
                 artwork: None,
             },
         },

@@ -223,6 +223,8 @@ pub struct PlaybackTitle {
     pub series_name: Option<String>,
     /// Label such as `S01E02`, for an episode.
     pub episode_label: Option<String>,
+    /// Production year.
+    pub year: Option<i32>,
     /// Image standing for the item, such as its series poster when it has none.
     pub artwork: Option<ImageRef>,
 }

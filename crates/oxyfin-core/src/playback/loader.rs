@@ -170,12 +170,14 @@ async fn fetch(
             title: summary.title,
             series_name: summary.series_name,
             episode_label: summary.episode_label,
+            year: summary.year,
             artwork: artwork(&dto),
         },
         None => PlaybackTitle {
             title: dto.name.clone().unwrap_or_default(),
             series_name: None,
             episode_label: None,
+            year: dto.production_year,
             artwork: artwork(&dto),
         },
     };
@@ -285,6 +287,7 @@ mod tests {
                     title: "Item".into(),
                     series_name: None,
                     episode_label: None,
+                    year: None,
                     artwork: None,
                 },
             },

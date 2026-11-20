@@ -83,6 +83,7 @@ pub struct App {
     mpris: RefCell<Option<crate::mpris::Mpris>>,
     #[cfg(all(target_os = "linux", feature = "mpv"))]
     inhibitor: RefCell<Option<crate::inhibit::Inhibitor>>,
+    discord: RefCell<Option<crate::discord::Discord>>,
     pub(crate) sign_in: SignInController,
     pub(crate) home: HomeController,
     pub(crate) library: LibraryController,
@@ -129,6 +130,7 @@ impl App {
             mpris: RefCell::new(None),
             #[cfg(all(target_os = "linux", feature = "mpv"))]
             inhibitor: RefCell::new(None),
+            discord: RefCell::new(None),
             sign_in: SignInController::default(),
             home: HomeController::default(),
             library: LibraryController::default(),
@@ -280,6 +282,31 @@ impl App {
     #[cfg(all(target_os = "linux", feature = "mpv"))]
     pub fn take_inhibitor(&self) -> Option<crate::inhibit::Inhibitor> {
         self.inhibitor.borrow_mut().take()
+    }
+
+    /// Shows what plays on Discord while the setting is on, until
+    /// [`App::take_discord`].
+    pub fn start_discord(&self) {
+        match crate::discord::Discord::start(self.manager.discord()) {
+            Ok(discord) => {
+                discord.update(crate::discord::Update::Active(
+                    self.state.borrow().screen() == Screen::Player,
+                ));
+                *self.discord.borrow_mut() = Some(discord);
+            }
+            Err(error) => log::warn!("cannot start the Discord activity: {error}"),
+        }
+    }
+
+    /// Takes the Discord activity, for `main` to clear it before exiting.
+    pub fn take_discord(&self) -> Option<crate::discord::Discord> {
+        self.discord.borrow_mut().take()
+    }
+
+    fn discord_update(&self, update: crate::discord::Update) {
+        if let Some(discord) = &*self.discord.borrow() {
+            discord.update(update);
+        }
     }
 
     #[cfg(all(target_os = "linux", feature = "mpv"))]
@@ -511,6 +538,9 @@ impl App {
         if crate::inhibit::concerns(&event) {
             self.inhibit_update(crate::inhibit::Update::Event(event.clone()));
         }
+        if crate::discord::concerns(&event) {
+            self.discord_update(crate::discord::Update::Event(event.clone()));
+        }
         let chapters = match &event {
             PlaybackEvent::Chapters(chapters) => Some(chapters.clone()),
             _ => None,
@@ -711,6 +741,20 @@ impl App {
         }
         if let Some(window) = self.window() {
             window.set_settings_start_fullscreen(self.manager.start_fullscreen());
+        }
+    }
+
+    /// Saves whether Discord shows what plays and applies it at once; the
+    /// settings then show what is saved.
+    fn set_discord(&self, on: bool) {
+        if let Err(error) = self.manager.set_discord(on) {
+            log::error!("cannot save the Discord setting: {error}");
+            self.notify(Message::StorageError);
+        }
+        let on = self.manager.discord();
+        self.discord_update(crate::discord::Update::Enabled(on));
+        if let Some(window) = self.window() {
+            window.set_settings_discord(on);
         }
     }
 
@@ -940,6 +984,12 @@ impl App {
         window.on_settings_start_fullscreen_changed(move |on| {
             if let Some(app) = this.upgrade() {
                 app.set_start_fullscreen(on);
+            }
+        });
+        let this = self.this.clone();
+        window.on_settings_discord_changed(move |on| {
+            if let Some(app) = this.upgrade() {
+                app.set_discord(on);
             }
         });
         let this = self.this.clone();
@@ -1237,6 +1287,7 @@ impl App {
                     self.mpris_update(crate::mpris::Update::Active(screen == Screen::Player));
                     #[cfg(all(target_os = "linux", feature = "mpv"))]
                     self.inhibit_update(crate::inhibit::Update::Active(screen == Screen::Player));
+                    self.discord_update(crate::discord::Update::Active(screen == Screen::Player));
                     let root = self.state.borrow().stack().first().cloned();
                     window.set_top_bar_page(top_bar_page(root.as_ref()));
                     if screen == Screen::Settings {
@@ -1245,6 +1296,7 @@ impl App {
                             self.manager.subtitle_style(),
                         ));
                         window.set_settings_start_fullscreen(self.manager.start_fullscreen());
+                        window.set_settings_discord(self.manager.discord());
                         window.set_settings_playback(settings::playback_choice(
                             self.manager.playback_prefs(),
                         ));

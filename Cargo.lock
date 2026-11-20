@@ -3738,6 +3738,7 @@ dependencies = [
  "oxyfin-core",
  "oxyfin-player",
  "raw-window-handle",
+ "serde_json",
  "slint",
  "slint-build",
  "sys-locale",

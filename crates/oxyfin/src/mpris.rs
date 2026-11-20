@@ -736,6 +736,7 @@ mod tests {
                 title: "Pilot".to_owned(),
                 series_name: Some("The Show".to_owned()),
                 episode_label: Some("S01E01".to_owned()),
+                year: None,
                 artwork: None,
             },
         }
@@ -802,6 +803,7 @@ mod tests {
                 title: "Film".to_owned(),
                 series_name: None,
                 episode_label: None,
+                year: None,
                 artwork: None,
             },
         }));
@@ -879,6 +881,7 @@ mod tests {
                 title: "Second".to_owned(),
                 series_name: Some("The Show".to_owned()),
                 episode_label: Some("S01E02".to_owned()),
+                year: None,
                 artwork: None,
             },
         }));

@@ -916,6 +916,7 @@ mod tests {
             title: "Pilot".into(),
             series_name: series.map(Into::into),
             episode_label: label.map(Into::into),
+            year: None,
             artwork: None,
         }
     }
