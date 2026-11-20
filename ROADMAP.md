@@ -31,7 +31,7 @@ This file is the single source of truth for planned work. An item is checked onl
 - [x] Subtitle and audio delay
 - [x] Chapters (seek bar markers and menu)
 - [ ] Remember audio and subtitle choices per series
-- [ ] Next episode options (countdown, autoplay, automatic segment skipping)
+- [x] Next episode options (countdown, autoplay, automatic segment skipping)
 - [ ] Subtitle search and download
 - [x] Playback statistics
 - [ ] "More like this" on detail pages
