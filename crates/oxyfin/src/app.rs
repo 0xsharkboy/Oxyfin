@@ -159,6 +159,12 @@ impl App {
         self.manager.start_fullscreen()
     }
 
+    /// Sends server discovery requests to these addresses instead of the local network
+    /// broadcast, for tests.
+    pub fn set_discovery_targets(&self, targets: Vec<std::net::SocketAddr>) {
+        self.manager.set_discovery_targets(targets);
+    }
+
     /// Takes the generation shutdowns still running, for `main` to wait on before exiting.
     pub fn take_pending_ends(&self) -> Vec<JoinHandle<()>> {
         std::mem::take(&mut *self.ending.borrow_mut())
@@ -1056,6 +1062,12 @@ impl App {
         window.on_server_changed(move |address| {
             if let Some(app) = this.upgrade() {
                 app.sign_in.server_changed(&app, address);
+            }
+        });
+        let this = self.this.clone();
+        window.on_found_server_chosen(move |address| {
+            if let Some(app) = this.upgrade() {
+                app.sign_in.found_server_chosen(&app, address);
             }
         });
         let this = self.this.clone();
