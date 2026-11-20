@@ -375,3 +375,38 @@ pub async fn back_returns_to_detail(window: &AppWindow) -> Result<(), String> {
     wait_until("the movies tab", || window.get_screen() == Screen::Library).await?;
     Ok(())
 }
+
+/// Scrolls down until the button `label` is inside the window, and returns it; rows below the
+/// window are only built once scrolled near.
+pub async fn reveal(window: &AppWindow, label: &str) -> Result<ElementHandle, String> {
+    let height = window_height(window);
+    let width = window.window().size().width as f32 / window.window().scale_factor();
+    for _ in 0..60 {
+        let found = ElementHandle::find_by_accessible_label(window, label).find(|element| {
+            let (y, size) = (element.absolute_position().y, element.size());
+            element.accessible_role() == Some(AccessibleRole::Button)
+                && size.height > 0.
+                && y >= 0.
+                && y + size.height <= height
+        });
+        if let Some(found) = found {
+            let (x, y) = (found.absolute_position().x, found.absolute_position().y);
+            if x + found.size().width <= width {
+                return Ok(found);
+            }
+            // A card of a row past the right edge: the row scrolls sideways.
+            window
+                .window()
+                .dispatch_event(WindowEvent::PointerScrolled {
+                    position: LogicalPosition::new(width / 2., y + found.size().height / 2.),
+                    delta_x: -300.,
+                    delta_y: 0.,
+                });
+            pause(Duration::from_millis(20)).await;
+            continue;
+        }
+        scroll(window, -200.);
+        pause(Duration::from_millis(20)).await;
+    }
+    Err(format!("{label} cannot be scrolled into the window"))
+}

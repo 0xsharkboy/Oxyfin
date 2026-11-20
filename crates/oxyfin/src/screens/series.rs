@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use oxyfin_api::ItemId;
-use oxyfin_core::{CoreError, Episode, PlayMode, SeriesDetails, UserState};
+use oxyfin_core::{CoreError, Episode, ImageRef, PlayMode, SeriesDetails, UserState};
 use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 
 use crate::app::App;
@@ -45,6 +45,10 @@ pub(crate) struct SeriesController {
     reloading: Cell<bool>,
     episodes: Rc<VecModel<EpisodeData>>,
     thumbnail_tags: RefCell<HashMap<String, String>>,
+    // Thumbnail of each episode row, by episode id.
+    thumbs: RefCell<Vec<(String, ImageRef)>>,
+    // True once the episodes of the chosen season answered.
+    episodes_ready: Cell<bool>,
     images_requested: Cell<bool>,
     people: RefCell<Rc<VecModel<PersonCardData>>>,
     similar: SimilarRow,
@@ -58,6 +62,8 @@ pub(crate) struct ParkedSeries {
     rows_season: Option<Option<String>>,
     episodes: Vec<EpisodeData>,
     thumbnail_tags: HashMap<String, String>,
+    thumbs: Vec<(String, ImageRef)>,
+    episodes_ready: bool,
     people: Rc<VecModel<PersonCardData>>,
     similar: ParkedRow,
     poster: Image,
@@ -113,6 +119,8 @@ impl SeriesController {
             rows_season: self.rows_season.borrow().clone(),
             episodes: self.episodes.iter().collect(),
             thumbnail_tags: self.thumbnail_tags.take(),
+            thumbs: self.thumbs.take(),
+            episodes_ready: self.episodes_ready.get(),
             people: Rc::clone(&self.people.borrow()),
             similar: self.similar.park(),
             poster: window.get_series_poster(),
@@ -132,12 +140,13 @@ impl SeriesController {
             return;
         };
         let series = page.details.summary.id.as_str().to_owned();
-        let answered = page.rows_season.is_some();
         *self.details.borrow_mut() = Some(page.details);
         self.season.set(page.season);
         *self.rows_season.borrow_mut() = page.rows_season;
         self.episodes.set_vec(page.episodes);
         *self.thumbnail_tags.borrow_mut() = page.thumbnail_tags;
+        *self.thumbs.borrow_mut() = page.thumbs;
+        self.episodes_ready.set(page.episodes_ready);
         *self.people.borrow_mut() = Rc::clone(&page.people);
         window.set_series_people(ModelRc::from(page.people));
         window.set_series_poster(page.poster.clone());
@@ -164,7 +173,22 @@ impl SeriesController {
         );
         self.similar
             .request(app, &series, AppWindow::set_series_similar);
-        if !answered {
+        if self.episodes_ready.get() {
+            let missing: Vec<(String, ImageRef)> = self
+                .thumbs
+                .borrow()
+                .iter()
+                .filter(|(episode, _)| {
+                    !self
+                        .episodes
+                        .iter()
+                        .any(|row| row.id == episode.as_str() && row.image.size().width > 0)
+                })
+                .cloned()
+                .collect();
+            self.load_thumbnails(app, id, &window, missing);
+        } else {
+            // The episodes had not come, or failed: they are asked again.
             self.request_episodes(app);
         }
         window.set_series_viewport_y(page.viewport_y);
@@ -251,6 +275,8 @@ impl SeriesController {
         self.reloading.set(false);
         self.episodes.set_vec(Vec::new());
         self.thumbnail_tags.borrow_mut().clear();
+        self.thumbs.borrow_mut().clear();
+        self.episodes_ready.set(false);
         self.images_requested.set(false);
         *self.people.borrow_mut() = Rc::default();
         self.similar.clear(app, AppWindow::set_series_similar);
@@ -351,6 +377,7 @@ impl SeriesController {
             window.set_series_episodes_error(SharedString::default());
             // Rows of another season are hidden, not shown under the new pill.
             if changed {
+                self.episodes_ready.set(false);
                 window.set_series_episodes_stale(true);
             }
             window.set_series_episodes_loading(
@@ -420,6 +447,29 @@ impl SeriesController {
                 .collect::<Vec<_>>(),
         );
         window.set_series_episodes_stale(false);
+        self.episodes_ready.set(true);
+        *self.thumbs.borrow_mut() = episodes
+            .iter()
+            .filter_map(|episode| Some((episode.id.as_str().to_owned(), episode.thumb.clone()?)))
+            .collect();
+        let missing: Vec<(String, ImageRef)> = self
+            .thumbs
+            .borrow()
+            .iter()
+            .filter(|(episode, _)| !kept.contains_key(episode.as_str()))
+            .cloned()
+            .collect();
+        self.load_thumbnails(app, id, &window, missing);
+    }
+
+    /// Loads the thumbnails `wanted`, by episode id, into the rows of the current episodes.
+    fn load_thumbnails(
+        &self,
+        app: &Rc<App>,
+        id: GenerationId,
+        window: &AppWindow,
+        wanted: Vec<(String, ImageRef)>,
+    ) {
         let Some((_, _, images)) = app.services() else {
             return;
         };
@@ -428,15 +478,9 @@ impl SeriesController {
             THUMB_ARTWORK.1,
             window.window().scale_factor(),
         );
-        for episode in episodes {
-            if kept.contains_key(episode.id.as_str()) {
-                continue;
-            }
-            let Some(thumb) = episode.thumb.clone() else {
-                continue;
-            };
+        let load = self.episodes_load.get();
+        for (episode_id, thumb) in wanted {
             let (target, current) = (window.as_weak(), Rc::clone(&self.episodes_load));
-            let episode_id = episode.id.as_str().to_owned();
             self.loads
                 .track(load_into(app, id, &images, thumb, size, move |image| {
                     let Some(window) = target.upgrade() else {
