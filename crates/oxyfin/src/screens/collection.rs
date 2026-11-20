@@ -24,13 +24,15 @@ enum Flag {
     Favorite,
 }
 
-/// The item Play starts: the first one not watched yet, else the first one.
+/// The item Play starts: the first movie or video not watched yet, else the first one. Series
+/// are left out: playing a box set never starts a whole series.
 fn play_target(details: &CollectionDetails) -> Option<&ItemSummary> {
-    details
-        .first_unwatched
-        .as_ref()
-        .and_then(|id| details.items.iter().find(|item| item.id == *id))
-        .or_else(|| details.items.first())
+    let mut playable = details
+        .items
+        .iter()
+        .filter(|item| matches!(item.kind, ItemKind::Movie | ItemKind::Video));
+    let first = playable.clone().next();
+    playable.find(|item| !item.user.played).or(first)
 }
 
 /// What the collection page shows for `details`.
@@ -393,6 +395,17 @@ mod tests {
         let data = collection_data(&empty);
         assert_eq!(data.play_title, "");
         assert_eq!(data.first_year, "");
+    }
+
+    #[test]
+    fn play_skips_the_series_of_a_mixed_box_set() {
+        let mut series = item("s", Some(2019), false);
+        series.kind = ItemKind::Series;
+        let mixed = details(vec![series.clone(), item("a", Some(2020), true)]);
+        assert_eq!(play_target(&mixed).map(|item| item.id.as_str()), Some("a"));
+        let shows = details(vec![series]);
+        assert!(play_target(&shows).is_none());
+        assert_eq!(collection_data(&shows).play_title, "");
     }
 
     #[test]
