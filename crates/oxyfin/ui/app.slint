@@ -199,6 +199,8 @@ export component AppWindow inherits Window {
     callback player-command-set-subtitle-delay(ms: int);
     callback player-command-step-chapter(direction: int);
     in property <[StatSection]> player-stats;
+    // Whether the playback statistics show.
+    in-out property <bool> player-stats-visible;
     callback player-command-stats();
     callback close-player();
 
@@ -477,6 +479,7 @@ export component AppWindow inherits Window {
         scrubbing <=> root.player-scrubbing;
         preview: root.player-preview;
         stats: root.player-stats;
+        stats-visible <=> root.player-stats-visible;
         preview-requested(seconds) => {
             root.player-preview-requested(seconds);
         }
