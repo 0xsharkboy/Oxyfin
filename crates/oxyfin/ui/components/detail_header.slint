@@ -25,7 +25,57 @@ component GenreTag inherits Rectangle {
     }
 }
 
-// Backdrop, poster, title, metadata, summary and actions of a movie or a series.
+// Accent link to the box set of a movie: layers icon, label and chevron.
+component CollectionLink inherits Rectangle {
+    in property <string> label;
+    callback clicked();
+
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => {
+        root.clicked();
+    }
+
+    HorizontalLayout {
+        spacing: Theme.link-gap;
+        alignment: start;
+
+        VerticalLayout {
+            alignment: center;
+
+            Image {
+                source: Icons.layers;
+                width: Theme.link-icon-size;
+                height: Theme.link-icon-size;
+                colorize: Theme.text-primary;
+            }
+        }
+        LabelText {
+            text: root.label;
+            color: Theme.accent;
+            vertical-alignment: center;
+        }
+        VerticalLayout {
+            alignment: center;
+
+            Image {
+                source: Icons.chevron-right;
+                width: Theme.link-icon-size;
+                height: Theme.link-icon-size;
+                colorize: Theme.text-primary;
+            }
+        }
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// Backdrop, poster, title, metadata, summary and actions of a movie, a series or a box set.
 // The children are the playback buttons, shown before the watched and favorite toggles.
 export component DetailHeader inherits Rectangle {
     in property <image> backdrop;
@@ -38,7 +88,11 @@ export component DetailHeader inherits Rectangle {
     in property <string> official-rating;
     // Number of seasons, 0 for a movie.
     in property <int> season-count;
+    // Metadata line replacing the year, duration and ratings, for a box set.
+    in property <string> caption;
     in property <[string]> genres;
+    // Name of the box set the movie belongs to; empty when it belongs to none.
+    in property <string> collection;
     in property <string> overview;
     in property <bool> watched;
     in property <bool> favorite;
@@ -49,6 +103,7 @@ export component DetailHeader inherits Rectangle {
     callback back();
     callback toggle-watched();
     callback toggle-favorite();
+    callback open-collection();
 
     pure function duration(total: int) -> string {
         total >= 60 ? @tr("{}h {}m", floor(total / 60), mod(total, 60)) : @tr("{}m", total)
@@ -154,6 +209,9 @@ export component DetailHeader inherits Rectangle {
                             text: root.rating;
                         }
                     }
+                    if root.caption != "": LabelText {
+                        text: root.caption;
+                    }
                     if root.official-rating != "": Rectangle {
                         border-radius: Theme.radius-md;
                         border-width: Theme.border-thin;
@@ -176,6 +234,17 @@ export component DetailHeader inherits Rectangle {
 
                     for genre in root.genres: GenreTag {
                         label: genre;
+                    }
+                }
+
+                if root.collection != "": HorizontalLayout {
+                    alignment: start;
+
+                    CollectionLink {
+                        label: @tr("Part of the {}", root.collection);
+                        clicked => {
+                            root.open-collection();
+                        }
                     }
                 }
 

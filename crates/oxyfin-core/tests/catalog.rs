@@ -5,8 +5,8 @@ mod common;
 use common::{TEST_USER_ID, fixture, session};
 use oxyfin_api::ItemId;
 use oxyfin_core::{
-    BrowseQuery, BrowseSource, Catalog, ContentKind, CoreError, ItemKind, ItemSummary, LibraryKind,
-    MovieDetails, PersonKind, SortField, WatchFilter,
+    BrowseQuery, BrowseSource, Catalog, CollectionLink, ContentKind, CoreError, ItemKind,
+    ItemSummary, LibraryKind, MovieDetails, PersonKind, SortField, WatchFilter,
 };
 use serde_json::{Value, json};
 use wiremock::matchers::{method, path, query_param};
@@ -499,7 +499,7 @@ async fn search_sends_term_and_paging() {
         .and(path("/Items"))
         .and(query_param("searchTerm", "test"))
         .and(query_param("recursive", "true"))
-        .and(query_param("includeItemTypes", "Movie,Series"))
+        .and(query_param("includeItemTypes", "Movie,Series,BoxSet"))
         .and(query_param("startIndex", "10"))
         .and(query_param("limit", "30"))
         .respond_with(ResponseTemplate::new(200).set_body_json(fixture("items_search")))
@@ -906,4 +906,258 @@ async fn person_titles_role_from_people() {
         ]
     );
     assert_eq!(titles[0].summary.kind, ItemKind::Series);
+}
+
+const BOX_SET_ID: &str = "b0000000000000000000000000000001";
+const OTHER_BOX_SET_ID: &str = "b0000000000000000000000000000002";
+
+async fn mount_box_sets(mock: &MockServer, calls: u64) {
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .and(query_param("includeItemTypes", "BoxSet"))
+        .and(query_param("recursive", "true"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Items": [
+                {"Id": OTHER_BOX_SET_ID, "Name": "Other Collection", "Type": "BoxSet"},
+                {"Id": BOX_SET_ID, "Name": "Northbound Collection", "Type": "BoxSet"}
+            ],
+            "TotalRecordCount": 2
+        })))
+        .expect(calls)
+        .mount(mock)
+        .await;
+    let children = [
+        (
+            OTHER_BOX_SET_ID,
+            json!([{"Id": "m9", "Name": "Elsewhere", "Type": "Movie"}]),
+        ),
+        (
+            BOX_SET_ID,
+            json!([
+                {"Id": "m1", "Name": "The Long Coast", "Type": "Movie"},
+                {"Id": MOVIE_ID, "Name": "Northbound", "Type": "Movie"}
+            ]),
+        ),
+    ];
+    for (parent, items) in children {
+        Mock::given(method("GET"))
+            .and(path("/Items"))
+            .and(query_param("parentId", parent))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(json!({"Items": items, "TotalRecordCount": 1})),
+            )
+            .expect(calls)
+            .mount(mock)
+            .await;
+    }
+}
+
+#[tokio::test]
+async fn collections_of_finds_box_set() {
+    let mock = MockServer::start().await;
+    mount_box_sets(&mock, 1).await;
+    let catalog = catalog(&mock);
+    let found = catalog
+        .collections_of(&ItemId::from(MOVIE_ID))
+        .await
+        .unwrap();
+    assert_eq!(
+        found,
+        [CollectionLink {
+            id: ItemId::from(BOX_SET_ID),
+            name: "Northbound Collection".to_owned(),
+        }]
+    );
+    let none = catalog
+        .collections_of(&ItemId::from("not-in-any"))
+        .await
+        .unwrap();
+    assert!(none.is_empty());
+}
+
+#[tokio::test]
+async fn collections_cached_once() {
+    let mock = MockServer::start().await;
+    mount_box_sets(&mock, 1).await;
+    let catalog = catalog(&mock);
+    let clone = catalog.clone();
+    let (movie, other) = (ItemId::from(MOVIE_ID), ItemId::from("m9"));
+    let (first, second) =
+        tokio::join!(catalog.collections_of(&movie), clone.collections_of(&other));
+    assert_eq!(first.unwrap().len(), 1);
+    assert_eq!(second.unwrap()[0].name, "Other Collection");
+    let again = catalog.clone().collections_of(&ItemId::from("m1")).await;
+    assert_eq!(again.unwrap()[0].id, ItemId::from(BOX_SET_ID));
+}
+
+#[tokio::test]
+async fn collections_not_cached_after_failure() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .and(query_param("includeItemTypes", "BoxSet"))
+        .respond_with(ResponseTemplate::new(500))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    mount_box_sets(&mock, 1).await;
+    let catalog = catalog(&mock);
+    assert!(
+        catalog
+            .collections_of(&ItemId::from(MOVIE_ID))
+            .await
+            .is_err()
+    );
+    let found = catalog.collections_of(&ItemId::from(MOVIE_ID)).await;
+    assert_eq!(found.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn collection_orders_by_premiere() {
+    let mock = MockServer::start().await;
+    mount(
+        &mock,
+        "GET",
+        &format!("/Items/{BOX_SET_ID}"),
+        json!({
+            "Id": BOX_SET_ID, "Name": "Northbound Collection", "Type": "BoxSet",
+            "Overview": "Expeditions to the north.",
+            "UserData": {"Played": false, "IsFavorite": true, "PlaybackPositionTicks": 0}
+        }),
+    )
+    .await;
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .and(query_param("parentId", BOX_SET_ID))
+        .and(query_param("sortBy", "PremiereDate"))
+        .and(query_param("sortOrder", "Ascending"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Items": [
+                {"Id": "m3", "Name": "The Surveyor", "Type": "Movie", "ProductionYear": 2024,
+                 "PremiereDate": "2024-02-01T00:00:00.0000000Z"},
+                {"Id": "m1", "Name": "The Long Coast", "Type": "Movie", "ProductionYear": 2019,
+                 "PremiereDate": "2019-05-01T00:00:00.0000000Z",
+                 "UserData": {"Played": true, "IsFavorite": false, "PlaybackPositionTicks": 0}},
+                {"Id": "m4", "Name": "Undated", "Type": "Movie"},
+                {"Id": "m2", "Name": "Northbound", "Type": "Movie", "ProductionYear": 2023,
+                 "PremiereDate": "2023-03-01T00:00:00.0000000Z"}
+            ],
+            "TotalRecordCount": 4
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let details = catalog(&mock)
+        .collection(&ItemId::from(BOX_SET_ID))
+        .await
+        .unwrap();
+    assert_eq!(details.summary.kind, ItemKind::BoxSet);
+    assert_eq!(details.summary.title, "Northbound Collection");
+    assert!(details.summary.user.favorite);
+    assert_eq!(
+        details.overview.as_deref(),
+        Some("Expeditions to the north.")
+    );
+    let titles: Vec<_> = details
+        .items
+        .iter()
+        .map(|item| item.title.as_str())
+        .collect();
+    assert_eq!(
+        titles,
+        ["The Long Coast", "Northbound", "The Surveyor", "Undated"]
+    );
+    assert_eq!(details.watched, 1);
+    assert_eq!(details.first_unwatched, Some(ItemId::from("m2")));
+}
+
+#[tokio::test]
+async fn collection_fully_watched_has_no_first_unwatched() {
+    let mock = MockServer::start().await;
+    mount(
+        &mock,
+        "GET",
+        &format!("/Items/{BOX_SET_ID}"),
+        json!({"Id": BOX_SET_ID, "Name": "Done", "Type": "BoxSet"}),
+    )
+    .await;
+    mount(
+        &mock,
+        "GET",
+        "/Items",
+        json!({"Items": [
+            {"Id": "m1", "Name": "Seen", "Type": "Movie",
+             "UserData": {"Played": true, "IsFavorite": false, "PlaybackPositionTicks": 0}}
+        ], "TotalRecordCount": 1}),
+    )
+    .await;
+    let details = catalog(&mock)
+        .collection(&ItemId::from(BOX_SET_ID))
+        .await
+        .unwrap();
+    assert_eq!(details.watched, 1);
+    assert_eq!(details.first_unwatched, None);
+}
+
+#[tokio::test]
+async fn search_includes_box_sets() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/Items"))
+        .and(query_param("searchTerm", "north"))
+        .and(query_param("includeItemTypes", "Movie,Series,BoxSet"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Items": [
+                {"Id": BOX_SET_ID, "Name": "Northbound Collection", "Type": "BoxSet"},
+                {"Id": MOVIE_ID, "Name": "Northbound", "Type": "Movie"}
+            ],
+            "TotalRecordCount": 2
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let page = catalog(&mock).search("north", 0, 20).await.unwrap();
+    let kinds: Vec<_> = page.items.iter().map(|item| item.kind).collect();
+    assert_eq!(kinds, [ItemKind::BoxSet, ItemKind::Movie]);
+}
+
+#[tokio::test]
+async fn collections_of_reads_every_box_set() {
+    let mock = MockServer::start().await;
+    let ids: Vec<String> = (0..9).map(|n| format!("b{n:031}")).collect();
+    let sets: Vec<Value> = ids
+        .iter()
+        .map(|id| json!({"Id": id, "Name": format!("Set {id}"), "Type": "BoxSet"}))
+        .collect();
+    mount(
+        &mock,
+        "GET",
+        "/Items",
+        json!({"Items": sets, "TotalRecordCount": 9}),
+    )
+    .await;
+    for (n, id) in ids.iter().enumerate() {
+        Mock::given(method("GET"))
+            .and(path("/Items"))
+            .and(query_param("parentId", id.as_str()))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "Items": [{"Id": format!("m{n}"), "Name": "Movie", "Type": "Movie"}],
+                "TotalRecordCount": 1
+            })))
+            .expect(1)
+            .with_priority(1)
+            .mount(&mock)
+            .await;
+    }
+    let catalog = catalog(&mock);
+    for (n, id) in ids.iter().enumerate() {
+        let found = catalog
+            .collections_of(&ItemId::from(format!("m{n}").as_str()))
+            .await
+            .unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].id, ItemId::from(id.as_str()));
+    }
 }

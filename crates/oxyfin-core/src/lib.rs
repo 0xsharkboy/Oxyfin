@@ -72,8 +72,9 @@ pub use config::{Config, SavedSession};
 pub use error::{CoreError, Result};
 pub use images::{CacheBudgets, DEFAULT_DISK_BUDGET, DEFAULT_MEMORY_BUDGET, ImageCache, ImageSize};
 pub use models::{
-    Episode, ImageRef, ItemKind, ItemSummary, Library, LibraryKind, MovieDetails, Page, Person,
-    PersonDetails, PersonKind, PersonTitle, Season, SeriesDetails, UserState,
+    CollectionDetails, CollectionLink, Episode, ImageRef, ItemKind, ItemSummary, Library,
+    LibraryKind, MovieDetails, Page, Person, PersonDetails, PersonKind, PersonTitle, Season,
+    SeriesDetails, UserState,
 };
 pub use paths::Paths;
 pub use playback::{

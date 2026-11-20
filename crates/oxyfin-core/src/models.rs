@@ -14,6 +14,8 @@ pub enum ItemKind {
     Series,
     /// An episode of a series.
     Episode,
+    /// A collection of movies or series, also called a box set.
+    BoxSet,
 }
 
 /// Reference to an image of an item.
@@ -126,7 +128,7 @@ fn duration(dto: &BaseItemDto) -> Option<Duration> {
     dto.run_time_ticks.map(|ticks| ticks.to_duration())
 }
 
-/// Compact description of a movie, video, series or episode, for lists and cards.
+/// Compact description of a movie, video, series, episode or box set, for lists and cards.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ItemSummary {
     /// Identifier of the item.
@@ -163,6 +165,7 @@ impl ItemSummary {
             BaseItemKind::Video => ItemKind::Video,
             BaseItemKind::Series => ItemKind::Series,
             BaseItemKind::Episode => ItemKind::Episode,
+            BaseItemKind::BoxSet => ItemKind::BoxSet,
             _ => return None,
         };
         let is_episode = kind == ItemKind::Episode;
@@ -319,7 +322,8 @@ pub struct PersonTitle {
 impl PersonTitle {
     /// Converts a DTO listed with its people; `None` for kinds the UI does not display.
     pub fn from_dto(dto: &BaseItemDto, person: &ItemId) -> Option<Self> {
-        let summary = ItemSummary::from_dto(dto)?;
+        let summary =
+            ItemSummary::from_dto(dto).filter(|summary| summary.kind != ItemKind::BoxSet)?;
         let role = dto
             .people
             .iter()
@@ -492,6 +496,57 @@ impl SeriesDetails {
             next_episode,
             community_rating: dto.community_rating,
             official_rating: dto.official_rating.clone(),
+        })
+    }
+}
+
+/// A box set an item belongs to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CollectionLink {
+    /// Identifier of the box set.
+    pub id: ItemId,
+    /// Name of the box set.
+    pub name: String,
+}
+
+/// Full description of a box set with its items.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CollectionDetails {
+    /// Summary of the box set.
+    pub summary: ItemSummary,
+    /// Synopsis.
+    pub overview: Option<String>,
+    /// Items of the box set, oldest premiere first, undated ones last.
+    pub items: Vec<ItemSummary>,
+    /// Number of items played.
+    pub watched: usize,
+    /// First item not played yet, `None` when every item was played.
+    pub first_unwatched: Option<ItemId>,
+}
+
+impl CollectionDetails {
+    /// Converts the DTO of a box set and the DTOs of its items, whatever their order.
+    ///
+    /// Returns `None` when `dto` is not a box set.
+    pub fn from_dto(dto: &BaseItemDto, children: &[BaseItemDto]) -> Option<Self> {
+        let summary = ItemSummary::from_dto(dto).filter(|s| s.kind == ItemKind::BoxSet)?;
+        let mut ordered: Vec<&BaseItemDto> = children.iter().collect();
+        ordered.sort_by_key(|child| (child.premiere_date.is_none(), child.premiere_date.clone()));
+        let items: Vec<ItemSummary> = ordered
+            .into_iter()
+            .filter_map(ItemSummary::from_dto)
+            .collect();
+        let watched = items.iter().filter(|item| item.user.played).count();
+        let first_unwatched = items
+            .iter()
+            .find(|item| !item.user.played)
+            .map(|item| item.id.clone());
+        Some(Self {
+            summary,
+            overview: non_empty(dto.overview.as_deref()),
+            items,
+            watched,
+            first_unwatched,
         })
     }
 }
@@ -678,7 +733,7 @@ mod tests {
     #[test]
     fn unknown_kind_is_skipped() {
         let dto = BaseItemDto {
-            r#type: BaseItemKind::BoxSet,
+            r#type: BaseItemKind::Folder,
             ..BaseItemDto::default()
         };
         assert!(ItemSummary::from_dto(&dto).is_none());

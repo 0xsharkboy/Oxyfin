@@ -1,0 +1,213 @@
+import { Theme, CardData } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { TopBar, TopBarPage } from "../components/top_bar.slint";
+import { DetailHeader } from "../components/detail_header.slint";
+import { Button, ButtonStyle } from "../components/button.slint";
+import { IconButton } from "../components/icon_button.slint";
+import { PosterRow } from "../components/poster_row.slint";
+import { BodyText } from "../components/text.slint";
+
+// What the collection page shows about its box set; Rust fills it from the core.
+export struct CollectionData {
+    title: string,
+    overview: string,
+    // Number of items, and whether they are all movies.
+    count: int,
+    all-movies: bool,
+    // Production years of the oldest and newest items; empty when unknown.
+    first-year: string,
+    last-year: string,
+    watched-count: int,
+    watched: bool,
+    favorite: bool,
+    // Title of the item Play starts; empty when the box set is empty.
+    play-title: string,
+}
+
+// Collection page: the detail header of a box set and the row of its items.
+export component CollectionScreen inherits Rectangle {
+    in property <TopBarPage> page: TopBarPage.none;
+    // True once the box set is known; before that only the back arrow and the loading state show.
+    in property <bool> loaded;
+    in property <bool> loading;
+    in property <string> error;
+    in property <CollectionData> collection;
+    in property <image> poster;
+    in property <image> backdrop;
+    in property <bool> busy;
+    in property <[CardData]> items;
+    // False once another screen is shown: the page being left must not take the focus back.
+    in property <bool> active: true;
+    callback play();
+    callback toggle-watched();
+    callback toggle-favorite();
+    callback open-item(id: string);
+    callback retry();
+    callback back();
+    callback open-tab(page: TopBarPage);
+    callback open-settings();
+
+    pure function caption(data: CollectionData) -> string {
+        let count = data.all-movies ? @tr("{n} movie" | "{n} movies" % data.count) : @tr("{n} title" | "{n} titles" % data.count);
+        let years = data.first-year == "" ? "" : data.first-year == data.last-year ? data.first-year : @tr("{} to {}", data.first-year, data.last-year);
+        let watched = @tr("{n} watched" | "{n} watched" % data.watched-count);
+        years == "" ? count + " · " + watched : count + " · " + years + " · " + watched
+    }
+
+    accessible-role: groupbox;
+    accessible-label: @tr("Collection");
+
+    background: Theme.bg-base;
+    forward-focus: keys;
+
+    // Another box set may replace this one without a new page, and the clicked card took the focus.
+    changed loaded => {
+        if !self.loaded && self.active {
+            flick.content-y = 0;
+            keys.focus();
+        }
+    }
+
+    // Wraps the content so Escape reaches it from any focused control.
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.back();
+                return accept;
+            }
+            reject
+        }
+
+        flick := Flickable {
+            height: parent.height;
+            content-width: self.width;
+            content-height: max(content.preferred-height, self.height);
+
+            // The mouse back button, on whatever lies behind the content.
+            TouchArea {
+                width: flick.content-width;
+                height: flick.content-height;
+                pointer-event(event) => {
+                    if event.button == PointerEventButton.back && event.kind == PointerEventKind.up {
+                        root.back();
+                    }
+                }
+            }
+
+            content := VerticalLayout {
+                width: parent.width;
+                alignment: start;
+
+                if root.loaded: DetailHeader {
+                    height: self.preferred-height;
+                    backdrop: root.backdrop;
+                    poster: root.poster;
+                    title: root.collection.title;
+                    caption: root.caption(root.collection);
+                    overview: root.collection.overview;
+                    watched: root.collection.watched;
+                    favorite: root.collection.favorite;
+                    busy: root.busy;
+                    top-inset: top-bar.height;
+                    back => {
+                        root.back();
+                    }
+                    toggle-watched => {
+                        root.toggle-watched();
+                    }
+                    toggle-favorite => {
+                        root.toggle-favorite();
+                    }
+
+                    if root.collection.play-title != "": Button {
+                        label: @tr("Play {}", root.collection.play-title);
+                        icon: Icons.play;
+                        clicked => {
+                            root.play();
+                        }
+                    }
+                }
+
+                if root.loaded && root.items.length > 0: VerticalLayout {
+                    padding-top: Theme.space-sm;
+                    padding-bottom: Theme.space-3xl;
+
+                    PosterRow {
+                        title: @tr("In this collection");
+                        items: root.items;
+                        clicked(id) => {
+                            root.open-item(id);
+                        }
+                    }
+                }
+
+                if !root.loaded: VerticalLayout {
+                    padding-top: top-bar.height + Theme.space-lg;
+                    padding-left: Theme.space-3xl;
+                    padding-right: Theme.space-3xl;
+                    spacing: Theme.space-xl;
+
+                    HorizontalLayout {
+                        alignment: start;
+
+                        IconButton {
+                            icon: Icons.arrow-left;
+                            label: @tr("Back");
+                            clicked => {
+                                root.back();
+                            }
+                        }
+                    }
+                    if root.loading: BodyText {
+                        text: @tr("Loading");
+                        color: Theme.text-secondary;
+                    }
+                    if root.error != "": BodyText {
+                        text: root.error;
+                        color: Theme.text-secondary;
+                        wrap: word-wrap;
+                    }
+                    if root.error != "": HorizontalLayout {
+                        alignment: start;
+
+                        Button {
+                            label: @tr("Retry");
+                            style: ButtonStyle.secondary;
+                            clicked => {
+                                root.retry();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    top-bar := TopBar {
+        y: 0;
+        height: self.preferred-height;
+        current: root.page;
+        home-clicked => {
+            root.open-tab(TopBarPage.home);
+        }
+        movies-clicked => {
+            root.open-tab(TopBarPage.movies);
+        }
+        shows-clicked => {
+            root.open-tab(TopBarPage.shows);
+        }
+        favorites-clicked => {
+            root.open-tab(TopBarPage.favorites);
+        }
+        search-clicked => {
+            root.open-tab(TopBarPage.search);
+        }
+        settings-clicked => {
+            root.open-settings();
+        }
+    }
+
+    init => {
+        keys.focus();
+    }
+}

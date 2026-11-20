@@ -59,6 +59,8 @@ pub enum Screen {
     Series(String),
     /// Page of a person of the cast and crew, by person identifier.
     Person(String),
+    /// Page of a box set, by item identifier.
+    Collection(String),
     /// Video player.
     Player,
     /// Settings.
@@ -76,7 +78,10 @@ impl Screen {
 
     /// Whether playback can start from the screen: the home screen and the detail pages.
     pub fn can_play(&self) -> bool {
-        matches!(self, Screen::Home | Screen::Movie(_) | Screen::Series(_))
+        matches!(
+            self,
+            Screen::Home | Screen::Movie(_) | Screen::Series(_) | Screen::Collection(_)
+        )
     }
 
     fn has_controller(&self) -> bool {
@@ -88,13 +93,14 @@ impl Screen {
                 | Screen::Movie(_)
                 | Screen::Series(_)
                 | Screen::Person(_)
+                | Screen::Collection(_)
         )
     }
 
     fn is_detail(&self) -> bool {
         matches!(
             self,
-            Screen::Movie(_) | Screen::Series(_) | Screen::Person(_)
+            Screen::Movie(_) | Screen::Series(_) | Screen::Person(_) | Screen::Collection(_)
         )
     }
 }
@@ -129,7 +135,8 @@ pub enum Msg {
     CloseQuickConnect,
     /// The user picked a tab of the top bar.
     OpenTab(Tab),
-    /// The user opened a detail page: only `Screen::Movie`, `Screen::Series` or `Screen::Person`.
+    /// The user opened a detail page: only `Screen::Movie`, `Screen::Series`, `Screen::Person`
+    /// or `Screen::Collection`.
     OpenItem(Screen),
     /// A watched or favorite change succeeded on a detail page: the screens below are stale.
     ItemChanged(Screen),
@@ -763,6 +770,33 @@ mod tests {
         assert_eq!(
             s.update(Msg::Back),
             vec![Effect::Discard(person), Effect::Show(movie("m"))]
+        );
+    }
+
+    #[test]
+    fn collection_opens_items_and_plays() {
+        let (mut s, _) = signed_in();
+        s.update(Msg::OpenItem(movie("m")));
+        let collection = Screen::Collection("c".into());
+        assert_eq!(
+            s.update(Msg::OpenItem(collection.clone())),
+            vec![Effect::Show(collection.clone())]
+        );
+        assert!(s.screen().can_play());
+        assert_eq!(
+            s.update(Msg::OpenItem(movie("n"))),
+            vec![Effect::Show(movie("n"))]
+        );
+        assert_eq!(
+            s.update(Msg::Back),
+            vec![
+                Effect::Discard(movie("n")),
+                Effect::Show(collection.clone())
+            ]
+        );
+        assert_eq!(
+            s.update(Msg::OpenPlayer),
+            vec![Effect::Show(Screen::Player)]
         );
     }
 

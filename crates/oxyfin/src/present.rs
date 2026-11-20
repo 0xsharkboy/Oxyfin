@@ -75,11 +75,13 @@ pub fn image_size(logical_width: f32, logical_height: f32, scale: f32) -> ImageS
     }
 }
 
-/// Detail page an item opens: movies and videos their own, series their own, episodes their series.
+/// Detail page an item opens: movies, videos, series and box sets their own, episodes their
+/// series.
 pub fn detail_target(item: &ItemSummary) -> Option<Screen> {
     match item.kind {
         ItemKind::Movie | ItemKind::Video => Some(Screen::Movie(item.id.as_str().to_owned())),
         ItemKind::Series => Some(Screen::Series(item.id.as_str().to_owned())),
+        ItemKind::BoxSet => Some(Screen::Collection(item.id.as_str().to_owned())),
         ItemKind::Episode => item
             .series_id
             .as_ref()
@@ -822,6 +824,10 @@ mod tests {
         assert_eq!(
             detail_target(&summary(ItemKind::Series)),
             Some(Screen::Series("abc".into()))
+        );
+        assert_eq!(
+            detail_target(&summary(ItemKind::BoxSet)),
+            Some(Screen::Collection("abc".into()))
         );
         let mut episode = summary(ItemKind::Episode);
         assert_eq!(detail_target(&episode), None);
