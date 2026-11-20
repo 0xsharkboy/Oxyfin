@@ -12,6 +12,8 @@ export struct PersonCardData {
     initials: string,
     role: string,
     job: PersonJob,
+    // Crew credit of an actor who also directs, writes, composes or produces; `other` for none.
+    also: PersonJob,
     image: image,
     has-image: bool,
 }
@@ -155,6 +157,15 @@ export component CastRow inherits Rectangle {
         ""
     }
 
+    // The role, after the crew credit of an actor who has one; the job when no role is known.
+    pure function caption(person: PersonCardData) -> string {
+        if person.role == "" {
+            return root.job-text(person.job);
+        }
+        let also = root.job-text(person.also);
+        also == "" ? person.role : also + " · " + person.role
+    }
+
     accessible-role: list;
     accessible-label: @tr("Cast and crew");
 
@@ -179,7 +190,7 @@ export component CastRow inherits Rectangle {
 
                 for person in root.people: PersonCard {
                     name: person.name;
-                    role: person.role != "" ? person.role : root.job-text(person.job);
+                    role: root.caption(person);
                     initials: person.initials;
                     image: person.image;
                     has-image: person.has-image;

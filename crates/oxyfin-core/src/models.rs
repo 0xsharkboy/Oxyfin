@@ -226,17 +226,19 @@ impl PersonKind {
     }
 }
 
-/// A person credited on an item.
+/// A person credited on an item, with all the credits of that person joined.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Person {
     /// Identifier of the person, when the server knows one.
     pub id: Option<ItemId>,
     /// Name of the person.
     pub name: String,
-    /// Character played, for actors.
+    /// Characters played, for actors, joined with " / ".
     pub role: Option<String>,
-    /// Kind of credit.
+    /// Main credit: acting first, then directing, writing, composing, producing.
     pub kind: PersonKind,
+    /// Crew credit of an actor who also directs, writes, composes or produces the item.
+    pub also: Option<PersonKind>,
     /// Portrait of the person.
     pub image: Option<ImageRef>,
 }
@@ -248,10 +250,37 @@ impl Person {
             name: dto.name.clone(),
             role: non_empty(dto.role.as_deref()),
             kind: PersonKind::from_type(dto.r#type.as_deref()),
+            also: None,
             image: dto
                 .id
                 .as_ref()
                 .and_then(|id| image(id, ImageType::Primary, dto.primary_image_tag.as_ref())),
+        }
+    }
+
+    /// Adds `credit`, another credit of the same person.
+    fn join(&mut self, credit: Person) {
+        let (kind, role) = (credit.kind, credit.role);
+        if (kind as u8) < (self.kind as u8) {
+            let previous = std::mem::replace(&mut self.kind, kind);
+            self.also = (kind == PersonKind::Actor).then_some(previous);
+            self.role = role;
+        } else if kind == self.kind {
+            self.role = match (self.role.take(), role) {
+                (Some(kept), Some(added)) if kept != added => Some(format!("{kept} / {added}")),
+                (kept, added) => kept.or(added),
+            };
+        } else if self.kind == PersonKind::Actor && kind != PersonKind::Other {
+            self.also = Some(self.also.map_or(kind, |also| {
+                if (kind as u8) < (also as u8) {
+                    kind
+                } else {
+                    also
+                }
+            }));
+        }
+        if self.image.is_none() {
+            self.image = credit.image;
         }
     }
 }
@@ -259,18 +288,42 @@ impl Person {
 /// Number of people listed on a detail page.
 const CAST_LIMIT: usize = 20;
 
+/// Places kept for the crew when the actors alone would fill the list.
+const CREW_PLACES: usize = 5;
+
 fn non_empty(text: Option<&str>) -> Option<String> {
     text.map(str::trim)
         .filter(|text| !text.is_empty())
         .map(str::to_owned)
 }
 
-/// Actors in the order of the server, then directors, writers, composers, producers and the
-/// other credits.
+/// One card per person, actors in the order of the server, then directors, writers, composers,
+/// producers and the other credits. A long cast leaves up to five places to the crew.
 fn cast_and_crew(dto: &BaseItemDto) -> Vec<Person> {
-    let mut people: Vec<Person> = dto.people.iter().map(Person::from_dto).collect();
+    let mut people: Vec<Person> = Vec::new();
+    for credit in dto.people.iter().map(Person::from_dto) {
+        let same = credit.id.as_ref().and_then(|id| {
+            people
+                .iter()
+                .position(|person| person.id.as_ref() == Some(id))
+        });
+        match same {
+            Some(index) => people[index].join(credit),
+            None => people.push(credit),
+        }
+    }
     people.sort_by_key(|person| person.kind as u8);
-    people.truncate(CAST_LIMIT);
+    let actors = people
+        .iter()
+        .filter(|person| person.kind == PersonKind::Actor)
+        .count();
+    let crew = people.len() - actors;
+    let kept_actors = actors.min(CAST_LIMIT - crew.min(CREW_PLACES));
+    let kept_crew = crew.min(CAST_LIMIT - kept_actors);
+    let mut crew_people = people.split_off(actors);
+    people.truncate(kept_actors);
+    crew_people.truncate(kept_crew);
+    people.extend(crew_people);
     people
 }
 

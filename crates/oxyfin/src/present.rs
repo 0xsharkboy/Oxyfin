@@ -112,6 +112,17 @@ pub fn date_parts(date: &str) -> Option<(i32, i32, i32)> {
     (year > 0 && (1..=12).contains(&month) && (1..=31).contains(&day)).then_some((year, month, day))
 }
 
+fn person_job(kind: PersonKind) -> PersonJob {
+    match kind {
+        PersonKind::Actor => PersonJob::Actor,
+        PersonKind::Director => PersonJob::Director,
+        PersonKind::Writer => PersonJob::Writer,
+        PersonKind::Composer => PersonJob::Composer,
+        PersonKind::Producer => PersonJob::Producer,
+        PersonKind::Other => PersonJob::Other,
+    }
+}
+
 /// Card of a person of the cast and crew. The photo is loaded later.
 pub fn person_card(person: &Person) -> PersonCardData {
     PersonCardData {
@@ -123,14 +134,8 @@ pub fn person_card(person: &Person) -> PersonCardData {
         name: person.name.as_str().into(),
         initials: initials(&person.name).into(),
         role: person.role.clone().unwrap_or_default().into(),
-        job: match person.kind {
-            PersonKind::Actor => PersonJob::Actor,
-            PersonKind::Director => PersonJob::Director,
-            PersonKind::Writer => PersonJob::Writer,
-            PersonKind::Composer => PersonJob::Composer,
-            PersonKind::Producer => PersonJob::Producer,
-            PersonKind::Other => PersonJob::Other,
-        },
+        job: person_job(person.kind),
+        also: person.also.map_or(PersonJob::Other, person_job),
         image: Default::default(),
         has_image: false,
     }
@@ -970,6 +975,7 @@ mod tests {
             name: "Karl Vinter".into(),
             role: None,
             kind: PersonKind::Director,
+            also: None,
             image: None,
         };
         let card = person_card(&person);
@@ -985,6 +991,12 @@ mod tests {
         };
         let card = person_card(&actor);
         assert_eq!((card.id.as_str(), card.role.as_str()), ("a", "Hero"));
+        assert_eq!(card.also, PersonJob::Other);
+        let directing = Person {
+            also: Some(PersonKind::Director),
+            ..actor
+        };
+        assert_eq!(person_card(&directing).also, PersonJob::Director);
     }
 
     fn loaded_row(id: &str) -> EpisodeData {
