@@ -327,6 +327,7 @@ async fn items_query_serializes_parameters() {
         fields: vec![ItemFields::Overview, ItemFields::Genres],
         ids: Vec::new(),
         person_ids: Vec::new(),
+        bare: false,
     };
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
@@ -437,6 +438,25 @@ async fn items_query_person_ids() {
     );
     let pairs = query_pairs_for(&ItemsQuery::default()).await;
     assert!(pairs.iter().all(|(k, _)| k != "personIds"), "{pairs:?}");
+}
+
+#[tokio::test]
+async fn items_query_bare_leaves_images_and_user_data_out() {
+    let pairs = query_pairs_for(&ItemsQuery {
+        bare: true,
+        ..ItemsQuery::default()
+    })
+    .await;
+    assert!(
+        pairs.contains(&("enableImages".to_string(), "false".to_string())),
+        "{pairs:?}"
+    );
+    assert!(
+        pairs.contains(&("enableUserData".to_string(), "false".to_string())),
+        "{pairs:?}"
+    );
+    let pairs = query_pairs_for(&ItemsQuery::default()).await;
+    assert!(pairs.iter().all(|(k, _)| k != "enableImages"), "{pairs:?}");
 }
 
 #[test]
