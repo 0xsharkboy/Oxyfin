@@ -133,15 +133,11 @@ impl SessionManager {
         oxyfin_api::discover(DISCOVERY_TIMEOUT, &targets).await
     }
 
-    /// Version the server at `url` publishes, or `None` when it does not tell within
-    /// [`SERVER_VERSION_TIMEOUT`].
-    pub async fn server_version(&self, url: &str) -> Option<String> {
-        let server = Server::new(url, self.client_info()).ok()?;
-        let info = tokio::time::timeout(SERVER_VERSION_TIMEOUT, server.public_info())
-            .await
-            .ok()?
-            .ok()?;
-        Some(info.version)
+    /// Version a discovered server publishes, or `None` when it does not tell within
+    /// [`SERVER_VERSION_TIMEOUT`]. The request carries no client identity and follows no
+    /// redirect.
+    pub async fn discovered_version(&self, server: &DiscoveredServer) -> Option<String> {
+        oxyfin_api::discovered_version(server, SERVER_VERSION_TIMEOUT).await
     }
 
     /// Returns how subtitles look, as last saved.

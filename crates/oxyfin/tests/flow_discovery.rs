@@ -31,11 +31,14 @@ fn discovered_server_fills_address() {
         .await?;
 
         let row = wait_role(&window, "Maison", AccessibleRole::Button).await?;
-        let servers = window.get_found_servers();
-        let found = servers.row_data(0).ok_or("no found server")?;
-        if found.detail != format!("{uri} · {SERVER_VERSION}") {
-            return Err(format!("unexpected detail: {}", found.detail));
-        }
+        let versioned = format!("{uri} · {SERVER_VERSION}");
+        wait_until("the version of the server", || {
+            window
+                .get_found_servers()
+                .row_data(0)
+                .is_some_and(|found| found.detail == versioned.as_str())
+        })
+        .await?;
         let header = label_y(&window, "On your network")?;
         let address = label_y(&window, "Server address")?;
         let user = label_y(&window, "Username")?;

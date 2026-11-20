@@ -3,11 +3,10 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
-use std::sync::Arc;
 use std::time::Duration;
 
-use oxyfin_core::{CoreError, DiscoveredServer, ServerHandle};
-use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
+use oxyfin_core::{CoreError, ServerHandle};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
 use tokio::task::AbortHandle;
 
 use crate::app::App;
@@ -185,31 +184,51 @@ impl SignInController {
         self.check(app, address);
     }
 
-    /// Lists the servers answering on the local network, with their version when they tell it.
+    /// Lists the servers answering on the local network as soon as discovery ends, then adds
+    /// the version of each one as it tells it.
     fn discover(&self, app: &Rc<App>) {
         let round = self.discovery.get() + 1;
         self.discovery.set(round);
         let manager = app.manager();
         app.spawn(
-            async move {
-                let servers = manager.discover().await;
-                let versions = versions(&manager, &servers).await;
-                servers.into_iter().zip(versions).collect::<Vec<_>>()
-            },
-            move |app, found| {
+            async move { manager.discover().await },
+            move |app, servers| {
                 if app.sign_in.discovery.get() != round {
                     return;
                 }
                 let Some(window) = app.window() else { return };
-                let rows: Vec<FoundServer> = found
-                    .into_iter()
-                    .map(|(server, version)| FoundServer {
-                        detail: found_detail(&server.address, version.as_deref()).into(),
-                        name: server.name.into(),
-                        address: server.address.into(),
+                let rows: Vec<FoundServer> = servers
+                    .iter()
+                    .map(|server| FoundServer {
+                        detail: found_detail(&server.address, None).into(),
+                        name: server.name.as_str().into(),
+                        address: server.address.as_str().into(),
                     })
                     .collect();
                 window.set_found_servers(ModelRc::new(VecModel::from(rows)));
+                for (index, server) in servers.into_iter().enumerate() {
+                    let manager = app.manager();
+                    app.spawn(
+                        async move {
+                            let version = manager.discovered_version(&server).await;
+                            (server, version)
+                        },
+                        move |app, (server, version)| {
+                            let Some(version) = version else { return };
+                            if app.sign_in.discovery.get() != round {
+                                return;
+                            }
+                            let Some(window) = app.window() else { return };
+                            let rows = window.get_found_servers();
+                            if let Some(mut row) = rows.row_data(index)
+                                && row.address == server.address.as_str()
+                            {
+                                row.detail = found_detail(&server.address, Some(&version)).into();
+                                rows.set_row_data(index, row);
+                            }
+                        },
+                    );
+                }
             },
         );
     }
@@ -289,27 +308,6 @@ impl SignInController {
             task.abort();
         }
     }
-}
-
-async fn versions(
-    manager: &Arc<oxyfin_core::SessionManager>,
-    servers: &[DiscoveredServer],
-) -> Vec<Option<String>> {
-    let mut lookups = tokio::task::JoinSet::new();
-    for (index, server) in servers.iter().enumerate() {
-        let manager = Arc::clone(manager);
-        let address = server.address.clone();
-        lookups.spawn(async move { (index, manager.server_version(&address).await) });
-    }
-    let mut versions = vec![None; servers.len()];
-    while let Some(done) = lookups.join_next().await {
-        if let Ok((index, version)) = done
-            && let Some(slot) = versions.get_mut(index)
-        {
-            *slot = version;
-        }
-    }
-    versions
 }
 
 /// Second line of a server found on the network: its address, then its version when known.

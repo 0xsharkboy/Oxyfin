@@ -684,21 +684,34 @@ async fn discover_without_targets_finds_nothing_at_once() {
     assert!(start.elapsed() < Duration::from_millis(500));
 }
 
+fn discovered(address: &str) -> oxyfin_core::DiscoveredServer {
+    oxyfin_core::DiscoveredServer {
+        id: "server-1".to_owned(),
+        name: "Maison".to_owned(),
+        address: address.to_owned(),
+    }
+}
+
 #[tokio::test]
-async fn server_version_reads_the_public_info() {
+async fn discovered_version_reads_the_public_info_anonymously() {
     let mock = MockServer::start().await;
     mount_public_info(&mock).await;
     let dir = TempDir::new().unwrap();
     let manager = manager(&mock, &dir, memory_vault());
 
     assert_eq!(
-        manager.server_version(&mock.uri()).await.as_deref(),
+        manager
+            .discovered_version(&discovered(&mock.uri()))
+            .await
+            .as_deref(),
         Some("12.4.0")
     );
+    let requests = mock.received_requests().await.unwrap();
+    assert!(!requests[0].headers.contains_key("authorization"));
 }
 
 #[tokio::test]
-async fn server_version_is_none_when_the_server_does_not_answer() {
+async fn discovered_version_is_none_when_the_server_does_not_answer() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/System/Info/Public"))
@@ -708,6 +721,12 @@ async fn server_version_is_none_when_the_server_does_not_answer() {
     let dir = TempDir::new().unwrap();
     let manager = manager(&mock, &dir, memory_vault());
 
-    assert_eq!(manager.server_version(&mock.uri()).await, None);
-    assert_eq!(manager.server_version("not a url").await, None);
+    assert_eq!(
+        manager.discovered_version(&discovered(&mock.uri())).await,
+        None
+    );
+    assert_eq!(
+        manager.discovered_version(&discovered("not a url")).await,
+        None
+    );
 }
