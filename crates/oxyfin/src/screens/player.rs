@@ -163,10 +163,13 @@ pub fn bind(window: &AppWindow, send: Rc<dyn Fn(PlaybackCommand)>) {
     });
 
     let weak = window.as_weak();
-    window.on_player_toggle_fullscreen(move || {
+    window.on_toggle_fullscreen(move || {
         if let Some(window) = weak.upgrade() {
             let fullscreen = !window.window().is_fullscreen();
             window.window().set_fullscreen(fullscreen);
+            if window.get_screen() == crate::Screen::Player {
+                window.set_player_fullscreen_own(fullscreen);
+            }
         }
     });
 }
@@ -214,19 +217,20 @@ fn quality_row(quality: Quality) -> QualityRow {
     }
 }
 
-/// Opens the player screen: remembers whether the window is fullscreen, for [`leave`].
+/// Opens the player screen: the fullscreen the window has, if any, is not the
+/// player's own, so Escape and [`leave`] keep it.
 pub fn enter(window: &AppWindow) {
-    window.set_player_fullscreen_before(window.window().is_fullscreen());
+    window.set_player_fullscreen_own(false);
 }
 
-/// Leaves the player screen: the window gets back the fullscreen state it had when the
-/// player opened, so fullscreen turned on in the player does not stay behind the other
-/// screens, and a window launched fullscreen stays so.
+/// Leaves the player screen: fullscreen the player turned on does not stay
+/// behind the other screens; a window launched fullscreen stays so, unless
+/// fullscreen was left in the player.
 pub fn leave(window: &AppWindow) {
-    let before = window.get_player_fullscreen_before();
-    if window.window().is_fullscreen() != before {
-        window.window().set_fullscreen(before);
+    if window.get_player_fullscreen_own() && window.window().is_fullscreen() {
+        window.window().set_fullscreen(false);
     }
+    window.set_player_fullscreen_own(false);
 }
 
 /// Shows a playback event on the player screen. Returns the message to show

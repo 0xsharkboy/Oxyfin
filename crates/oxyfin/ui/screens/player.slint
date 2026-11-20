@@ -52,6 +52,8 @@ export component PlayerScreen inherits Rectangle {
     in property <SkipKind> skip-kind;
     in property <float> skip-end;
     in property <bool> fullscreen;
+    // Whether the player turned fullscreen on, so Escape leaves it.
+    in property <bool> fullscreen-own;
     in-out property <bool> scrubbing;
     in property <SeekPreview> preview;
     in property <[StatSection]> stats;
@@ -128,12 +130,13 @@ export component PlayerScreen inherits Rectangle {
     }
 
     function escape() {
-        if root.fullscreen {
-            root.toggle-fullscreen();
-        } else if root.menu != PlayerMenu.none {
+        if root.menu != PlayerMenu.none {
             root.menu = PlayerMenu.none;
         } else if root.stats-visible {
             root.stats-visible = false;
+        } else if root.fullscreen && root.fullscreen-own {
+            // The fullscreen of a fullscreen launch stays: Escape goes back instead.
+            root.toggle-fullscreen();
         } else {
             root.back();
         }
