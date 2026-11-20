@@ -141,11 +141,13 @@ pub fn person_card(person: &Person) -> PersonCardData {
     }
 }
 
-/// Card of a title on a person page: its year, then the role of the person when known.
-pub fn person_title_card(title: &PersonTitle) -> CardData {
+/// Card of a title on a person page: its year, `series` (the translated word) for a series,
+/// then the role of the person when known.
+pub fn person_title_card(title: &PersonTitle, series: &str) -> CardData {
     let mut data = card(&title.summary);
     let year = title.summary.year.map(|year| year.to_string());
-    data.subtitle = join_detail(year.into_iter().chain(title.role.clone()));
+    let kind = (title.summary.kind == ItemKind::Series).then(|| series.to_owned());
+    data.subtitle = join_detail(year.into_iter().chain(kind).chain(title.role.clone()));
     data
 }
 
@@ -958,7 +960,8 @@ mod tests {
             summary: summary_titled(ItemKind::Movie, year),
             role: role.map(str::to_owned),
         };
-        let subtitle = |title: PersonTitle| person_title_card(&title).subtitle.to_string();
+        let subtitle =
+            |title: PersonTitle| person_title_card(&title, "Series").subtitle.to_string();
         assert_eq!(
             subtitle(title(Some(2003), Some("Detective"))),
             "2003 \u{b7} Detective"
@@ -966,6 +969,16 @@ mod tests {
         assert_eq!(subtitle(title(Some(2003), None)), "2003");
         assert_eq!(subtitle(title(None, Some("Detective"))), "Detective");
         assert_eq!(subtitle(title(None, None)), "");
+        let series = PersonTitle {
+            summary: summary_titled(ItemKind::Series, Some(2021)),
+            role: Some("Kari".into()),
+        };
+        assert_eq!(subtitle(series.clone()), "2021 \u{b7} Series \u{b7} Kari");
+        let unnamed = PersonTitle {
+            role: None,
+            ..series
+        };
+        assert_eq!(subtitle(unnamed), "2021 \u{b7} Series");
     }
 
     #[test]

@@ -291,11 +291,12 @@ impl PersonController {
             .filter(|card| card.has_image)
             .map(|card| (card.id.clone(), card))
             .collect();
+        let series = window.global::<Messages>().invoke_series_kind();
         let mut missing = Vec::new();
         let cards: Vec<CardData> = titles
             .iter()
             .map(|title| {
-                let mut card = person_title_card(title);
+                let mut card = person_title_card(title, &series);
                 match previous.get(&card.id) {
                     Some(kept) => {
                         card.image = kept.image.clone();

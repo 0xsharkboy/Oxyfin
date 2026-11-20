@@ -327,7 +327,7 @@ pub async fn person_filters_counts(window: &AppWindow) -> Result<(), String> {
         })
         .collect();
     if labels(&grid) != ["Northbound", "Test Movie (2020)", "Driftwood"]
-        || subtitles != ["2023 \u{b7} Ada", "2020 \u{b7} Hero", "2019"]
+        || subtitles != ["2023 \u{b7} Series \u{b7} Ada", "2020 \u{b7} Hero", "2019"]
     {
         return Err(format!(
             "unexpected grid: {:?} {subtitles:?}",
