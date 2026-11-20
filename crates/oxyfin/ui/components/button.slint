@@ -76,6 +76,7 @@ export component Button inherits Rectangle {
         label-text := BodyStrongText {
             accessible-role: none;
             text: root.label;
+            overflow: elide;
             color: root.foreground;
             vertical-alignment: center;
         }

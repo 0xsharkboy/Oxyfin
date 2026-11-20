@@ -153,7 +153,6 @@ export component DetailHeader inherits Rectangle {
 
         HorizontalLayout {
             spacing: Theme.space-3xl;
-            alignment: start;
 
             Rectangle {
                 width: Theme.poster-width * 1.5;
@@ -173,6 +172,7 @@ export component DetailHeader inherits Rectangle {
             VerticalLayout {
                 alignment: end;
                 spacing: Theme.space-lg;
+                horizontal-stretch: 1;
 
                 DisplayText {
                     text: root.title;
@@ -252,7 +252,7 @@ export component DetailHeader inherits Rectangle {
                     text: root.overview;
                     color: Theme.text-secondary;
                     wrap: word-wrap;
-                    max-width: 640px;
+                    max-width: Theme.detail-text-width;
                 }
 
                 FlexboxLayout {
