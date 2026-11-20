@@ -10,12 +10,12 @@ use std::time::Duration;
 use common::{click, exists};
 use i_slint_backend_testing::{AccessibleRole, ElementHandle};
 use oxyfin::screens::player;
-use oxyfin::{AppWindow, Screen};
+use oxyfin::{AppWindow, Screen, TrackRow};
 use oxyfin_core::{
     Episode, PlaybackCommand, PlaybackEvent, SegmentKind, SkippableSegment, UserState,
 };
-use slint::platform::WindowEvent;
-use slint::{ComponentHandle, LogicalSize};
+use slint::platform::{PointerEventButton, WindowEvent};
+use slint::{ComponentHandle, LogicalPosition, LogicalSize, ModelRc, VecModel};
 
 const WIDTH: f32 = 1280.;
 const HEIGHT: f32 = 720.;
@@ -276,5 +276,69 @@ fn countdown_line_fills_by_the_last_step() {
         (fill_ratio(&window) - 1.).abs() < 0.01,
         "{}",
         fill_ratio(&window)
+    );
+}
+
+fn press_at(window: &AppWindow, position: LogicalPosition) {
+    window
+        .window()
+        .dispatch_event(WindowEvent::PointerMoved { position });
+    for event in [
+        WindowEvent::PointerPressed {
+            position,
+            button: PointerEventButton::Left,
+        },
+        WindowEvent::PointerReleased {
+            position,
+            button: PointerEventButton::Left,
+        },
+    ] {
+        window.window().dispatch_event(event);
+    }
+}
+
+#[test]
+fn skip_notice_stays_hidden_under_an_open_menu() {
+    let (window, sent) = playing();
+    window.set_player_subtitles(ModelRc::new(VecModel::from(vec![
+        TrackRow {
+            index: -1,
+            ..TrackRow::default()
+        },
+        TrackRow {
+            index: 2,
+            label: "English".into(),
+            ..TrackRow::default()
+        },
+    ])));
+    skip(&window, SegmentKind::Recap);
+    let pill = notice(&window, "Recap skipped").expect("no recap notice");
+    let (pill_at, pill_size) = (pill.absolute_position(), pill.size());
+    click(&window, &button(&window, "Undo"));
+    assert!(notice(&window, "Recap skipped").is_none());
+    sent.borrow_mut().clear();
+
+    click(&window, &button(&window, "Audio and subtitles"));
+    skip(&window, SegmentKind::Intro);
+    assert!(
+        notice(&window, "Intro skipped").is_none(),
+        "the notice shows over the menu"
+    );
+    // The menu control drawn where the notice was.
+    let step = button(&window, "Increase the subtitle delay");
+    let (at, size) = (step.absolute_position(), step.size());
+    let spot = LogicalPosition::new(at.x + size.width / 2., at.y + size.height / 2.);
+    assert!(
+        spot.x > pill_at.x
+            && spot.x < pill_at.x + pill_size.width
+            && spot.y > pill_at.y
+            && spot.y < pill_at.y + pill_size.height,
+        "{spot:?} lies outside the notice at {pill_at:?} {pill_size:?}"
+    );
+    press_at(&window, spot);
+    assert!(
+        matches!(sent.borrow()[..], [PlaybackCommand::AdjustSubtitleDelay(step)] if step > 0),
+        "{:?}",
+        sent.borrow()
     );
 }
