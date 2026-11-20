@@ -805,18 +805,6 @@ fn cast_order_actors_first() {
     assert_eq!(photo.index, None);
 }
 
-#[test]
-fn cast_limited_to_20() {
-    let mut people: Vec<Value> = (0..30)
-        .map(|n| json!({"Name": format!("Actor {n}"), "Id": format!("a{n}"), "Type": "Actor"}))
-        .collect();
-    people.push(json!({"Name": "The Director", "Id": "d", "Type": "Director"}));
-    let details = MovieDetails::from_dto(&people_movie(Value::Array(people)))
-        .unwrap_or_else(|| panic!("not a movie"));
-    assert_eq!(details.cast.len(), 20);
-    assert_eq!(details.cast[19].name, "Actor 19");
-}
-
 const PERSON_ID: &str = "8db589eea9a68887bf01dfcc4020e817";
 
 #[tokio::test]
@@ -1160,4 +1148,41 @@ async fn collections_of_reads_every_box_set() {
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].id, ItemId::from(id.as_str()));
     }
+}
+
+#[test]
+fn cast_keeps_the_crew_of_a_long_cast() {
+    let mut people: Vec<Value> = (0..30)
+        .map(|n| json!({"Name": format!("Actor {n}"), "Id": format!("a{n}"), "Type": "Actor"}))
+        .collect();
+    people.push(json!({"Name": "The Director", "Id": "d", "Type": "Director"}));
+    let details = MovieDetails::from_dto(&people_movie(Value::Array(people)))
+        .unwrap_or_else(|| panic!("not a movie"));
+    assert_eq!(details.cast.len(), 20);
+    assert_eq!(details.cast[18].name, "Actor 18");
+    assert_eq!(details.cast[19].name, "The Director");
+    assert_eq!(details.cast[19].kind, PersonKind::Director);
+}
+
+#[test]
+fn cast_joins_the_credits_of_one_person() {
+    let dto = people_movie(json!([
+        {"Name": "Ada Lind", "Id": "a1", "Role": "Captain", "Type": "Actor"},
+        {"Name": "Ada Lind", "Id": "a1", "Role": "Director", "Type": "Director"},
+        {"Name": "Ada Lind", "Id": "a1", "Role": "Narrator", "Type": "Actor"},
+        {"Name": "Karl Vinter", "Id": "w1", "Type": "Writer"},
+        {"Name": "Karl Vinter", "Id": "w1", "Type": "Producer"},
+        {"Name": "Unnamed", "Type": "Actor"},
+        {"Name": "Unnamed", "Type": "Actor"}
+    ]));
+    let details = MovieDetails::from_dto(&dto).unwrap_or_else(|| panic!("not a movie"));
+    let names: Vec<_> = details.cast.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(names, ["Ada Lind", "Unnamed", "Unnamed", "Karl Vinter"]);
+    let ada = &details.cast[0];
+    assert_eq!(ada.kind, PersonKind::Actor);
+    assert_eq!(ada.role.as_deref(), Some("Captain / Narrator"));
+    assert_eq!(ada.also, Some(PersonKind::Director));
+    let karl = &details.cast[3];
+    assert_eq!(karl.kind, PersonKind::Writer);
+    assert_eq!(karl.also, None);
 }
