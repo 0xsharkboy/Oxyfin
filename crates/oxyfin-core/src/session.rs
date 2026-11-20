@@ -1,14 +1,21 @@
 //! Sign-in, session restoration and sign-out.
 
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
-use oxyfin_api::{ClientInfo, Server, Session, UserId};
+use oxyfin_api::{ClientInfo, DiscoveredServer, Server, Session, UserId};
 
 use crate::{
     Config, CoreError, Paths, PlaybackPrefs, QUICK_CONNECT_POLL_INTERVAL, Quality, Result,
     SavedSession, SubtitleStyle, TokenStorage, TokenVault, account_key,
 };
+
+/// How long a discovery waits for servers to answer.
+pub const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// How long a discovered server has to tell its version.
+pub const SERVER_VERSION_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// A server that passed the version check.
 #[derive(Debug, Clone)]
@@ -46,6 +53,7 @@ pub struct SessionManager {
     config: Mutex<Config>,
     device_name: String,
     pub(crate) quick_connect_interval: Duration,
+    discovery_targets: Mutex<Option<Vec<SocketAddr>>>,
 }
 
 fn blocking<E: std::fmt::Display>(error: E) -> CoreError {
@@ -62,6 +70,7 @@ impl SessionManager {
             config: Mutex::new(config),
             device_name: device_name.into(),
             quick_connect_interval: QUICK_CONNECT_POLL_INTERVAL,
+            discovery_targets: Mutex::new(None),
         })
     }
 
@@ -101,6 +110,38 @@ impl SessionManager {
     /// Returns the last server address a sign-in succeeded on.
     pub fn last_server_url(&self) -> Option<String> {
         self.config().last_server_url.clone()
+    }
+
+    /// Sends discovery requests to these addresses instead of the local broadcast, for tests.
+    pub fn set_discovery_targets(&self, targets: Vec<SocketAddr>) {
+        *self
+            .discovery_targets
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(targets);
+    }
+
+    /// Lists the Jellyfin servers that answer on the local network within [`DISCOVERY_TIMEOUT`].
+    ///
+    /// Finds nothing, rather than failing, when the network refuses the request.
+    pub async fn discover(&self) -> Vec<DiscoveredServer> {
+        let targets = self
+            .discovery_targets
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .unwrap_or_else(oxyfin_api::default_targets);
+        oxyfin_api::discover(DISCOVERY_TIMEOUT, &targets).await
+    }
+
+    /// Version the server at `url` publishes, or `None` when it does not tell within
+    /// [`SERVER_VERSION_TIMEOUT`].
+    pub async fn server_version(&self, url: &str) -> Option<String> {
+        let server = Server::new(url, self.client_info()).ok()?;
+        let info = tokio::time::timeout(SERVER_VERSION_TIMEOUT, server.public_info())
+            .await
+            .ok()?
+            .ok()?;
+        Some(info.version)
     }
 
     /// Returns how subtitles look, as last saved.
