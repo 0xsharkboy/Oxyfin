@@ -11,6 +11,7 @@ use crate::app::App;
 use crate::images::load_into;
 use crate::present::{cast_line, clock, core_error_message, image_size};
 use crate::screens::home::{banner_artwork, banner_box};
+use crate::screens::similar::SimilarRow;
 use crate::state::{GenerationId, Msg, Screen};
 use crate::{AppWindow, Messages, MovieData};
 
@@ -31,6 +32,7 @@ pub(crate) struct MovieController {
     current: RefCell<Option<String>>,
     details: RefCell<Option<MovieDetails>>,
     images_requested: Cell<bool>,
+    similar: SimilarRow,
 }
 
 impl MovieController {
@@ -77,6 +79,11 @@ impl MovieController {
         }
     }
 
+    /// Opens the item of the card `id` in the "More like this" row.
+    pub(crate) fn open_similar(&self, app: &Rc<App>, id: &str) {
+        self.similar.open(app, id);
+    }
+
     /// Marks the movie watched or unwatched.
     pub(crate) fn toggle_watched(&self, app: &Rc<App>) {
         self.toggle(app, Flag::Watched);
@@ -93,6 +100,7 @@ impl MovieController {
         self.current.borrow_mut().take();
         self.details.borrow_mut().take();
         self.images_requested.set(false);
+        self.similar.clear(app, AppWindow::set_movie_similar);
         if let Some(window) = app.window() {
             window.set_movie_loaded(false);
             window.set_movie_loading(false);
@@ -137,6 +145,10 @@ impl MovieController {
             Ok(details) => {
                 *self.details.borrow_mut() = Some(details);
                 self.publish(app, id, &window);
+                if let Some(movie) = self.current.borrow().clone() {
+                    self.similar
+                        .request(app, &movie, AppWindow::set_movie_similar);
+                }
             }
             Err(CoreError::SessionExpired) => app.dispatch(Msg::Expired(id)),
             Err(error) => {

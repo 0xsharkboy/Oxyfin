@@ -523,3 +523,31 @@ fn null_chapters_decode_as_none() {
     assert_eq!(ItemFields::Chapters.as_str(), "Chapters");
     assert_eq!(ImageType::Chapter.as_str(), "Chapter");
 }
+
+#[tokio::test]
+async fn similar_query() {
+    for (label, body) in variants("items_movies") {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/Items/abc/Similar"))
+            .and(authorization_is(Some(TEST_TOKEN)))
+            .and(query_param("userId", TEST_USER_ID))
+            .and(query_param("limit", "12"))
+            .and(query_param("fields", "PrimaryImageAspectRatio"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&body))
+            .expect(1)
+            .mount(&mock)
+            .await;
+        let page = session(&mock)
+            .similar(&ItemId::from("abc"), 12)
+            .await
+            .unwrap();
+        let names: Vec<_> = page
+            .items
+            .iter()
+            .filter_map(|item| item.name.as_deref())
+            .collect();
+        assert!(names.contains(&"Test Movie (2020)"), "{label}: {names:?}");
+        assert_eq!(page.items.len(), 2, "{label}");
+    }
+}

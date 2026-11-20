@@ -876,6 +876,18 @@ impl App {
         window.on_series_retry_episodes(with(|app| app.series.retry_episodes(app)));
         window.on_series_play(with(|app| app.series.play(app)));
         let this = self.this.clone();
+        window.on_movie_open_similar(move |id| {
+            if let Some(app) = this.upgrade() {
+                app.movie.open_similar(&app, &id);
+            }
+        });
+        let this = self.this.clone();
+        window.on_series_open_similar(move |id| {
+            if let Some(app) = this.upgrade() {
+                app.series.open_similar(&app, &id);
+            }
+        });
+        let this = self.this.clone();
         window.on_series_play_episode(move |id| {
             if let Some(app) = this.upgrade() {
                 app.series.play_episode(&app, &id);

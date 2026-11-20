@@ -296,6 +296,12 @@ impl Catalog {
         Ok(page(self.session.items(&query).await?))
     }
 
+    /// Lists the items similar to `id`.
+    pub async fn similar(&self, id: &ItemId, limit: u32) -> Result<Vec<ItemSummary>> {
+        let result = self.session.similar(id, limit).await?;
+        Ok(summaries(&result.items))
+    }
+
     /// Fetches the details of a movie.
     pub async fn movie(&self, id: &ItemId) -> Result<MovieDetails> {
         let dto = self.session.item(id).await?;

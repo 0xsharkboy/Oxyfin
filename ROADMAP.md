@@ -34,7 +34,7 @@ This file is the single source of truth for planned work. An item is checked onl
 - [x] Next episode options (countdown, autoplay, automatic segment skipping)
 - [ ] Subtitle search and download
 - [x] Playback statistics
-- [ ] "More like this" on detail pages
+- [x] "More like this" on detail pages
 - [ ] Cast and crew pages
 - [ ] Collections (box sets)
 - [ ] Server discovery on the local network

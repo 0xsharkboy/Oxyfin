@@ -110,10 +110,12 @@ export component AppWindow inherits Window {
     in property <image> movie-poster;
     in property <image> movie-backdrop;
     in property <bool> movie-busy;
+    in property <[CardData]> movie-similar;
     callback movie-play(from-start: bool);
     callback movie-toggle-watched();
     callback movie-toggle-favorite();
     callback movie-retry();
+    callback movie-open-similar(id: string);
 
     in property <bool> series-loaded;
     in property <bool> series-loading;
@@ -128,6 +130,7 @@ export component AppWindow inherits Window {
     in property <bool> series-episodes-loading;
     in property <bool> series-episodes-stale;
     in property <string> series-episodes-error;
+    in property <[CardData]> series-similar;
     callback series-play();
     callback series-play-episode(id: string);
     callback series-select-season(index: int);
@@ -135,6 +138,7 @@ export component AppWindow inherits Window {
     callback series-toggle-favorite();
     callback series-retry();
     callback series-retry-episodes();
+    callback series-open-similar(id: string);
 
     in property <string> player-title;
     in property <string> player-subtitle;
@@ -401,6 +405,7 @@ export component AppWindow inherits Window {
             poster: root.movie-poster;
             backdrop: root.movie-backdrop;
             busy: root.movie-busy;
+            similar: root.movie-similar;
             play(from-start) => {
                 root.movie-play(from-start);
             }
@@ -412,6 +417,9 @@ export component AppWindow inherits Window {
             }
             retry => {
                 root.movie-retry();
+            }
+            open-item(id) => {
+                root.movie-open-similar(id);
             }
             back => {
                 root.back();
@@ -439,6 +447,7 @@ export component AppWindow inherits Window {
             episodes-loading: root.series-episodes-loading;
             episodes-stale: root.series-episodes-stale;
             episodes-error: root.series-episodes-error;
+            similar: root.series-similar;
             play => {
                 root.series-play();
             }
@@ -459,6 +468,9 @@ export component AppWindow inherits Window {
             }
             retry-episodes => {
                 root.series-retry-episodes();
+            }
+            open-item(id) => {
+                root.series-open-similar(id);
             }
             back => {
                 root.back();

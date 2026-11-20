@@ -1,9 +1,10 @@
-import { Theme } from "../theme.slint";
+import { Theme, CardData } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { TopBar, TopBarPage } from "../components/top_bar.slint";
 import { DetailHeader } from "../components/detail_header.slint";
 import { Button, ButtonStyle } from "../components/button.slint";
 import { IconButton } from "../components/icon_button.slint";
+import { PosterRow } from "../components/poster_row.slint";
 import { BodyText } from "../components/text.slint";
 
 // What the movie page shows about its movie; Rust fills it from the core.
@@ -34,10 +35,13 @@ export component MovieScreen inherits Rectangle {
     in property <image> poster;
     in property <image> backdrop;
     in property <bool> busy;
+    // Items like this one; the row is hidden while empty.
+    in property <[CardData]> similar;
     // `from-start` is false to resume where the movie was left.
     callback play(from-start: bool);
     callback toggle-watched();
     callback toggle-favorite();
+    callback open-item(id: string);
     callback retry();
     callback back();
     callback open-tab(page: TopBarPage);
@@ -48,6 +52,14 @@ export component MovieScreen inherits Rectangle {
 
     background: Theme.bg-base;
     forward-focus: keys;
+
+    // Another movie may replace this one without a new page, and the clicked card took the focus.
+    changed loaded => {
+        if !self.loaded {
+            flick.content-y = 0;
+            keys.focus();
+        }
+    }
 
     // Wraps the content so Escape reaches it from any focused control.
     keys := FocusScope {
@@ -118,6 +130,19 @@ export component MovieScreen inherits Rectangle {
                         style: root.movie.can-resume ? ButtonStyle.secondary : ButtonStyle.primary;
                         clicked => {
                             root.play(true);
+                        }
+                    }
+                }
+
+                if root.loaded && root.similar.length > 0: VerticalLayout {
+                    padding-top: Theme.space-sm;
+                    padding-bottom: Theme.space-3xl;
+
+                    PosterRow {
+                        title: @tr("More like this");
+                        items: root.similar;
+                        clicked(id) => {
+                            root.open-item(id);
                         }
                     }
                 }
