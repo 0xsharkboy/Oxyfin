@@ -91,6 +91,7 @@ fn shortcuts_step_the_delays_like_mpv_and_show_them() {
     press(&window, "z");
     press(&window, "Z");
     press(&window, "x");
+    press(&window, "X");
     with_control(&window, "+");
     with_control(&window, "=");
     with_control(&window, "-");
@@ -98,6 +99,7 @@ fn shortcuts_step_the_delays_like_mpv_and_show_them() {
         *sent.borrow(),
         vec![
             PlaybackCommand::AdjustSubtitleDelay(-100),
+            PlaybackCommand::AdjustSubtitleDelay(100),
             PlaybackCommand::AdjustSubtitleDelay(100),
             PlaybackCommand::AdjustSubtitleDelay(100),
             PlaybackCommand::AdjustAudioDelay(100),

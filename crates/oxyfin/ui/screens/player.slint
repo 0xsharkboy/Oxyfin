@@ -275,7 +275,7 @@ export component PlayerScreen inherits Rectangle {
                     root.command-step-chapter(1);
                 } else if event.text == "z" {
                     root.step-delay(DelayKind.subtitle, -1);
-                } else if event.text == "Z" || event.text == "x" {
+                } else if event.text == "Z" || event.text == "x" || event.text == "X" {
                     root.step-delay(DelayKind.subtitle, 1);
                 } else if event.text == Key.Escape {
                     root.escape();
