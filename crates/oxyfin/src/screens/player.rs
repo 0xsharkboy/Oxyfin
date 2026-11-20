@@ -79,6 +79,17 @@ pub fn bind(window: &AppWindow, send: Rc<dyn Fn(PlaybackCommand)>) {
     });
 
     let (to, weak) = (Rc::clone(&send), window.as_weak());
+    window.on_player_command_skip_segment(move || {
+        if let Some(window) = weak.upgrade() {
+            let seconds = window.get_player_skip_end();
+            window.set_player_position(seconds);
+            window.set_player_elapsed(clock(Duration::from_secs_f32(seconds)));
+            window.set_player_seek_pending(true);
+            show_current_chapter(&window);
+        }
+        to(PlaybackCommand::SkipSegment);
+    });
+    let (to, weak) = (Rc::clone(&send), window.as_weak());
     window.on_player_command_seek(move |seconds| {
         let seconds = seconds.max(0.0);
         if let Some(window) = weak.upgrade() {

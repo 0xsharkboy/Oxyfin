@@ -543,6 +543,16 @@ impl PlaybackController {
             }
             PlaybackCommand::CancelNextUp => self.cancel_countdown(),
             PlaybackCommand::SetPrefs(prefs) => self.prefs = prefs,
+            PlaybackCommand::SkipSegment => {
+                let end = self
+                    .current
+                    .as_ref()
+                    .and_then(|current| current.segment)
+                    .map(|segment| segment.end);
+                if let Some(end) = end {
+                    self.seek(SeekTarget::Absolute(end));
+                }
+            }
             PlaybackCommand::UndoSkip => {
                 if let Some(from) = self.skips.undo() {
                     self.seek(SeekTarget::Absolute(from));

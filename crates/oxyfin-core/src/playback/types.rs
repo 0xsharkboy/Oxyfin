@@ -168,6 +168,10 @@ pub enum PlaybackCommand {
     /// Apply the user's playback choices, from the next end of an episode
     /// and the next segment on.
     SetPrefs(PlaybackPrefs),
+    /// Skip the segment offered at the current position, as its skip button
+    /// does: unlike a seek, the segments after it may still be skipped by
+    /// themselves.
+    SkipSegment,
     /// Go back to where the last automatic skip of the current item
     /// happened. The segment is then only offered, never skipped again.
     UndoSkip,
