@@ -6,6 +6,9 @@ use oxyfin_core::{
     best_subtitle,
 };
 
+const ACCOUNT: &str = "alice-id@https://jellyfin.example";
+const OTHER_ACCOUNT: &str = "bob-id@https://jellyfin.example";
+
 fn audio(index: i32, language: &str, channels: u32) -> MediaStream {
     MediaStream {
         index,
@@ -194,14 +197,14 @@ fn choice(language: &str) -> TrackChoice {
 fn memory_survives_reload() {
     let dir = tempfile::tempdir().unwrap();
     let paths = Paths::under(dir.path());
-    let mut memory = TrackMemory::load(&paths);
+    let mut memory = TrackMemory::load(&paths, ACCOUNT);
     assert_eq!(memory.get(&series(1)), None);
     memory.set(&series(1), choice("fre")).unwrap();
     memory.set(&series(2), choice("jpn")).unwrap();
     memory.set(&series(1), choice("eng")).unwrap();
     assert!(paths.data_dir.join("track-memory.json").is_file());
 
-    let reloaded = TrackMemory::load(&paths);
+    let reloaded = TrackMemory::load(&paths, ACCOUNT);
     assert_eq!(reloaded.get(&series(1)), Some(choice("eng")));
     assert_eq!(reloaded.get(&series(2)), Some(choice("jpn")));
 }
@@ -212,11 +215,11 @@ fn unreadable_memory_starts_empty() {
     let paths = Paths::under(dir.path());
     std::fs::create_dir_all(&paths.data_dir).unwrap();
     std::fs::write(paths.data_dir.join("track-memory.json"), "not json").unwrap();
-    let mut memory = TrackMemory::load(&paths);
+    let mut memory = TrackMemory::load(&paths, ACCOUNT);
     assert_eq!(memory.get(&series(1)), None);
     memory.set(&series(1), choice("fre")).unwrap();
     assert_eq!(
-        TrackMemory::load(&paths).get(&series(1)),
+        TrackMemory::load(&paths, ACCOUNT).get(&series(1)),
         Some(choice("fre"))
     );
 }
@@ -226,7 +229,7 @@ fn memory_bounded_to_500() {
     assert_eq!(TRACK_MEMORY_LIMIT, 500);
     let dir = tempfile::tempdir().unwrap();
     let paths = Paths::under(dir.path());
-    let mut memory = TrackMemory::load(&paths);
+    let mut memory = TrackMemory::load(&paths, ACCOUNT);
     for n in 0..TRACK_MEMORY_LIMIT {
         memory.set(&series(n), choice("fre")).unwrap();
     }
@@ -235,7 +238,7 @@ fn memory_bounded_to_500() {
         .set(&series(TRACK_MEMORY_LIMIT), choice("jpn"))
         .unwrap();
 
-    let reloaded = TrackMemory::load(&paths);
+    let reloaded = TrackMemory::load(&paths, ACCOUNT);
     assert_eq!(reloaded.get(&series(1)), None, "the oldest is dropped");
     assert_eq!(reloaded.get(&series(0)), Some(choice("eng")));
     assert_eq!(reloaded.get(&series(2)), Some(choice("fre")));
@@ -243,4 +246,30 @@ fn memory_bounded_to_500() {
         reloaded.get(&series(TRACK_MEMORY_LIMIT)),
         Some(choice("jpn"))
     );
+}
+
+#[test]
+fn each_account_keeps_its_own_choices() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::under(dir.path());
+    let mut alice = TrackMemory::load(&paths, ACCOUNT);
+    let mut bob = TrackMemory::load(&paths, OTHER_ACCOUNT);
+    alice.set(&series(1), choice("fre")).unwrap();
+    assert_eq!(bob.get(&series(1)), None);
+    assert_eq!(
+        TrackMemory::load(&paths, OTHER_ACCOUNT).get(&series(1)),
+        None
+    );
+
+    bob.set(&series(1), choice("jpn")).unwrap();
+    bob.set(&series(2), choice("eng")).unwrap();
+    alice.set(&series(3), choice("eng")).unwrap();
+
+    let alice = TrackMemory::load(&paths, ACCOUNT);
+    let bob = TrackMemory::load(&paths, OTHER_ACCOUNT);
+    assert_eq!(alice.get(&series(1)), Some(choice("fre")));
+    assert_eq!(alice.get(&series(2)), None);
+    assert_eq!(alice.get(&series(3)), Some(choice("eng")));
+    assert_eq!(bob.get(&series(1)), Some(choice("jpn")));
+    assert_eq!(bob.get(&series(2)), Some(choice("eng")));
 }

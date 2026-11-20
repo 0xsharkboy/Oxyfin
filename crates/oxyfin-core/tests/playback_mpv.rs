@@ -20,6 +20,7 @@ use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
 const MOVIE_ID: &str = "76282b1c408f374beeee50519e9157a4";
 const SOURCE_ID: &str = "5a3b1b5e0c8e4f6e9a1d2c3b4a5f6e7d";
+const ACCOUNT: &str = "user@http://jellyfin.test";
 const START: &str = "/Sessions/Playing";
 const PROGRESS: &str = "/Sessions/Playing/Progress";
 const STOPPED: &str = "/Sessions/Playing/Stopped";
@@ -175,7 +176,7 @@ async fn real_player_reports_start() {
             progress_interval: Duration::from_secs(3600),
             ..PlaybackTimings::default()
         },
-        TrackMemory::load(&Paths::under(data.path())),
+        TrackMemory::load(&Paths::under(data.path()), ACCOUNT),
     );
     handle.send(PlaybackCommand::Play {
         item: ItemId::from(MOVIE_ID),
