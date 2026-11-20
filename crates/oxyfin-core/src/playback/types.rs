@@ -3,8 +3,8 @@
 
 use std::time::Duration;
 
-use oxyfin_api::ItemId;
-use oxyfin_player::{PlayerError, SeekTarget};
+use oxyfin_api::{ItemId, PlayMethod};
+use oxyfin_player::{PlaybackStats, PlayerError, SeekTarget};
 
 use super::{AudioOption, Chapter, Quality, SkippableSegment, SubtitleOption};
 use crate::SubtitleStyle;
@@ -126,6 +126,9 @@ pub enum PlaybackCommand {
     /// Change how subtitles look. Applies at once, even with nothing
     /// playing, and again before each item loads.
     SetSubtitleStyle(SubtitleStyle),
+    /// Ask for the statistics of the loaded item, answered with
+    /// [`PlaybackEvent::Stats`]; ignored while nothing is loaded.
+    RequestStats,
     /// Stop playback.
     Stop,
 }
@@ -232,6 +235,8 @@ pub enum PlaybackEvent {
     Stopped,
     /// Playback or a command failed.
     Error(PlaybackError),
+    /// The statistics asked with [`PlaybackCommand::RequestStats`].
+    Stats(Box<StatsReport>),
     /// The server no longer accepts the session; playback stopped.
     ///
     /// The binary must then call [`SessionManager::expire`] and rebuild the
@@ -242,6 +247,18 @@ pub enum PlaybackEvent {
     /// [`Catalog`]: crate::Catalog
     /// [`ImageCache`]: crate::ImageCache
     SessionExpired,
+}
+
+/// Statistics of the loaded item.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StatsReport {
+    /// How the server delivers the item.
+    pub method: PlayMethod,
+    /// Why the server transcodes, such as `VideoCodecNotSupported`, as the
+    /// server names it. Empty without a transcode or when the server gives none.
+    pub transcode_reasons: Vec<String>,
+    /// What the player measures.
+    pub player: PlaybackStats,
 }
 
 /// Why playback or a command failed. The UI translates each variant.

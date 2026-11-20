@@ -261,7 +261,8 @@ impl PlayerState {
             | PlaybackEvent::Ended
             | PlaybackEvent::TracksChanged { .. }
             | PlaybackEvent::NextUpCountdown { .. }
-            | PlaybackEvent::NextUpCancelled => {}
+            | PlaybackEvent::NextUpCancelled
+            | PlaybackEvent::Stats(_) => {}
         }
         false
     }

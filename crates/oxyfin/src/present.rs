@@ -4,13 +4,13 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use oxyfin_core::{
-    AudioOption, Chapter, CoreError, Episode, ImageSize, ItemKind, ItemSummary, Person,
-    PlaybackError, PlaybackTitle, SeriesDetails, SubtitleOption,
+    AudioOption, Chapter, CoreError, Episode, ImageSize, ItemKind, ItemSummary, Person, PlayMethod,
+    PlaybackError, PlaybackTitle, SeriesDetails, StatsReport, SubtitleOption,
 };
-use slint::SharedString;
+use slint::{ModelRc, SharedString, VecModel};
 
 use crate::state::Screen;
-use crate::{CardData, ChapterRow, EpisodeData, Message, TrackRow};
+use crate::{CardData, ChapterRow, EpisodeData, Message, StatRow, StatSection, TrackRow};
 
 /// Message and detail to show for a core error.
 ///
@@ -326,6 +326,239 @@ pub fn device_name(hostname: Option<&str>, device_id: &str) -> String {
     match hostname.map(str::trim).filter(|name| !name.is_empty()) {
         Some(name) => name.to_owned(),
         None => format!("Oxyfin {}", device_id.chars().take(6).collect::<String>()),
+    }
+}
+
+/// Words of the playback statistics in the user's language: the window's
+/// translations in the application, plain English in tests.
+pub trait StatWords {
+    /// Title of the playback section.
+    fn playback(&self) -> String;
+    /// Title of the video section.
+    fn video(&self) -> String;
+    /// Title of the audio section.
+    fn audio(&self) -> String;
+    /// Title of the network section.
+    fn network(&self) -> String;
+    /// Label of the play method.
+    fn method(&self) -> String;
+    /// Label of the container.
+    fn container(&self) -> String;
+    /// Label of the bitrate.
+    fn bitrate(&self) -> String;
+    /// Label of a codec.
+    fn codec(&self) -> String;
+    /// Label of the resolution.
+    fn resolution(&self) -> String;
+    /// Label of the frame rate.
+    fn frame_rate(&self) -> String;
+    /// Label of the dropped frames.
+    fn dropped_frames(&self) -> String;
+    /// Label of the HDR format.
+    fn hdr(&self) -> String;
+    /// Label of the audio output.
+    fn output(&self) -> String;
+    /// Label of the buffer.
+    fn buffer(&self) -> String;
+    /// Label of the download speed.
+    fn speed(&self) -> String;
+    /// The original file, played as is.
+    fn direct_play(&self) -> String;
+    /// The original streams in another container.
+    fn direct_stream(&self) -> String;
+    /// A stream the server encodes.
+    fn transcode(&self) -> String;
+    /// Software decoding.
+    fn software(&self) -> String;
+    /// Hardware decoding with `api`.
+    fn hardware(&self, api: &str) -> String;
+    /// Frames dropped by the decoder and by the output.
+    fn dropped(&self, decoder: &str, output: &str) -> String;
+    /// Media buffered ahead of the position.
+    fn ahead(&self, seconds: &str) -> String;
+}
+
+/// The sections of the playback statistics panel, in the order of the
+/// reference design. Values the report lacks get no row, and a section with
+/// no row is left out.
+pub fn stat_sections(report: &StatsReport, words: &dyn StatWords) -> Vec<StatSection> {
+    let stats = &report.player;
+    let row = |label: String, value: String| StatRow {
+        label: label.into(),
+        value: value.into(),
+        ..StatRow::default()
+    };
+
+    let method = match report.method {
+        PlayMethod::DirectPlay => words.direct_play(),
+        PlayMethod::DirectStream => words.direct_stream(),
+        PlayMethod::Transcode => words.transcode(),
+    };
+    let method = if report.transcode_reasons.is_empty() {
+        method
+    } else {
+        format!("{method} ({})", report.transcode_reasons.join(", "))
+    };
+    let total_bitrate = match (stats.video_bitrate, stats.audio_bitrate) {
+        (None, None) => None,
+        (video, audio) => Some(video.unwrap_or(0) + audio.unwrap_or(0)),
+    };
+    let playback = [
+        Some(StatRow {
+            good: report.method == PlayMethod::DirectPlay,
+            ..row(words.method(), method)
+        }),
+        stats
+            .file_format
+            .as_deref()
+            .map(|format| row(words.container(), container_name(format))),
+        total_bitrate.map(|bits| row(words.bitrate(), bitrate(bits))),
+    ];
+
+    let decoding = match stats.hwdec.as_deref() {
+        Some(api) => words.hardware(api),
+        None => words.software(),
+    };
+    let resolution = match (stats.source_size, stats.output_size) {
+        (Some(source), Some(output)) if source != output => {
+            Some(format!("{} → {}", size(source), size(output)))
+        }
+        (Some(source), _) => Some(size(source)),
+        (None, Some(output)) => Some(size(output)),
+        (None, None) => None,
+    };
+    let dropped = match (stats.dropped_decoder, stats.dropped_output) {
+        (None, None) => None,
+        (decoder, output) => Some((decoder.unwrap_or(0), output.unwrap_or(0))),
+    };
+    let video = [
+        stats
+            .video_codec
+            .as_deref()
+            .map(|codec| row(words.codec(), format!("{} ({decoding})", codec_name(codec)))),
+        resolution.map(|value| row(words.resolution(), value)),
+        stats
+            .fps
+            .map(|fps| row(words.frame_rate(), format!("{} fps", trim_number(fps, 3)))),
+        dropped.map(|(decoder, output)| StatRow {
+            warn: decoder > 0 || output > 0,
+            ..row(
+                words.dropped_frames(),
+                words.dropped(&decoder.to_string(), &output.to_string()),
+            )
+        }),
+        stats.hdr.clone().map(|hdr| row(words.hdr(), hdr)),
+    ];
+
+    let codec_line = [
+        stats
+            .audio_codec
+            .as_deref()
+            .map(|codec| match stats.audio_channels.as_deref() {
+                Some(channels) => format!("{} {channels}", codec_name(codec)),
+                None => codec_name(codec),
+            }),
+        stats.audio_bitrate.map(bitrate),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    let audio = [
+        (!codec_line.is_empty()).then(|| row(words.codec(), codec_line.join(" · "))),
+        stats
+            .audio_output
+            .clone()
+            .map(|output| row(words.output(), output)),
+    ];
+
+    let network = [
+        stats.cache_seconds.map(|seconds| {
+            row(
+                words.buffer(),
+                words.ahead(&format!("{}", seconds.round() as u64)),
+            )
+        }),
+        stats
+            .cache_speed
+            .map(|bytes| row(words.speed(), bitrate(bytes.saturating_mul(8)))),
+    ];
+
+    [
+        (words.playback(), playback.to_vec()),
+        (words.video(), video.to_vec()),
+        (words.audio(), audio.to_vec()),
+        (words.network(), network.to_vec()),
+    ]
+    .into_iter()
+    .filter_map(|(title, rows)| {
+        let rows: Vec<StatRow> = rows.into_iter().flatten().collect();
+        (!rows.is_empty()).then(|| StatSection {
+            title: title.into(),
+            rows: ModelRc::new(VecModel::from(rows)),
+        })
+    })
+    .collect()
+}
+
+/// A bitrate in bits per second, as kbps below 1 Mbps and Mbps from there.
+fn bitrate(bits: u64) -> String {
+    if bits >= 1_000_000 {
+        format!("{:.1} Mbps", bits as f64 / 1_000_000.0)
+    } else {
+        format!("{} kbps", (bits as f64 / 1000.0).round() as u64)
+    }
+}
+
+fn size((width, height): (u32, u32)) -> String {
+    format!("{width} × {height}")
+}
+
+/// `value` with at most `decimals` decimals and no trailing zero.
+fn trim_number(value: f64, decimals: usize) -> String {
+    let text = format!("{value:.decimals$}");
+    if text.contains('.') {
+        text.trim_end_matches('0').trim_end_matches('.').to_owned()
+    } else {
+        text
+    }
+}
+
+/// Display name of a container as mpv names it.
+fn container_name(format: &str) -> String {
+    match format {
+        "mkv" | "matroska" | "matroska,webm" => "Matroska (MKV)".to_owned(),
+        "webm" => "WebM".to_owned(),
+        "mp4" | "mov" | "mov,mp4,m4a,3gp,3g2,mj2" => "MP4".to_owned(),
+        "hls" | "applehttp" => "HLS".to_owned(),
+        "mpegts" => "MPEG-TS".to_owned(),
+        "avi" => "AVI".to_owned(),
+        other => other.to_uppercase(),
+    }
+}
+
+/// `codec`, a codec name as mpv gives it with an optional profile after a
+/// space, with a display name for the codec part.
+fn codec_name(codec: &str) -> String {
+    let (name, profile) = codec.split_once(' ').unwrap_or((codec, ""));
+    let name = match name {
+        "h264" => "H.264".to_owned(),
+        "hevc" => "HEVC".to_owned(),
+        "av1" => "AV1".to_owned(),
+        "vp8" => "VP8".to_owned(),
+        "vp9" => "VP9".to_owned(),
+        "mpeg2video" => "MPEG-2".to_owned(),
+        "mpeg4" => "MPEG-4".to_owned(),
+        "vc1" => "VC-1".to_owned(),
+        "eac3" => "E-AC3".to_owned(),
+        "truehd" => "TrueHD".to_owned(),
+        "opus" => "Opus".to_owned(),
+        "vorbis" => "Vorbis".to_owned(),
+        other => other.to_uppercase(),
+    };
+    if profile.is_empty() {
+        name
+    } else {
+        format!("{name} {profile}")
     }
 }
 

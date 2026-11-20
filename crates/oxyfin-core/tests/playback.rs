@@ -10,11 +10,11 @@ use common::{
 };
 use oxyfin_api::{ImageType, ItemId, MediaSourceId};
 use oxyfin_core::{
-    Chapter, ImageRef, PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackController,
-    PlaybackError, PlaybackEvent, PlaybackHandle, PlaybackTimings, PlayerEventSink, QUALITIES,
-    Quality, SHUTDOWN_TIMEOUT, SegmentKind, SkippableSegment, SubtitleBackground, SubtitleSize,
-    SubtitleStyle, Trickplay, UNLOAD_GRACE, chapter_at, next_chapter, player_events,
-    previous_chapter, start_at,
+    Chapter, ImageRef, PROGRESS_INTERVAL, PlayMethod, PlayMode, PlaybackCommand,
+    PlaybackController, PlaybackError, PlaybackEvent, PlaybackHandle, PlaybackStats,
+    PlaybackTimings, PlayerEventSink, QUALITIES, Quality, SHUTDOWN_TIMEOUT, SegmentKind,
+    SkippableSegment, SubtitleBackground, SubtitleSize, SubtitleStyle, Trickplay, UNLOAD_GRACE,
+    chapter_at, next_chapter, player_events, previous_chapter, start_at,
 };
 use oxyfin_player::{PlayerEvent, SeekTarget, Track, TrackId, TrackKind, UnloadReason};
 use serde_json::{Value, json};
@@ -3092,4 +3092,59 @@ async fn delay_steps_sent_in_a_row_add_up() {
     let calls = h.player.calls();
     assert!(calls.contains(&Call::SetSubtitleDelay(200)), "{calls:?}");
     assert!(calls.contains(&Call::SetAudioDelay(-200)), "{calls:?}");
+}
+
+#[tokio::test]
+async fn request_stats_reports_method() {
+    let mut h = harness(quiet()).await;
+    h.player.set_stats(PlaybackStats {
+        video_codec: Some("h264".into()),
+        source_size: Some((1920, 1080)),
+        ..PlaybackStats::default()
+    });
+    h.start().await;
+
+    h.handle.send(PlaybackCommand::RequestStats);
+    let PlaybackEvent::Stats(report) =
+        wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Stats(_))).await
+    else {
+        unreachable!()
+    };
+    assert_eq!(report.method, PlayMethod::DirectPlay);
+    assert!(report.transcode_reasons.is_empty());
+    assert_eq!(report.player.source_size, Some((1920, 1080)));
+    assert_eq!(report.player.video_codec.as_deref(), Some("h264"));
+}
+
+#[tokio::test]
+async fn request_stats_reports_the_transcode_reasons() {
+    let mock = MockServer::start().await;
+    mount_playback_info(&mock, transcode_info()).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.play(PlayMode::FromStart).await;
+    h.loaded_with(transcode_tracks()).await;
+
+    h.handle.send(PlaybackCommand::RequestStats);
+    let PlaybackEvent::Stats(report) =
+        wait_event(&mut h.events, |e| matches!(e, PlaybackEvent::Stats(_))).await
+    else {
+        unreachable!()
+    };
+    assert_eq!(report.method, PlayMethod::Transcode);
+    assert_eq!(
+        report.transcode_reasons,
+        vec!["ContainerBitrateExceedsLimit".to_owned()]
+    );
+}
+
+#[tokio::test]
+async fn request_stats_without_media_reports_nothing() {
+    let mut h = harness(quiet()).await;
+    h.handle.send(PlaybackCommand::RequestStats);
+    h.handle.send(PlaybackCommand::Stop);
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::Stopped)).await;
+    assert!(
+        !seen.iter().any(|e| matches!(e, PlaybackEvent::Stats(_))),
+        "{seen:?}"
+    );
 }

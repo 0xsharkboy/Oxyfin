@@ -13,11 +13,12 @@ use slint::platform::WindowEvent;
 use slint::{ComponentHandle, LogicalPosition, Model, ModelRc, SharedString, VecModel};
 
 use crate::present::{
-    audio_rows, chapter_marks, chapter_rows, clock, next_up_title, playback_error_message,
-    playback_title, subtitle_rows,
+    StatWords, audio_rows, chapter_marks, chapter_rows, clock, next_up_title,
+    playback_error_message, playback_title, stat_sections, subtitle_rows,
 };
 use crate::{
-    AppWindow, ChapterRow, Message, NextUp, QualityRow, SeekPreview, SkipKind, TrickplayGrid,
+    AppWindow, ChapterRow, Message, NextUp, QualityRow, SeekPreview, SkipKind, StatsTitles,
+    TrickplayGrid,
 };
 
 /// Volume change of one step of the volume keys, in percent.
@@ -55,6 +56,7 @@ pub fn bind(window: &AppWindow, send: Rc<dyn Fn(PlaybackCommand)>) {
     window.on_player_command_next(command(PlaybackCommand::Next));
     window.on_player_command_play_next_now(command(PlaybackCommand::PlayNextNow));
     window.on_player_command_cancel_next_up(command(PlaybackCommand::CancelNextUp));
+    window.on_player_command_stats(command(PlaybackCommand::RequestStats));
 
     let to = Rc::clone(&send);
     window.on_player_command_set_paused(move |paused| to(PlaybackCommand::SetPaused(paused)));
@@ -185,6 +187,7 @@ pub fn reset(window: &AppWindow) {
     window.set_player_next_up(NextUp::default());
     window.set_player_scrubbing(false);
     clear_chapters(window);
+    window.set_player_stats(ModelRc::default());
     clear_preview(window);
     show_segment(window, None);
     show_progress(window, Duration::ZERO, None);
@@ -238,6 +241,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             window.set_player_has_error(false);
             window.set_player_next_up(NextUp::default());
             clear_chapters(window);
+            window.set_player_stats(ModelRc::default());
             show_segment(window, None);
             show_progress(window, Duration::ZERO, None);
         }
@@ -305,6 +309,10 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
         PlaybackEvent::Segment(segment) => show_segment(window, segment),
         PlaybackEvent::Trickplay(trickplay) => window.set_player_trickplay(grid(&trickplay)),
         PlaybackEvent::Chapters(chapters) => show_chapters(window, &chapters),
+        PlaybackEvent::Stats(report) => {
+            let words = Words(window.global::<StatsTitles>());
+            window.set_player_stats(ModelRc::new(VecModel::from(stat_sections(&report, &words))));
+        }
         PlaybackEvent::Ended | PlaybackEvent::SessionExpired => {}
         PlaybackEvent::Error(error @ PlaybackError::Command { .. }) => {
             log::warn!("playback command failed: {error}");
@@ -321,6 +329,78 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
         }
     }
     None
+}
+
+/// The statistics words translated by the window.
+struct Words<'a>(StatsTitles<'a>);
+
+impl StatWords for Words<'_> {
+    fn playback(&self) -> String {
+        self.0.invoke_playback().into()
+    }
+    fn video(&self) -> String {
+        self.0.invoke_video().into()
+    }
+    fn audio(&self) -> String {
+        self.0.invoke_audio().into()
+    }
+    fn network(&self) -> String {
+        self.0.invoke_network().into()
+    }
+    fn method(&self) -> String {
+        self.0.invoke_method().into()
+    }
+    fn container(&self) -> String {
+        self.0.invoke_container().into()
+    }
+    fn bitrate(&self) -> String {
+        self.0.invoke_bitrate().into()
+    }
+    fn codec(&self) -> String {
+        self.0.invoke_codec().into()
+    }
+    fn resolution(&self) -> String {
+        self.0.invoke_resolution().into()
+    }
+    fn frame_rate(&self) -> String {
+        self.0.invoke_frame_rate().into()
+    }
+    fn dropped_frames(&self) -> String {
+        self.0.invoke_dropped_frames().into()
+    }
+    fn hdr(&self) -> String {
+        self.0.invoke_hdr().into()
+    }
+    fn output(&self) -> String {
+        self.0.invoke_output().into()
+    }
+    fn buffer(&self) -> String {
+        self.0.invoke_buffer().into()
+    }
+    fn speed(&self) -> String {
+        self.0.invoke_speed().into()
+    }
+    fn direct_play(&self) -> String {
+        self.0.invoke_direct_play().into()
+    }
+    fn direct_stream(&self) -> String {
+        self.0.invoke_direct_stream().into()
+    }
+    fn transcode(&self) -> String {
+        self.0.invoke_transcode().into()
+    }
+    fn software(&self) -> String {
+        self.0.invoke_software().into()
+    }
+    fn hardware(&self, api: &str) -> String {
+        self.0.invoke_hardware(api.into()).into()
+    }
+    fn dropped(&self, decoder: &str, output: &str) -> String {
+        self.0.invoke_dropped(decoder.into(), output.into()).into()
+    }
+    fn ahead(&self, seconds: &str) -> String {
+        self.0.invoke_ahead(seconds.into()).into()
+    }
 }
 
 /// Wires the seek bar preview of `window`: `request` is asked for each
