@@ -399,10 +399,12 @@ pub fn stat_sections(report: &StatsReport, words: &dyn StatWords) -> Vec<StatSec
     } else {
         format!("{method} ({})", report.transcode_reasons.join(", "))
     };
-    let total_bitrate = match (stats.video_bitrate, stats.audio_bitrate) {
-        (None, None) => None,
-        (video, audio) => Some(video.unwrap_or(0) + audio.unwrap_or(0)),
-    };
+    // A stream whose bitrate is not known yet would make the total too low.
+    let part = |present: bool, bits: Option<u64>| if present { bits } else { Some(0) };
+    let total_bitrate = part(stats.video_codec.is_some(), stats.video_bitrate)
+        .zip(part(stats.audio_codec.is_some(), stats.audio_bitrate))
+        .map(|(video, audio)| video + audio)
+        .filter(|bits| *bits > 0);
     let playback = [
         Some(StatRow {
             good: report.method == PlayMethod::DirectPlay,
@@ -427,10 +429,7 @@ pub fn stat_sections(report: &StatsReport, words: &dyn StatWords) -> Vec<StatSec
         (None, Some(output)) => Some(size(output)),
         (None, None) => None,
     };
-    let dropped = match (stats.dropped_decoder, stats.dropped_output) {
-        (None, None) => None,
-        (decoder, output) => Some((decoder.unwrap_or(0), output.unwrap_or(0))),
-    };
+    let dropped = stats.dropped_decoder.zip(stats.dropped_output);
     let video = [
         stats
             .video_codec
