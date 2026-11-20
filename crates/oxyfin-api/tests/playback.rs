@@ -122,6 +122,7 @@ async fn playback_info_posts_the_bitrate_and_the_tracks() {
     let mock = MockServer::start().await;
     let mut body = playback_info_body();
     body["MaxStreamingBitrate"] = json!(4_000_000);
+    body["MediaSourceId"] = json!("def");
     body["AudioStreamIndex"] = json!(3);
     body["SubtitleStreamIndex"] = json!(-1);
     Mock::given(method("POST"))
@@ -133,6 +134,7 @@ async fn playback_info_posts_the_bitrate_and_the_tracks() {
         .await;
     let options = PlaybackOptions {
         max_streaming_bitrate: Some(4_000_000),
+        media_source_id: Some(MediaSourceId::from("def")),
         audio_stream_index: Some(3),
         subtitle_stream_index: Some(-1),
         max_height: None,
@@ -239,6 +241,7 @@ async fn transcode_answer_decodes_without_the_token() {
     assert_eq!(source.transcoding_sub_protocol.as_deref(), Some("hls"));
     assert_eq!(source.transcode_reasons(), ["ContainerBitrateExceedsLimit"]);
     assert_eq!(source.transcoding_audio_stream_index(), Some(2));
+    assert_eq!(source.transcoding_subtitle_stream_index(), None);
     let url = source.transcoding_url.as_deref().unwrap();
     assert!(!url.contains(TEST_TOKEN), "{url}");
     let subtitle = &source.media_streams[0];
@@ -421,4 +424,26 @@ async fn stream_source_debug_redacts() {
     let debug = format!("{source:?}");
     assert!(!debug.contains(TEST_TOKEN), "{debug}");
     assert!(debug.contains("<redacted>"), "{debug}");
+}
+
+#[tokio::test]
+async fn a_subtitle_burned_into_a_transcode_is_known() {
+    let mut answer = transcode_answer();
+    answer["mediaSources"][0]["transcodingUrl"] = json!(
+        "/videos/abc/master.m3u8?MediaSourceId=def&AudioStreamIndex=1&SubtitleStreamIndex=3&SubtitleMethod=Encode&ApiKey=test-token"
+    );
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/Items/abc/PlaybackInfo"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(answer))
+        .mount(&mock)
+        .await;
+    let info = session(&mock)
+        .playback_info(&ItemId::from("abc"))
+        .await
+        .unwrap();
+    assert_eq!(
+        info.media_sources[0].transcoding_subtitle_stream_index(),
+        Some(3)
+    );
 }
