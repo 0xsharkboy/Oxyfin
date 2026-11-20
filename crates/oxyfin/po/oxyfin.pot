@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-20 18:39+0000\n"
+"POT-Creation-Date: 2026-11-20 19:46+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1523,7 +1523,7 @@ msgstr ""
 
 #: crates/oxyfin/ui/screens/settings.slint:454
 msgctxt "SettingsScreen"
-msgid "The device could not be authorized. Try again."
+msgid "The device could not be authorized."
 msgstr ""
 
 #: crates/oxyfin/ui/screens/settings.slint:461

@@ -538,7 +538,7 @@ impl Catalog {
     }
 
     /// Signs another device in as this user with the Quick Connect code it shows, typed with
-    /// or without spaces.
+    /// or without spaces or dashes.
     ///
     /// Returns `Ok(false)` for an empty, wrong or expired code, and
     /// [`CoreError::QuickConnectDisabled`] when Quick Connect is turned off on the server.

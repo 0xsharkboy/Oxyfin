@@ -172,7 +172,7 @@ export component SettingsScreen inherits Rectangle {
     // The Quick Connect code typed to sign another device in.
     in-out property <string> authorize-code;
     in-out property <AuthorizeState> authorize-state;
-    // Whether `code` holds more than spaces.
+    // Whether `code` holds at least one digit.
     pure callback code-ready(code: string) -> bool;
     callback authorize(code: string);
 
@@ -451,7 +451,7 @@ export component SettingsScreen inherits Rectangle {
                             text: root.authorize-state == AuthorizeState.done ? @tr("Device authorized")
                                 : root.authorize-state == AuthorizeState.wrong-code ? @tr("This code is wrong or expired")
                                 : root.authorize-state == AuthorizeState.unavailable ? @tr("Quick Connect is turned off on this server")
-                                : @tr("The device could not be authorized. Try again.");
+                                : @tr("The device could not be authorized.");
                             color: root.authorize-state == AuthorizeState.done ? Theme.watched : Theme.danger;
                             wrap: word-wrap;
                         }

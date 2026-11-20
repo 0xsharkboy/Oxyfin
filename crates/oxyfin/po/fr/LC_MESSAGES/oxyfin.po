@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-20 18:39+0000\n"
+"POT-Creation-Date: 2026-11-20 19:46+0000\n"
 "PO-Revision-Date: 2026-11-15 12:00+0000\n"
 "Last-Translator: Oxyfin contributors\n"
 "Language-Team: French\n"
@@ -1519,8 +1519,8 @@ msgstr "Quick Connect est désactivé sur ce serveur"
 
 #: crates/oxyfin/ui/screens/settings.slint:454
 msgctxt "SettingsScreen"
-msgid "The device could not be authorized. Try again."
-msgstr "L'appareil n'a pas pu être autorisé. Réessayez."
+msgid "The device could not be authorized."
+msgstr "L'appareil n'a pas pu être autorisé."
 
 #: crates/oxyfin/ui/screens/settings.slint:461
 msgctxt "SettingsScreen"

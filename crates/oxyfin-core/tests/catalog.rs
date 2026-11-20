@@ -1262,16 +1262,17 @@ async fn collections_listed_again_after_half_an_hour() {
 }
 
 #[tokio::test]
-async fn authorize_device_sends_the_code_without_spaces() {
+async fn authorize_device_sends_the_digits_of_the_code() {
     let mock = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/QuickConnect/Authorize"))
         .and(query_param("code", "482913"))
         .respond_with(ResponseTemplate::new(200).set_body_json(true))
-        .expect(1)
+        .expect(2)
         .mount(&mock)
         .await;
     assert_eq!(catalog(&mock).authorize_device(" 482 913 ").await, Ok(true));
+    assert_eq!(catalog(&mock).authorize_device("482-913").await, Ok(true));
 }
 
 #[tokio::test]

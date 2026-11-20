@@ -97,6 +97,11 @@ async fn authorize_button_disabled_when_empty(window: &AppWindow) -> Result<(), 
     if authorize_enabled(window) {
         return Err("Authorize is enabled with only spaces".into());
     }
+    enter_code(window, " - -").await?;
+    pause(Duration::from_millis(50)).await;
+    if authorize_enabled(window) {
+        return Err("Authorize is enabled without a digit".into());
+    }
     type_text(window, "4");
     wait_until("Authorize enabled with a code", || {
         authorize_enabled(window)
@@ -115,6 +120,13 @@ async fn authorize_wrong_code_message(window: &AppWindow) -> Result<(), String> 
         !message_shown(window, "This code is wrong or expired")
     })
     .await?;
+    Ok(())
+}
+
+async fn authorize_failed_message(window: &AppWindow) -> Result<(), String> {
+    enter_code(window, "222222").await?;
+    press(window, slint::platform::Key::Return);
+    wait_visible(window, "The device could not be authorized.").await?;
     Ok(())
 }
 
@@ -137,7 +149,7 @@ async fn authorize_success_message(window: &AppWindow) -> Result<(), String> {
         "Sign in another device: open Quick Connect on it, then type the code it shows.",
     )
     .await?;
-    enter_code(window, "482 913").await?;
+    enter_code(window, "482-913").await?;
     let button = wait_role(window, "Authorize", AccessibleRole::Button).await?;
     let field = wait_role(window, "Quick Connect code", AccessibleRole::TextInput).await?;
     inside_column(&button, "the Authorize button")?;
@@ -170,12 +182,14 @@ fn authorize_another_device() {
         answer(200, "482913"),
         answer(404, "000000"),
         answer(401, "111111"),
+        answer(500, "222222"),
         enabled,
     ];
     open_settings_with(mocks, async |window, _| {
         authorize_button_disabled_when_empty(window).await?;
         authorize_wrong_code_message(window).await?;
         authorize_unavailable_message(window).await?;
+        authorize_failed_message(window).await?;
         authorize_success_message(window).await
     });
 }
