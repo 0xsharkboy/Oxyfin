@@ -8,8 +8,8 @@
 //!
 //! The app forwards the player screen state and the playback events with
 //! [`Inhibitor::update`]; a task on the Tokio runtime holds the inhibition
-//! while an item plays, unpaused, on the player screen, and releases it
-//! otherwise.
+//! while an item plays, unpaused, on the player screen, keeps it through a
+//! load and the next episode countdown, and releases it otherwise.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -54,29 +54,48 @@ pub enum Update {
     Event(PlaybackEvent),
 }
 
-/// Whether `event` can change the inhibition, so the app forwards only those,
-/// and not the position reported every second.
+/// Whether `event` can change the inhibition, so the app forwards only those.
 pub fn concerns(event: &PlaybackEvent) -> bool {
     matches!(
         event,
         PlaybackEvent::Loading { .. }
             | PlaybackEvent::Ready { .. }
+            | PlaybackEvent::Position(_)
             | PlaybackEvent::Paused(_)
             | PlaybackEvent::Ended
-            | PlaybackEvent::Seeked
+            | PlaybackEvent::NextUpCancelled
             | PlaybackEvent::Stopped
             | PlaybackEvent::SessionExpired
             | PlaybackEvent::Error(_)
     )
 }
 
+/// What the inhibition should do, from [`Playing::wanted`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Want {
+    /// Keep the screen awake.
+    Hold,
+    /// Let the screen sleep.
+    Release,
+    /// Leave the inhibition as it is, held or not: an item loads, or the next
+    /// episode is about to.
+    Keep,
+}
+
 /// What the inhibition depends on, updated from [`Update`]s.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Playing {
     active: bool,
+    loading: bool,
     ready: bool,
     paused: bool,
+    has_next: bool,
     ended: bool,
+    countdown: bool,
+    /// The last position reported, or after the end the furthest one: only a
+    /// position before it plays again, as a seek to the end may end before
+    /// its position is reported.
+    position: Option<Duration>,
 }
 
 impl Playing {
@@ -84,33 +103,64 @@ impl Playing {
     pub fn apply(&mut self, update: &Update) {
         match update {
             Update::Active(active) => {
-                self.active = *active;
-                if !active {
-                    *self = Self::default();
-                }
+                *self = Self {
+                    active: *active,
+                    ..if *active { *self } else { Self::default() }
+                };
             }
             Update::Event(event) => match event {
                 PlaybackEvent::Loading { .. } => {
-                    self.ready = false;
-                    self.paused = false;
-                    self.ended = false;
+                    *self = Self {
+                        active: self.active,
+                        loading: true,
+                        ..Self::default()
+                    };
                 }
-                PlaybackEvent::Ready { .. } => self.ready = true,
+                PlaybackEvent::Ready { has_next, .. } => {
+                    self.loading = false;
+                    self.ready = true;
+                    self.has_next = *has_next;
+                }
+                PlaybackEvent::Position(position) => {
+                    if self.ended && self.position.is_some_and(|last| *position < last) {
+                        self.ended = false;
+                        self.countdown = false;
+                    }
+                    self.position = Some(*position);
+                }
                 PlaybackEvent::Paused(paused) => self.paused = *paused,
-                PlaybackEvent::Ended => self.ended = true,
-                // A seek after the end plays again; a seek to the end ends anew.
-                PlaybackEvent::Seeked => self.ended = false,
-                PlaybackEvent::Stopped | PlaybackEvent::SessionExpired => self.ready = false,
+                PlaybackEvent::Ended => {
+                    self.ended = true;
+                    self.countdown = self.has_next;
+                }
+                PlaybackEvent::NextUpCancelled => self.countdown = false,
                 PlaybackEvent::Error(PlaybackError::Command { .. }) => {}
-                PlaybackEvent::Error(_) => self.ready = false,
+                PlaybackEvent::Stopped
+                | PlaybackEvent::SessionExpired
+                | PlaybackEvent::Error(_) => {
+                    *self = Self {
+                        active: self.active,
+                        ..Self::default()
+                    };
+                }
                 _ => {}
             },
         }
     }
 
-    /// Whether the screen should stay awake: an item plays, unpaused, on the player screen.
-    pub fn wanted(&self) -> bool {
-        self.active && self.ready && !self.paused && !self.ended
+    /// What the inhibition should do: hold it while an item plays, unpaused,
+    /// on the player screen; keep it as it is while an item loads or the next
+    /// episode counts down; release it otherwise.
+    pub fn wanted(&self) -> Want {
+        if !self.active || self.paused {
+            Want::Release
+        } else if self.loading || (self.ended && self.countdown) {
+            Want::Keep
+        } else if self.ready && !self.ended {
+            Want::Hold
+        } else {
+            Want::Release
+        }
     }
 }
 
@@ -186,7 +236,7 @@ async fn run(bus: Bus, mut messages: UnboundedReceiver<Message>) {
             return;
         }
         match (playing.wanted(), held.is_some()) {
-            (true, false) => {
+            (Want::Hold, false) => {
                 if connection.is_none() {
                     connection = connect(&bus).await;
                 }
@@ -194,7 +244,7 @@ async fn run(bus: Bus, mut messages: UnboundedReceiver<Message>) {
                     held = inhibit(connection).await;
                 }
             }
-            (false, true) => {
+            (Want::Release, true) => {
                 if let (Some(connection), Some(held)) = (&connection, held.take()) {
                     uninhibit(connection, held).await;
                 }
@@ -344,14 +394,18 @@ mod tests {
         Update::Event(event)
     }
 
-    fn ready() -> Update {
+    fn ready_with(has_next: bool) -> Update {
         event(PlaybackEvent::Ready {
             duration: Some(Duration::from_secs(60)),
             audio: Vec::new(),
             subtitles: Vec::new(),
             has_previous: true,
-            has_next: false,
+            has_next,
         })
+    }
+
+    fn ready() -> Update {
+        ready_with(false)
     }
 
     fn loading() -> Update {
@@ -366,37 +420,52 @@ mod tests {
         })
     }
 
-    fn after(updates: &[Update]) -> bool {
+    fn at(seconds: u64) -> Update {
+        event(PlaybackEvent::Position(Duration::from_secs(seconds)))
+    }
+
+    fn paused(paused: bool) -> Update {
+        event(PlaybackEvent::Paused(paused))
+    }
+
+    /// Whether the inhibition is held after `updates`, as the task decides it.
+    fn held_after(updates: &[Update]) -> bool {
         let mut playing = Playing::default();
+        let mut held = false;
         for update in updates {
             playing.apply(update);
+            held = match playing.wanted() {
+                Want::Hold => true,
+                Want::Release => false,
+                Want::Keep => held,
+            };
         }
-        playing.wanted()
+        held
     }
 
     #[test]
     fn only_an_unpaused_item_on_the_player_keeps_the_screen_awake() {
         let active = Update::Active(true);
-        assert!(!after(&[active.clone(), loading()]));
-        assert!(after(&[active.clone(), loading(), ready()]));
-        assert!(!after(&[loading(), ready()]));
-        assert!(!after(&[
+        assert!(!held_after(&[active.clone(), loading()]));
+        assert!(held_after(&[active.clone(), loading(), ready()]));
+        assert!(!held_after(&[loading(), ready()]));
+        assert!(!held_after(&[active.clone(), ready(), paused(true)]));
+        assert!(held_after(&[
             active.clone(),
             ready(),
-            event(PlaybackEvent::Paused(true))
+            paused(true),
+            paused(false),
         ]));
-        assert!(after(&[
+        assert!(!held_after(&[
             active.clone(),
             ready(),
-            event(PlaybackEvent::Paused(true)),
-            event(PlaybackEvent::Paused(false)),
+            Update::Active(false)
         ]));
-        assert!(!after(&[active.clone(), ready(), Update::Active(false)]));
     }
 
     #[test]
     fn only_the_events_that_change_the_inhibition_are_forwarded() {
-        for update in [ready(), loading()] {
+        for update in [ready(), loading(), at(1)] {
             let Update::Event(event) = update else {
                 unreachable!()
             };
@@ -405,7 +474,7 @@ mod tests {
         for event in [
             PlaybackEvent::Paused(true),
             PlaybackEvent::Ended,
-            PlaybackEvent::Seeked,
+            PlaybackEvent::NextUpCancelled,
             PlaybackEvent::Stopped,
             PlaybackEvent::SessionExpired,
             PlaybackEvent::Error(PlaybackError::Network),
@@ -413,7 +482,7 @@ mod tests {
             assert!(concerns(&event), "{event:?}");
         }
         for event in [
-            PlaybackEvent::Position(Duration::from_secs(1)),
+            PlaybackEvent::Seeked,
             PlaybackEvent::Volume(50.0),
             PlaybackEvent::SubtitleDelay(100),
         ] {
@@ -431,28 +500,118 @@ mod tests {
             PlaybackEvent::Error(PlaybackError::Network),
         ] {
             assert!(
-                !after(&[active.clone(), ready(), event(end.clone())]),
+                !held_after(&[active.clone(), ready(), event(end.clone())]),
                 "{end:?}"
             );
         }
-        assert!(after(&[
+        assert!(held_after(&[
             active.clone(),
             ready(),
             event(PlaybackEvent::Error(PlaybackError::Command {
                 detail: "volume".into()
             })),
         ]));
-        assert!(after(&[
-            active.clone(),
-            ready(),
-            event(PlaybackEvent::Ended),
-            event(PlaybackEvent::Seeked),
-        ]));
-        assert!(!after(&[
+        assert!(!held_after(&[
             active,
             ready(),
             event(PlaybackEvent::Ended),
             loading()
         ]));
+    }
+
+    #[test]
+    fn loading_keeps_the_screen_awake_only_when_it_already_was() {
+        let active = Update::Active(true);
+        assert!(held_after(&[active.clone(), ready(), loading()]));
+        assert!(held_after(&[active.clone(), ready(), loading(), ready()]));
+        assert!(!held_after(&[
+            active.clone(),
+            ready(),
+            paused(true),
+            loading()
+        ]));
+        assert!(!held_after(&[active.clone(), loading()]));
+        assert!(!held_after(&[
+            active.clone(),
+            ready(),
+            loading(),
+            event(PlaybackEvent::Error(PlaybackError::Network)),
+        ]));
+        assert!(!held_after(&[
+            active,
+            ready(),
+            loading(),
+            Update::Active(false)
+        ]));
+    }
+
+    #[test]
+    fn the_next_episode_countdown_keeps_the_screen_awake() {
+        let active = Update::Active(true);
+        let ended = event(PlaybackEvent::Ended);
+        assert!(held_after(&[
+            active.clone(),
+            ready_with(true),
+            ended.clone()
+        ]));
+        assert!(held_after(&[
+            active.clone(),
+            ready_with(true),
+            ended.clone(),
+            loading(),
+            ready(),
+        ]));
+        assert!(!held_after(&[
+            active.clone(),
+            ready_with(true),
+            ended.clone(),
+            event(PlaybackEvent::NextUpCancelled),
+        ]));
+        assert!(!held_after(&[
+            active.clone(),
+            ready_with(true),
+            ended.clone(),
+            paused(true),
+        ]));
+        assert!(!held_after(&[active, ready_with(false), ended]));
+    }
+
+    #[test]
+    fn the_end_lasts_until_the_position_goes_back() {
+        let active = Update::Active(true);
+        let ended = event(PlaybackEvent::Ended);
+        let seeked = event(PlaybackEvent::Seeked);
+        // A seek to the end may end before the seek completes.
+        assert!(!held_after(&[
+            active.clone(),
+            ready(),
+            at(100),
+            ended.clone(),
+            seeked.clone(),
+            at(3600),
+        ]));
+        assert!(!held_after(&[
+            active.clone(),
+            ready(),
+            at(100),
+            ended.clone(),
+            at(3600),
+            seeked.clone(),
+        ]));
+        assert!(!held_after(&[
+            active.clone(),
+            ready(),
+            ended.clone(),
+            at(3600)
+        ]));
+        assert!(held_after(&[
+            active.clone(),
+            ready(),
+            at(3600),
+            ended.clone(),
+            seeked,
+            at(1200),
+        ]));
+        assert!(held_after(&[active, ready(), ended, at(3600), at(1200)]));
     }
 }

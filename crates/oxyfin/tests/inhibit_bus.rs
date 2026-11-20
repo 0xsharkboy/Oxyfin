@@ -159,6 +159,22 @@ fn ready() -> Update {
     })
 }
 
+fn loading() -> Update {
+    Update::Event(PlaybackEvent::Loading {
+        item: "a".into(),
+        title: oxyfin_core::PlaybackTitle {
+            title: "A".into(),
+            series_name: None,
+            episode_label: None,
+            artwork: None,
+        },
+    })
+}
+
+fn position(seconds: u64) -> Update {
+    Update::Event(PlaybackEvent::Position(Duration::from_secs(seconds)))
+}
+
 async fn serve<I: zbus::object_server::Interface>(
     address: &str,
     name: &str,
@@ -244,9 +260,15 @@ async fn the_screen_saver_service_is_the_fallback_without_a_portal() {
     inhibitor.update(Update::Active(true));
     inhibitor.update(ready());
     assert_eq!(call(&mut calls).await, format!("inhibit Oxyfin {REASON}"));
+    inhibitor.update(loading());
+    quiet(&mut calls).await;
+    inhibitor.update(ready());
+    inhibitor.update(position(89));
     inhibitor.update(Update::Event(PlaybackEvent::Ended));
     assert_eq!(call(&mut calls).await, "uninhibit 7");
-    inhibitor.update(Update::Event(PlaybackEvent::Seeked));
+    inhibitor.update(position(90));
+    quiet(&mut calls).await;
+    inhibitor.update(position(30));
     assert_eq!(call(&mut calls).await, format!("inhibit Oxyfin {REASON}"));
     timeout(DEADLINE, inhibitor.release()).await.unwrap();
     assert_eq!(call(&mut calls).await, "uninhibit 7");
