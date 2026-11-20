@@ -509,3 +509,30 @@ async fn chapter_images_are_fetched_and_cached_by_index() {
     assert_eq!(&*again, b"chapter 1");
     assert_eq!(requests(&mock).await, 2);
 }
+
+#[tokio::test]
+async fn image_fetches_run_at_most_six_at_a_time() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_bytes(b"pixels".to_vec())
+                .set_delay(std::time::Duration::from_millis(500)),
+        )
+        .mount(&mock)
+        .await;
+    let dir = TempDir::new().unwrap();
+    let cache = std::sync::Arc::new(cache(&mock, &dir, 1024 * 1024));
+    let started = std::time::Instant::now();
+    let mut gets = tokio::task::JoinSet::new();
+    for n in 0..7 {
+        let cache = std::sync::Arc::clone(&cache);
+        gets.spawn(async move { cache.get(&image(&format!("item{n}"), "t"), SIZE).await });
+    }
+    while let Some(got) = gets.join_next().await {
+        assert!(got.unwrap().is_ok());
+    }
+    assert_eq!(requests(&mock).await, 7);
+    // Seven fetches of 500 ms take two waves: the seventh waits for a free slot.
+    assert!(started.elapsed() >= std::time::Duration::from_millis(950));
+}

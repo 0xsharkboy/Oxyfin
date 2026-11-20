@@ -70,7 +70,9 @@ mod trickplay;
 pub use catalog::{BrowseQuery, BrowseSource, Catalog, ContentKind, SortField, WatchFilter};
 pub use config::{Config, SavedSession};
 pub use error::{CoreError, Result};
-pub use images::{CacheBudgets, DEFAULT_DISK_BUDGET, DEFAULT_MEMORY_BUDGET, ImageCache, ImageSize};
+pub use images::{
+    CacheBudgets, DEFAULT_DISK_BUDGET, DEFAULT_MEMORY_BUDGET, IMAGE_FETCHES, ImageCache, ImageSize,
+};
 pub use models::{
     CollectionDetails, CollectionLink, Episode, ImageRef, ItemKind, ItemSummary, Library,
     LibraryKind, MovieDetails, Page, Person, PersonDetails, PersonKind, PersonTitle, Season,
