@@ -239,11 +239,11 @@ fn countdown(remaining: u32) -> PlaybackEvent {
 
 /// Width of the countdown fill against the width of its line.
 fn fill_ratio(window: &AppWindow) -> f32 {
-    let line =
-        visible(window, "Countdown", AccessibleRole::ProgressIndicator).expect("no countdown line");
+    let line = visible(window, "Countdown", AccessibleRole::ProgressIndicator)
+        .unwrap_or_else(|| panic!("no countdown line"));
     let fill = ElementHandle::find_by_element_id(window, "NextEpisodeToast::fill")
         .next()
-        .expect("no countdown fill");
+        .unwrap_or_else(|| panic!("no countdown fill"));
     fill.size().width / line.size().width
 }
 
