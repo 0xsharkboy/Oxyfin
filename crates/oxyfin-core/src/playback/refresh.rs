@@ -2,48 +2,64 @@
 
 use std::time::Duration;
 
-use oxyfin_api::{ItemId, MediaSourceInfo, MediaStream, MediaStreamType, PlaybackOptions, Session};
+use oxyfin_api::{
+    ItemId, MediaSourceId, MediaSourceInfo, MediaStream, MediaStreamType, PlaybackOptions, Session,
+};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::task::JoinHandle;
 
 use super::types::SUBTITLE_RETRIES;
 
+/// A subtitle file asked for with `ReloadSubtitles`, until it is answered.
+#[derive(Clone, Debug)]
+pub(super) struct Wanted {
+    pub(super) item: ItemId,
+    /// Language to select among the new files.
+    pub(super) language: String,
+    /// The streams of the item before the download.
+    pub(super) before: Vec<MediaStream>,
+}
+
 /// The source of the playing item once the server lists a new subtitle file
 /// in it, or `None` when it did not in time.
 pub(super) struct Refreshed {
-    pub(super) item: ItemId,
+    /// The request answered: only the latest one counts.
+    pub(super) serial: u64,
+    pub(super) wanted: Wanted,
     pub(super) source: Option<MediaSourceInfo>,
-    /// Language to select among the new files.
-    pub(super) language: String,
 }
 
 /// What to ask the server for.
 pub(super) struct RefreshRequest {
-    pub(super) item: ItemId,
+    pub(super) serial: u64,
     pub(super) options: PlaybackOptions,
-    /// The source the item plays, with its streams as they were loaded.
-    pub(super) source: MediaSourceInfo,
-    pub(super) language: String,
+    /// The source the item plays.
+    pub(super) source: MediaSourceId,
+    pub(super) wanted: Wanted,
     pub(super) retry: Duration,
 }
 
 /// Asks the server for the streams of the playing source until it lists a
-/// subtitle file it did not list before, then sends the source back; sends
-/// `None` when the server fails or lists none after every retry.
+/// subtitle file it did not list before the download, then sends the source
+/// back; sends `None` when the server fails or lists none after every retry.
 pub(super) fn spawn(
     session: Session,
     request: RefreshRequest,
     refreshed: UnboundedSender<Refreshed>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
+        let RefreshRequest {
+            serial,
+            options,
+            source: source_id,
+            wanted,
+            retry,
+        } = request;
         for attempt in 0..=SUBTITLE_RETRIES {
             if attempt > 0 {
-                tokio::time::sleep(request.retry).await;
+                tokio::time::sleep(retry).await;
             }
-            let info = match session
-                .playback_info_with(&request.item, &request.options)
-                .await
-            {
+            let info = match session.playback_info_with(&wanted.item, &options).await {
                 Ok(info) => info,
                 Err(error) => {
                     log::warn!("cannot fetch the subtitles of the item: {error}");
@@ -53,23 +69,23 @@ pub(super) fn spawn(
             let source = info
                 .media_sources
                 .into_iter()
-                .find(|source| source.id == request.source.id);
+                .find(|source| source.id == source_id);
             if let Some(source) = source
-                && !added(&request.source.media_streams, &source.media_streams).is_empty()
+                && !added(&wanted.before, &source.media_streams).is_empty()
             {
                 let _ = refreshed.send(Refreshed {
-                    item: request.item,
+                    serial,
+                    wanted,
                     source: Some(source),
-                    language: request.language,
                 });
                 return;
             }
         }
         log::warn!("no new subtitle of the item came from the server");
         let _ = refreshed.send(Refreshed {
-            item: request.item,
+            serial,
+            wanted,
             source: None,
-            language: request.language,
         });
     })
 }

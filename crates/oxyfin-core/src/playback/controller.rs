@@ -21,7 +21,7 @@ use super::current::{Current, Siblings, mark_selected};
 use super::loader::{LoadFailure, LoadMessage, LoadRequest, LoadStage, Loader, Prepared, Resume};
 use super::media_player::{MediaPlayer, PlayerEvents};
 use super::quality::Quality;
-use super::refresh::{RefreshRequest, Refreshed, added, remapped};
+use super::refresh::{RefreshRequest, Refreshed, Wanted, added, remapped};
 use super::reporter::{ReportKind, Reporter};
 use super::segments::SkipMemory;
 use super::track_memory::{
@@ -122,8 +122,16 @@ pub struct PlaybackController {
     memory: TrackMemory,
     /// Where the subtitles of the playing item come back after `ReloadSubtitles`.
     refreshes: UnboundedSender<Refreshed>,
-    /// The request for them in progress, if any.
-    refresh: Option<tokio::task::JoinHandle<()>>,
+    /// The request for them in progress, if any, with its serial number.
+    refresh: Option<(u64, tokio::task::JoinHandle<()>)>,
+    /// Serial number of the latest request for them.
+    refresh_serial: u64,
+    /// The subtitle asked for with `ReloadSubtitles`, until it is answered;
+    /// kept while the item loads again.
+    wanted: Option<Wanted>,
+    /// The item loading again and its streams before, for a `ReloadSubtitles`
+    /// sent before it is ready.
+    reloaded: Option<(ItemId, Vec<MediaStream>)>,
 }
 
 impl PlaybackController {
@@ -197,6 +205,9 @@ impl PlaybackController {
             memory,
             refreshes,
             refresh: None,
+            refresh_serial: 0,
+            wanted: None,
+            reloaded: None,
         };
         tokio::spawn(controller.run(message_receiver, expired, loads, refreshed));
         (
@@ -306,6 +317,7 @@ impl PlaybackController {
     }
 
     fn expire(&mut self) {
+        self.drop_wanted();
         self.cancel_load();
         self.release(false);
         if !self.expired {
@@ -325,9 +337,7 @@ impl PlaybackController {
     /// when `report` is set and its server session is open.
     fn release(&mut self, report: bool) {
         self.next_progress = None;
-        if let Some(refresh) = self.refresh.take() {
-            refresh.abort();
-        }
+        self.abort_refresh();
         let Some(current) = self.current.take() else {
             return;
         };
@@ -521,6 +531,7 @@ impl PlaybackController {
                 self.call(self.player.set_subtitle_appearance(&appearance));
             }
             PlaybackCommand::Stop => {
+                self.drop_wanted();
                 self.cancel_countdown();
                 self.cancel_load();
                 self.release(true);
@@ -589,45 +600,98 @@ impl PlaybackController {
         })));
     }
 
-    /// Starts asking the server for the subtitles of the playing item.
+    /// Asks the server for the subtitles of the playing item, or of the item
+    /// loading once it is ready; answers at once when nothing plays.
     fn reload_subtitles(&mut self, language: String) {
+        let item = match (&self.current, &self.request) {
+            (Some(current), _) => current.item.clone(),
+            (None, Some(request)) if self.loading => request.item.clone(),
+            _ => return self.emit(PlaybackEvent::SubtitlesReloaded { added: false }),
+        };
+        // A request still waiting keeps its streams: they predate both downloads.
+        let before = match self.wanted.take().filter(|wanted| wanted.item == item) {
+            Some(previous) => previous.before,
+            None => self
+                .current
+                .as_ref()
+                .map(|current| current.source.media_streams.clone())
+                .or_else(|| {
+                    self.reloaded
+                        .as_ref()
+                        .filter(|(reloaded, _)| *reloaded == item)
+                        .map(|(_, streams)| streams.clone())
+                })
+                .unwrap_or_default(),
+        };
+        self.wanted = Some(Wanted {
+            item,
+            language,
+            before,
+        });
+        self.start_refresh();
+    }
+
+    /// Starts asking the server for the subtitle wanted, once its item is loaded.
+    fn start_refresh(&mut self) {
         let Some(current) = self.current.as_ref().filter(|current| current.loaded) else {
             return;
         };
+        let Some(wanted) = self.wanted.clone() else {
+            return;
+        };
+        if wanted.item != current.item {
+            return self.drop_wanted();
+        }
+        self.refresh_serial += 1;
         let request = RefreshRequest {
-            item: current.item.clone(),
+            serial: self.refresh_serial,
             options: PlaybackOptions {
                 max_streaming_bitrate: self.quality.max_bitrate(),
                 media_source_id: Some(current.source.id.clone()),
                 max_height: self.quality.max_height(),
                 ..PlaybackOptions::default()
             },
-            source: current.source.clone(),
-            language,
+            source: current.source.id.clone(),
+            wanted,
             retry: self.timings.subtitle_retry,
         };
-        if let Some(previous) = self.refresh.take() {
-            previous.abort();
+        self.abort_refresh();
+        let task = super::refresh::spawn(self.session.clone(), request, self.refreshes.clone());
+        self.refresh = Some((self.refresh_serial, task));
+    }
+
+    fn abort_refresh(&mut self) {
+        if let Some((_, task)) = self.refresh.take() {
+            task.abort();
         }
-        self.refresh = Some(super::refresh::spawn(
-            self.session.clone(),
-            request,
-            self.refreshes.clone(),
-        ));
+    }
+
+    /// Answers the subtitle wanted, if any, as not added: its item stopped or
+    /// another one replaces it.
+    fn drop_wanted(&mut self) {
+        self.abort_refresh();
+        if self.wanted.take().is_some() {
+            self.emit(PlaybackEvent::SubtitlesReloaded { added: false });
+        }
     }
 
     /// Adds the new subtitle files of the playing source to the player and
     /// selects the one in the language asked, or else the first of them.
     fn on_refreshed(&mut self, refreshed: Refreshed) {
-        self.refresh = None;
-        let playing = |current: &Current| current.loaded && current.item == refreshed.item;
-        if !self.current.as_ref().is_some_and(playing) {
+        if !self
+            .refresh
+            .as_ref()
+            .is_some_and(|(serial, _)| *serial == refreshed.serial)
+        {
             return;
         }
+        self.refresh = None;
+        self.wanted = None;
+        let wanted = refreshed.wanted;
         let source = refreshed.source.filter(|source| {
-            self.current
-                .as_ref()
-                .is_some_and(|current| current.source.id == source.id)
+            self.current.as_ref().is_some_and(|current| {
+                current.loaded && current.item == wanted.item && current.source.id == source.id
+            })
         });
         let (Some(source), Some(current)) = (source, self.current.as_mut()) else {
             return self.emit(PlaybackEvent::SubtitlesReloaded { added: false });
@@ -661,7 +725,6 @@ impl PlaybackController {
             .as_ref()
             .map(|map| map.tracks().to_vec())
             .unwrap_or_default();
-        let mut shown = Vec::new();
         for stream in added(&old, &new) {
             let url = self
                 .session
@@ -695,35 +758,58 @@ impl PlaybackController {
                 stream_index: None,
                 external_url: Some(url.clone()),
             });
-            shown.push((stream.index, id, stream.language.clone()));
             current.externals.push((stream.index, id));
             current.external_urls.push((stream.index, url));
         }
-        let chosen = shown
+        // The files of the download, added just now or when the item loaded again.
+        let downloaded = added(&wanted.before, &new);
+        let chosen = downloaded
             .iter()
-            .find(|(_, _, language)| {
-                language
+            .find(|stream| {
+                stream
+                    .language
                     .as_deref()
-                    .is_some_and(|language| crate::same_language(language, &refreshed.language))
+                    .is_some_and(|language| crate::same_language(language, &wanted.language))
             })
-            .or(shown.first())
-            .map(|(index, id, _)| (*index, *id));
-        if let Some((_, id)) = chosen
-            && self.player.select_subtitle(Some(id)).is_ok()
-        {
-            mark_selected(&mut tracks, TrackKind::Subtitle, Some(id));
-            current.expected_subtitle = Some(Some(id));
-            current.pending_subtitle = None;
-        }
+            .or(downloaded.first())
+            .map(|stream| stream.index);
+        let track = |index: i32| {
+            current
+                .externals
+                .iter()
+                .find(|(added, _)| *added == index)
+                .map(|(_, id)| *id)
+        };
+        let shown = match chosen {
+            Some(index) => match track(index) {
+                Some(id) if self.player.select_subtitle(Some(id)).is_ok() => {
+                    mark_selected(&mut tracks, TrackKind::Subtitle, Some(id));
+                    current.expected_subtitle = Some(Some(id));
+                    current.pending_subtitle = None;
+                    Some(index)
+                }
+                Some(_) => None,
+                // A transcode adds its files once the server serves them.
+                None => current
+                    .external_urls
+                    .iter()
+                    .any(|(added, _)| *added == index)
+                    .then(|| {
+                        current.pending_subtitle = Some(index);
+                        index
+                    }),
+            },
+            None => None,
+        };
         let changed = current.update_tracks(&tracks);
         let options = current.refresh_options();
         if let Some((audio, subtitles)) = options {
             self.emit(PlaybackEvent::TracksChanged { audio, subtitles });
         }
         self.emit(PlaybackEvent::SubtitlesReloaded {
-            added: !shown.is_empty(),
+            added: shown.is_some(),
         });
-        if let Some((index, _)) = chosen {
+        if let Some(index) = shown {
             self.remember_subtitle(Some(index));
         }
         if changed {
@@ -848,6 +934,20 @@ impl PlaybackController {
     }
 
     fn start_load(&mut self, request: LoadRequest) {
+        if self
+            .wanted
+            .as_ref()
+            .is_some_and(|wanted| wanted.item != request.item)
+        {
+            self.drop_wanted();
+        }
+        if self
+            .reloaded
+            .as_ref()
+            .is_some_and(|(item, _)| *item != request.item)
+        {
+            self.reloaded = None;
+        }
         self.cancel_countdown();
         self.release(true);
         self.navigation = None;
@@ -889,6 +989,7 @@ impl PlaybackController {
             },
             resume: Some(resume),
         };
+        self.reloaded = Some((current.item.clone(), current.source.media_streams.clone()));
         self.start_load(request);
     }
 
@@ -921,6 +1022,7 @@ impl PlaybackController {
 
     /// The load ended without an item: a navigation waiting for it is dropped.
     fn load_failed(&mut self) {
+        self.drop_wanted();
         self.loading = false;
         self.request = None;
         self.navigation = None;
@@ -1083,6 +1185,7 @@ impl PlaybackController {
                 }
                 self.stop_transcoding(&current);
                 self.navigation = None;
+                self.drop_wanted();
                 self.emit(PlaybackEvent::Error(PlaybackError::load(message)));
             }
             PlayerEvent::Unloaded(_) => {}
@@ -1096,6 +1199,7 @@ impl PlaybackController {
             return;
         };
         if !current.at_real_end() {
+            self.drop_wanted();
             self.release(true);
             return self.emit(PlaybackEvent::Stopped);
         }
@@ -1270,6 +1374,10 @@ impl PlaybackController {
         self.schedule_progress();
         self.report(ReportKind::Start);
         self.show_segment();
+        self.reloaded = None;
+        if self.wanted.is_some() {
+            self.start_refresh();
+        }
         if let Some(command) = self.navigation.take() {
             self.on_command(command);
         }

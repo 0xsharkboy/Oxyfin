@@ -4347,3 +4347,110 @@ async fn reload_without_a_new_subtitle_changes_nothing() {
         .count();
     assert_eq!(adds, 1);
 }
+
+/// Asks for the French subtitle and waits for the answer.
+async fn reloaded(h: &mut Harness) -> PlaybackEvent {
+    wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::SubtitlesReloaded { .. })
+    })
+    .await
+}
+
+fn reload_subtitles(h: &Harness) {
+    h.handle.send(PlaybackCommand::ReloadSubtitles {
+        select_language: "fre".to_owned(),
+    });
+}
+
+#[tokio::test]
+async fn a_reload_of_the_item_keeps_the_subtitle_request() {
+    let mut h = harness(PlaybackTimings {
+        subtitle_retry: Duration::from_secs(60),
+        ..quiet()
+    })
+    .await;
+    h.start().await;
+    reload_subtitles(&h);
+    wait_requests(&h.mock, PLAYBACK_INFO, 2).await;
+    mount_playback_info(&h.mock, playback_info_with_french_file()).await;
+    h.handle.send(PlaybackCommand::SetQuality(LOW));
+    h.wait_load(2).await;
+    h.loaded_with(file_tracks()).await;
+
+    assert_eq!(
+        reloaded(&mut h).await,
+        PlaybackEvent::SubtitlesReloaded { added: true }
+    );
+    // The reload added the French file (index 0) as track 2, the English one as track 3.
+    assert_eq!(
+        h.player.calls().last(),
+        Some(&Call::SelectSubtitle(Some(TrackId(2))))
+    );
+}
+
+#[tokio::test]
+async fn a_subtitle_request_during_a_reload_waits_for_the_item() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    mount_playback_info(&h.mock, playback_info_with_french_file()).await;
+    h.handle.send(PlaybackCommand::SetQuality(LOW));
+    reload_subtitles(&h);
+    h.wait_load(2).await;
+    h.loaded_with(file_tracks()).await;
+
+    assert_eq!(
+        reloaded(&mut h).await,
+        PlaybackEvent::SubtitlesReloaded { added: true }
+    );
+    assert_eq!(
+        h.player.calls().last(),
+        Some(&Call::SelectSubtitle(Some(TrackId(2))))
+    );
+}
+
+#[tokio::test]
+async fn stopping_answers_a_pending_subtitle_request() {
+    let mut h = harness(PlaybackTimings {
+        subtitle_retry: Duration::from_secs(60),
+        ..quiet()
+    })
+    .await;
+    h.start().await;
+    reload_subtitles(&h);
+    wait_requests(&h.mock, PLAYBACK_INFO, 2).await;
+    h.handle.send(PlaybackCommand::Stop);
+    assert_eq!(
+        reloaded(&mut h).await,
+        PlaybackEvent::SubtitlesReloaded { added: false }
+    );
+}
+
+#[tokio::test]
+async fn another_item_answers_a_pending_subtitle_request() {
+    let mut h = harness(PlaybackTimings {
+        subtitle_retry: Duration::from_secs(60),
+        ..quiet()
+    })
+    .await;
+    h.start().await;
+    reload_subtitles(&h);
+    wait_requests(&h.mock, PLAYBACK_INFO, 2).await;
+    h.handle.send(PlaybackCommand::Play {
+        item: ItemId::from(OTHER_ID),
+        mode: PlayMode::FromStart,
+    });
+    assert_eq!(
+        reloaded(&mut h).await,
+        PlaybackEvent::SubtitlesReloaded { added: false }
+    );
+}
+
+#[tokio::test]
+async fn a_subtitle_request_with_nothing_playing_is_answered() {
+    let mut h = harness(quiet()).await;
+    reload_subtitles(&h);
+    assert_eq!(
+        reloaded(&mut h).await,
+        PlaybackEvent::SubtitlesReloaded { added: false }
+    );
+}

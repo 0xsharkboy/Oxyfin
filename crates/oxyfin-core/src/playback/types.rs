@@ -223,8 +223,10 @@ pub enum PlaybackCommand {
     /// server lists a downloaded file once it has refreshed the item, so the
     /// controller asks for the subtitles of the item every
     /// [`PlaybackTimings::subtitle_retry`], at most [`SUBTITLE_RETRIES`] more
-    /// times. Answered with [`PlaybackEvent::SubtitlesReloaded`], after
-    /// [`PlaybackEvent::TracksChanged`] when a file was added.
+    /// times. When the item loads again first, as for another quality, the
+    /// request waits until it is ready. Answered with
+    /// [`PlaybackEvent::SubtitlesReloaded`], after [`PlaybackEvent::TracksChanged`]
+    /// when a file was added.
     ///
     /// [`Catalog::download_subtitle`]: crate::Catalog::download_subtitle
     ReloadSubtitles {
@@ -362,8 +364,8 @@ pub enum PlaybackEvent {
     /// Playback or a command failed.
     Error(PlaybackError),
     /// The answer to [`PlaybackCommand::ReloadSubtitles`]: whether a new
-    /// subtitle file was added to the playing item. Not sent when the item
-    /// stops or another one loads first.
+    /// subtitle file was added to the playing item. Sent once per request:
+    /// `false` as well when the item stops or another one loads first.
     SubtitlesReloaded {
         /// Whether a file was added.
         added: bool,
