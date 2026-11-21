@@ -32,7 +32,7 @@ This file is the single source of truth for planned work. An item is checked onl
 - [x] Chapters (seek bar markers and menu)
 - [x] Remember audio and subtitle choices per series
 - [x] Next episode options (countdown, autoplay, automatic segment skipping)
-- [ ] Subtitle search and download
+- [x] Subtitle search and download
 - [x] Playback statistics
 - [x] "More like this" on detail pages
 - [x] Cast and crew pages
