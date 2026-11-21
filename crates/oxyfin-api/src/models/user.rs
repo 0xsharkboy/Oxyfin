@@ -1,7 +1,7 @@
 //! Users and authentication.
 
 use crate::UserId;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 /// A Jellyfin user.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
@@ -15,9 +15,13 @@ pub struct UserDto {
     pub server_id: Option<String>,
     /// Tag of the user's profile image, if any.
     pub primary_image_tag: Option<String>,
-    /// What the user may do; all denied when the server sends none.
-    #[serde(default)]
+    /// What the user may do; all denied when the server sends none or `null`.
+    #[serde(default, deserialize_with = "nullable_policy")]
     pub policy: UserPolicy,
+}
+
+fn nullable_policy<'de, D: Deserializer<'de>>(deserializer: D) -> Result<UserPolicy, D::Error> {
+    Ok(Option::<UserPolicy>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 /// What a user may do on the server.
