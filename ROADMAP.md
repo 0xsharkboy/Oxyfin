@@ -41,7 +41,7 @@ This file is the single source of truth for planned work. An item is checked onl
 - [x] Authorize another device (Quick Connect code entry)
 - [x] Fullscreen launch option
 - [x] Discord Rich Presence (opt-in, never sends the server address)
-- [ ] AUR package
+- [x] AUR package (`oxyfin-git`)
 
 ## Milestone 3: Robustness and reach
 

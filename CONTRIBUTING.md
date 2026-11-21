@@ -171,6 +171,29 @@ nix shell --impure --expr 'with import (builtins.getFlake "nixpkgs") {}; python3
   -c python3 flatpak-cargo-generator.py Cargo.lock -o flatpak/cargo-sources.json
 ```
 
+## AUR
+
+`packaging/aur/oxyfin-git/` holds the `PKGBUILD` of the `oxyfin-git` package, which builds the latest commit of `main`, and its `.SRCINFO`. After editing the `PKGBUILD`, regenerate `.SRCINFO` on Arch (or in the container below) and commit both:
+
+```sh
+cd packaging/aur/oxyfin-git && makepkg --printsrcinfo > .SRCINFO
+```
+
+Test it in an Arch Linux container as a non-root user, building from your local commits rather than GitHub. Commit first: the package builds `HEAD`, not the working tree.
+
+```sh
+docker run --rm -v "$PWD:/src:ro" archlinux:latest bash -c '
+  pacman -Syu --noconfirm --needed base-devel git sudo namcap &&
+  useradd -m b && echo "b ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers &&
+  cp -r /src/packaging/aur/oxyfin-git /home/b/p && chown -R b /home/b/p && cd /home/b/p &&
+  sed -i "s|git+https://github.com/0xsharkboy/Oxyfin.git|git+file:///src|" PKGBUILD &&
+  sudo -u b git config --global safe.directory "*" &&
+  sudo -u b makepkg -si --noconfirm && oxyfin --version &&
+  namcap PKGBUILD oxyfin-git-*.pkg.tar.zst'
+```
+
+Publishing to the AUR is done by the maintainer.
+
 ## Dependencies
 
 - Prefer the standard library and the dependencies already in use.
