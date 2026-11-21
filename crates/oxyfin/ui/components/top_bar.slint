@@ -6,10 +6,12 @@ import { IconButton } from "icon_button.slint";
 
 export enum TopBarPage { home, movies, shows, favorites, search, none }
 
-// Top navigation drawn over the page banner.
+// Top navigation drawn over the page banner, solid once the page scrolls under it.
 export component TopBar inherits Rectangle {
     in property <TopBarPage> current: TopBarPage.home;
     in property <bool> settings-active;
+    // How far the page has scrolled under the bar; the scrim alone lets content show through the tabs.
+    in property <length> scrolled-by;
     callback home-clicked();
     callback movies-clicked();
     callback shows-clicked();
@@ -21,6 +23,11 @@ export component TopBar inherits Rectangle {
     accessible-label: @tr("Navigation");
 
     background: Theme.top-bar-scrim;
+
+    backing := Rectangle {
+        background: Theme.bg-base;
+        opacity: clamp(root.scrolled-by / root.height, 0, 1);
+    }
 
     HorizontalLayout {
         padding-left: Theme.space-2xl;
