@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use crate::app::App;
 use crate::images::load_into;
-use crate::present::{card, core_error_message, detail_target, image_size};
+use crate::present::{card, core_error_message, detail_target, home_banner, image_size};
 use crate::screens::library::open_detail;
 use crate::state::{GenerationId, Msg, Screen};
 use crate::{AppWindow, CardData, HomeBanner, HomeRow, HomeRowKind, HomeTitles, Messages};
@@ -415,10 +415,17 @@ impl HomeController {
 
     fn show_banner(&self, app: &Rc<App>) {
         let Some(window) = app.window() else { return };
-        let item = {
+        let (item, resuming) = {
             let featured = self.featured.borrow();
             let latest: Vec<ItemSummary> = featured.latest.iter().flatten().cloned().collect();
-            Catalog::featured(&featured.continue_watching, &latest)
+            let item = Catalog::featured(&featured.continue_watching, &latest);
+            let resuming = item.as_ref().is_some_and(|item| {
+                featured
+                    .continue_watching
+                    .first()
+                    .is_some_and(|first| first.id == item.id)
+            });
+            (item, resuming)
         };
         let Some(item) = item else {
             window.set_home_banner(HomeBanner::default());
@@ -432,22 +439,13 @@ impl HomeController {
                 .insert(item.id.as_str().to_owned(), screen);
         }
         let previous = window.get_home_banner();
-        let mut data = card(&item);
-        let kept = previous.has && previous.card.id == data.id && previous.card.has_image;
+        let mut banner = home_banner(&item, resuming, has_detail);
+        let kept = previous.has && previous.card.id == banner.card.id && previous.card.has_image;
         if kept {
-            data.image = previous.card.image;
-            data.has_image = true;
+            banner.card.image = previous.card.image;
+            banner.card.has_image = true;
         }
-        window.set_home_banner(HomeBanner {
-            has: true,
-            has_detail,
-            title: item.title.as_str().into(),
-            year: item.year.unwrap_or(0),
-            duration_minutes: item.duration.map_or(0, |duration| {
-                i32::try_from(duration.as_secs() / 60).unwrap_or(0)
-            }),
-            card: data,
-        });
+        window.set_home_banner(banner);
         if !kept && let Some(backdrop) = banner_artwork(&item) {
             self.load_banner_image(app, &window, backdrop, item.id.as_str().into());
         }

@@ -12,8 +12,8 @@ use slint::{ModelRc, SharedString, VecModel};
 
 use crate::state::Screen;
 use crate::{
-    CardData, ChapterRow, EpisodeData, Message, PersonCardData, PersonJob, StatRow, StatSection,
-    TrackRow,
+    BannerKind, CardData, ChapterRow, EpisodeData, HomeBanner, Message, PersonCardData, PersonJob,
+    StatRow, StatSection, TrackRow,
 };
 
 /// Message and detail to show for a core error.
@@ -253,6 +253,49 @@ pub fn card(item: &ItemSummary) -> CardData {
         watched: item.user.played,
         image: Default::default(),
         has_image: false,
+    }
+}
+
+/// Banner of the featured item of the home screen; `resuming` when it comes from Continue
+/// Watching. The image is loaded later.
+pub fn home_banner(item: &ItemSummary, resuming: bool, has_detail: bool) -> HomeBanner {
+    let episode = item.kind == ItemKind::Episode;
+    let series_name = item.series_name.as_deref().filter(|_| episode);
+    let remaining = match item.duration {
+        Some(duration) if resuming && item.user.can_resume() => {
+            let left = duration.saturating_sub(item.user.position).as_secs();
+            i32::try_from(left.div_ceil(60)).unwrap_or(0)
+        }
+        _ => 0,
+    };
+    HomeBanner {
+        has: true,
+        has_detail,
+        resuming,
+        kind: match item.kind {
+            ItemKind::Movie | ItemKind::Video => BannerKind::Movie,
+            ItemKind::Series | ItemKind::Episode => BannerKind::Series,
+            ItemKind::BoxSet => BannerKind::Collection,
+        },
+        title: series_name.unwrap_or(&item.title).into(),
+        episode_label: item
+            .episode_label
+            .as_deref()
+            .filter(|_| episode)
+            .unwrap_or_default()
+            .into(),
+        episode_title: if series_name.is_some() {
+            item.title.as_str().into()
+        } else {
+            SharedString::default()
+        },
+        year: if episode { 0 } else { item.year.unwrap_or(0) },
+        duration_minutes: item.duration.map_or(0, |duration| {
+            i32::try_from(duration.as_secs() / 60).unwrap_or(0)
+        }),
+        remaining_minutes: remaining,
+        overview: item.overview.as_deref().unwrap_or_default().into(),
+        card: card(item),
     }
 }
 
@@ -664,6 +707,7 @@ mod tests {
             backdrop: None,
             thumb: None,
             duration: None,
+            overview: None,
             user: UserState::default(),
         }
     }
@@ -816,6 +860,61 @@ mod tests {
         assert_eq!(card(&item).subtitle, "Show \u{b7} S01E02");
         item.series_name = None;
         assert_eq!(card(&item).subtitle, "S01E02");
+    }
+
+    #[test]
+    fn home_banner_names_the_series_of_an_episode_to_resume() {
+        let item = ItemSummary {
+            title: "Sword".into(),
+            series_name: Some("Saga".into()),
+            episode_label: Some("S01E02".into()),
+            duration: Some(Duration::from_secs(24 * 60)),
+            overview: Some("A raid.".into()),
+            user: UserState {
+                position: Duration::from_secs(11 * 60 + 30),
+                ..UserState::default()
+            },
+            ..summary(ItemKind::Episode)
+        };
+        let banner = home_banner(&item, true, true);
+        assert_eq!(banner.kind, BannerKind::Series);
+        assert_eq!(banner.title, "Saga");
+        assert_eq!(banner.episode_label, "S01E02");
+        assert_eq!(banner.episode_title, "Sword");
+        assert_eq!(banner.year, 0);
+        assert_eq!(banner.duration_minutes, 24);
+        assert_eq!(banner.remaining_minutes, 13);
+        assert_eq!(banner.overview, "A raid.");
+        assert!(banner.resuming && banner.has && banner.has_detail);
+    }
+
+    #[test]
+    fn home_banner_keeps_the_title_of_a_recent_movie() {
+        let item = ItemSummary {
+            duration: Some(Duration::from_secs(100 * 60)),
+            ..summary(ItemKind::Movie)
+        };
+        let banner = home_banner(&item, false, true);
+        assert_eq!(banner.kind, BannerKind::Movie);
+        assert_eq!(banner.title, "Title");
+        assert_eq!(banner.episode_label, "");
+        assert_eq!(banner.episode_title, "");
+        assert_eq!(banner.year, 1999);
+        assert_eq!(banner.remaining_minutes, 0);
+        assert!(!banner.resuming);
+
+        let orphan = ItemSummary {
+            episode_label: Some("S01E02".into()),
+            ..summary(ItemKind::Episode)
+        };
+        let banner = home_banner(&orphan, true, false);
+        assert_eq!(banner.title, "Title");
+        assert_eq!(banner.episode_title, "");
+        assert_eq!(banner.remaining_minutes, 0, "nothing started, nothing left");
+        assert_eq!(
+            home_banner(&summary(ItemKind::BoxSet), false, true).kind,
+            BannerKind::Collection
+        );
     }
 
     #[test]

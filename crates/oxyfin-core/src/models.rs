@@ -153,6 +153,8 @@ pub struct ItemSummary {
     pub thumb: Option<ImageRef>,
     /// Duration.
     pub duration: Option<Duration>,
+    /// Synopsis, when the list asked for it.
+    pub overview: Option<String>,
     /// State for the signed-in user.
     pub user: UserState,
 }
@@ -191,6 +193,7 @@ impl ItemSummary {
             backdrop: backdrop(dto),
             thumb,
             duration: duration(dto),
+            overview: non_empty(dto.overview.as_deref()),
             user: UserState::from_dto(dto.user_data.as_ref()),
         })
     }

@@ -1,5 +1,5 @@
 import { Theme, CardData } from "../theme.slint";
-import { Banner } from "../components/banner.slint";
+import { Banner, BannerKind } from "../components/banner.slint";
 import { TopBar, TopBarPage } from "../components/top_bar.slint";
 import { CardStatus } from "../components/card.slint";
 import { LandscapeCard } from "../components/landscape_card.slint";
@@ -13,9 +13,18 @@ export struct HomeBanner {
     has: bool,
     // False when the item has no detail page to open.
     has-detail: bool,
+    // True when the item comes from Continue Watching.
+    resuming: bool,
+    kind: BannerKind,
+    // Series name for an episode.
     title: string,
+    episode-label: string,
+    episode-title: string,
     year: int,
     duration-minutes: int,
+    // Minutes left to watch, rounded up; 0 when unknown.
+    remaining-minutes: int,
+    overview: string,
     card: CardData,
 }
 
@@ -126,12 +135,28 @@ export component HomeScreen inherits Rectangle {
 
     background: Theme.bg-base;
 
-    pure function banner-meta(year: int, minutes: int) -> string {
+    pure function duration-text(minutes: int) -> string {
         if minutes <= 0 {
-            return year > 0 ? "\{year}" : "";
+            return "";
         }
-        let duration = minutes >= 60 ? @tr("{}h {}m", floor(minutes / 60), mod(minutes, 60)) : @tr("{}m", minutes);
-        year > 0 ? "\{year} \u{b7} \{duration}" : duration
+        minutes >= 60 ? @tr("{}h {}m", floor(minutes / 60), mod(minutes, 60)) : @tr("{}m", minutes)
+    }
+
+    pure function joined(first: string, second: string) -> string {
+        if first == "" {
+            return second;
+        }
+        second == "" ? first : "\{first} \u{b7} \{second}"
+    }
+
+    // "S01E02 · Title · 24m" for an episode, "2020 · 1h 40m" otherwise.
+    pure function banner-meta(banner: HomeBanner) -> string {
+        let year = banner.year > 0 ? "\{banner.year}" : "";
+        root.joined(root.joined(root.joined(banner.episode-label, banner.episode-title), year), root.duration-text(banner.duration-minutes))
+    }
+
+    pure function banner-remaining(banner: HomeBanner) -> string {
+        banner.resuming && banner.remaining-minutes > 0 ? @tr("{} left", root.duration-text(banner.remaining-minutes)) : ""
     }
 
     flick := Flickable {
@@ -147,9 +172,15 @@ export component HomeScreen inherits Rectangle {
             if root.banner.has: Banner {
                 height: self.preferred-height;
                 backdrop: root.banner.card.image;
+                resuming: root.banner.resuming;
+                kind: root.banner.kind;
                 title: root.banner.title;
+                episode-label: root.banner.episode-label;
                 has-detail: root.banner.has-detail;
-                meta: root.banner-meta(root.banner.year, root.banner.duration-minutes);
+                meta: root.banner-meta(root.banner);
+                remaining: root.banner-remaining(root.banner);
+                progress: root.banner.card.progress;
+                overview: root.banner.overview;
                 play => {
                     root.play(root.banner.card.id);
                 }

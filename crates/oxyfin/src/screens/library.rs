@@ -558,6 +558,7 @@ mod tests {
             backdrop: None,
             thumb: None,
             duration: None,
+            overview: None,
             user: UserState::default(),
         }
     }

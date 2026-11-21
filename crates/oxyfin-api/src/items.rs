@@ -46,9 +46,13 @@ impl Session {
         self.get_items("Items/Latest", &params).await
     }
 
-    /// Lists items the user can resume (`GET UserItems/Resume`).
+    /// Lists items the user can resume (`GET UserItems/Resume`), with their overview.
     pub async fn resume(&self, limit: u32) -> Result<QueryResult<BaseItemDto>> {
-        let params = [self.user_param(), ("limit", limit.to_string())];
+        let params = [
+            self.user_param(),
+            ("limit", limit.to_string()),
+            ("fields", ItemFields::Overview.as_str().to_owned()),
+        ];
         self.get_items("UserItems/Resume", &params).await
     }
 

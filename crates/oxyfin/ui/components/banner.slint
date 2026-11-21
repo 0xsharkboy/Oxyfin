@@ -1,13 +1,46 @@
 import { Theme } from "../theme.slint";
 import { Icons } from "../icons.slint";
-import { BodyText, DisplayText, LabelText } from "text.slint";
+import { BodyText, CaptionText, DisplayText, LabelText } from "text.slint";
 import { Button, ButtonStyle } from "button.slint";
+import { ProgressBar } from "progress_bar.slint";
 
-// Featured item at the top of the home screen, over its backdrop.
+export enum BannerKind { movie, series, collection }
+
+// Kind of the featured item, as a small outlined tag.
+component KindTag inherits Rectangle {
+    in property <BannerKind> kind;
+
+    border-radius: Theme.radius-xs;
+    border-width: Theme.border-thin;
+    border-color: Theme.border-default;
+
+    HorizontalLayout {
+        padding-left: Theme.space-sm;
+        padding-right: Theme.space-sm;
+        padding-top: Theme.space-2xs;
+        padding-bottom: Theme.space-2xs;
+
+        CaptionText {
+            text: root.kind == BannerKind.series ? @tr("Series") : (root.kind == BannerKind.collection ? @tr("Collection") : @tr("Movie"));
+            color: Theme.text-secondary;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// Featured item at the top of the home screen, over its backdrop: an item to resume or a recent one.
 export component Banner inherits Rectangle {
     in property <image> backdrop;
+    // True when the item comes from Continue Watching.
+    in property <bool> resuming;
+    in property <BannerKind> kind;
     in property <string> title;
+    // Label such as `S01E02` for an episode, named on the resume button.
+    in property <string> episode-label;
     in property <string> meta;
+    // Time left, such as "12m left"; empty when unknown.
+    in property <string> remaining;
+    in property <float> progress;
     in property <string> overview;
     in property <bool> play-enabled: true;
     in property <bool> has-detail: true;
@@ -42,21 +75,46 @@ export component Banner inherits Rectangle {
         alignment: end;
 
         LabelText {
-            text: @tr("FEATURED");
+            text: root.resuming ? @tr("CONTINUE WATCHING") : @tr("RECENTLY ADDED");
             color: Theme.accent;
         }
         DisplayText {
             text: root.title;
             overflow: elide;
         }
-        if root.meta != "": LabelText {
-            text: root.meta;
+        HorizontalLayout {
+            spacing: Theme.space-sm;
+            alignment: start;
+
+            KindTag {
+                kind: root.kind;
+            }
+            if root.meta != "": LabelText {
+                text: root.meta;
+                color: Theme.text-primary;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            if root.remaining != "": LabelText {
+                text: root.remaining;
+                color: Theme.accent;
+                vertical-alignment: center;
+            }
+        }
+        if root.resuming && root.progress > 0: ProgressBar {
+            width: 240px;
+            value: root.progress;
+            label: root.remaining;
         }
         if root.overview != "": BodyText {
             text: root.overview;
             color: Theme.text-secondary;
             wrap: word-wrap;
+            overflow: elide;
             max-width: 560px;
+            // A wrapped text asks for all its lines as its minimum, which would win over the maximum.
+            min-height: 0px;
+            max-height: 3 * Theme.body-line-height;
         }
         HorizontalLayout {
             padding-top: Theme.space-sm;
@@ -64,7 +122,7 @@ export component Banner inherits Rectangle {
             alignment: start;
 
             Button {
-                label: @tr("Play");
+                label: !root.resuming ? @tr("Play") : (root.episode-label != "" ? @tr("Resume {}", root.episode-label) : @tr("Resume"));
                 icon: Icons.play;
                 enabled: root.play-enabled;
                 clicked => {

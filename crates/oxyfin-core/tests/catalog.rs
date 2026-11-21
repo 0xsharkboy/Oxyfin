@@ -122,6 +122,28 @@ async fn continue_watching_skips_unknown_kinds() {
 }
 
 #[tokio::test]
+async fn continue_watching_keeps_the_overview() {
+    let mock = MockServer::start().await;
+    let body = json!({
+        "Items": [
+            {"Id": "e1", "Name": "Sword", "Type": "Episode", "Overview": "  A raid.  "},
+            {"Id": "m1", "Name": "Quiet", "Type": "Movie", "Overview": " "}
+        ],
+        "TotalRecordCount": 2,
+        "StartIndex": 0
+    });
+    Mock::given(method("GET"))
+        .and(path("/UserItems/Resume"))
+        .and(query_param("fields", "Overview"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .mount(&mock)
+        .await;
+    let items = catalog(&mock).continue_watching(12).await.unwrap();
+    let overviews: Vec<_> = items.iter().map(|item| item.overview.as_deref()).collect();
+    assert_eq!(overviews, [Some("A raid."), None]);
+}
+
+#[tokio::test]
 async fn next_up_lists_episodes() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))

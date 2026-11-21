@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-20 23:08+0000\n"
+"POT-Creation-Date: 2026-11-21 17:05+0000\n"
 "PO-Revision-Date: 2026-11-15 12:00+0000\n"
 "Last-Translator: Oxyfin contributors\n"
 "Language-Team: French\n"
@@ -12,17 +12,47 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
-#: crates/oxyfin/ui/components/banner.slint:45
-msgctxt "Banner"
-msgid "FEATURED"
-msgstr "À LA UNE"
+#: crates/oxyfin/ui/components/banner.slint:24
+msgctxt "KindTag"
+msgid "Series"
+msgstr "Série"
 
-#: crates/oxyfin/ui/components/banner.slint:67
+#: crates/oxyfin/ui/components/banner.slint:24
+msgctxt "KindTag"
+msgid "Collection"
+msgstr "Collection"
+
+#: crates/oxyfin/ui/components/banner.slint:24
+msgctxt "KindTag"
+msgid "Movie"
+msgstr "Film"
+
+#: crates/oxyfin/ui/components/banner.slint:78
+msgctxt "Banner"
+msgid "CONTINUE WATCHING"
+msgstr "REPRENDRE LA LECTURE"
+
+#: crates/oxyfin/ui/components/banner.slint:78
+msgctxt "Banner"
+msgid "RECENTLY ADDED"
+msgstr "AJOUTÉ RÉCEMMENT"
+
+#: crates/oxyfin/ui/components/banner.slint:125
 msgctxt "Banner"
 msgid "Play"
 msgstr "Lire"
 
-#: crates/oxyfin/ui/components/banner.slint:75
+#: crates/oxyfin/ui/components/banner.slint:125
+msgctxt "Banner"
+msgid "Resume {}"
+msgstr "Reprendre {}"
+
+#: crates/oxyfin/ui/components/banner.slint:125
+msgctxt "Banner"
+msgid "Resume"
+msgstr "Reprendre"
+
+#: crates/oxyfin/ui/components/banner.slint:133
 msgctxt "Banner"
 msgid "More info"
 msgstr "Plus d'infos"
@@ -84,7 +114,7 @@ msgctxt "DetailHeader"
 msgid "Add to favorites"
 msgstr "Ajouter aux favoris"
 
-#: crates/oxyfin/ui/components/episode_row.slint:127
+#: crates/oxyfin/ui/components/episode_row.slint:128
 msgctxt "EpisodeRow"
 msgid "{} min"
 msgstr "{} min"
@@ -878,37 +908,37 @@ msgctxt "SubtitleSearchDialog"
 msgid "Other languages"
 msgstr "Autres langues"
 
-#: crates/oxyfin/ui/components/top_bar.slint:21
+#: crates/oxyfin/ui/components/top_bar.slint:23
 msgctxt "TopBar"
 msgid "Navigation"
 msgstr "Navigation"
 
-#: crates/oxyfin/ui/components/top_bar.slint:51
+#: crates/oxyfin/ui/components/top_bar.slint:59
 msgctxt "TopBar"
 msgid "Home"
 msgstr "Accueil"
 
-#: crates/oxyfin/ui/components/top_bar.slint:58
+#: crates/oxyfin/ui/components/top_bar.slint:66
 msgctxt "TopBar"
 msgid "Movies"
 msgstr "Films"
 
-#: crates/oxyfin/ui/components/top_bar.slint:65
+#: crates/oxyfin/ui/components/top_bar.slint:73
 msgctxt "TopBar"
 msgid "Shows"
 msgstr "Séries"
 
-#: crates/oxyfin/ui/components/top_bar.slint:72
+#: crates/oxyfin/ui/components/top_bar.slint:80
 msgctxt "TopBar"
 msgid "Favorites"
 msgstr "Favoris"
 
-#: crates/oxyfin/ui/components/top_bar.slint:87
+#: crates/oxyfin/ui/components/top_bar.slint:95
 msgctxt "TopBar"
 msgid "Search"
 msgstr "Recherche"
 
-#: crates/oxyfin/ui/components/top_bar.slint:98
+#: crates/oxyfin/ui/components/top_bar.slint:106
 msgctxt "TopBar"
 msgid "Settings"
 msgstr "Paramètres"
@@ -1054,42 +1084,47 @@ msgctxt "CollectionScreen"
 msgid "Retry"
 msgstr "Réessayer"
 
-#: crates/oxyfin/ui/screens/home.slint:33
+#: crates/oxyfin/ui/screens/home.slint:42
 msgctxt "HomeTitles"
 msgid "Continue Watching"
 msgstr "Reprendre la lecture"
 
-#: crates/oxyfin/ui/screens/home.slint:36
+#: crates/oxyfin/ui/screens/home.slint:45
 msgctxt "HomeTitles"
 msgid "Next Up"
 msgstr "À suivre"
 
-#: crates/oxyfin/ui/screens/home.slint:39
+#: crates/oxyfin/ui/screens/home.slint:48
 msgctxt "HomeTitles"
 msgid "Recently Added in {}"
 msgstr "Ajoutés récemment dans {}"
 
-#: crates/oxyfin/ui/screens/home.slint:125
+#: crates/oxyfin/ui/screens/home.slint:134
 msgctxt "HomeScreen"
 msgid "Home"
 msgstr "Accueil"
 
-#: crates/oxyfin/ui/screens/home.slint:133
+#: crates/oxyfin/ui/screens/home.slint:142
 msgctxt "HomeScreen"
 msgid "{}h {}m"
 msgstr "{} h {} min"
 
-#: crates/oxyfin/ui/screens/home.slint:133
+#: crates/oxyfin/ui/screens/home.slint:142
 msgctxt "HomeScreen"
 msgid "{}m"
 msgstr "{} min"
 
-#: crates/oxyfin/ui/screens/home.slint:180
+#: crates/oxyfin/ui/screens/home.slint:159
+msgctxt "HomeScreen"
+msgid "{} left"
+msgstr "{} restantes"
+
+#: crates/oxyfin/ui/screens/home.slint:211
 msgctxt "HomeScreen"
 msgid "Nothing to show yet"
 msgstr "Rien à afficher pour l'instant"
 
-#: crates/oxyfin/ui/screens/home.slint:185
+#: crates/oxyfin/ui/screens/home.slint:216
 msgctxt "HomeScreen"
 msgid "Movies and shows you add or start watching will appear here."
 msgstr ""

@@ -3,6 +3,7 @@
 
 pub mod collection;
 pub mod discovery;
+pub mod home_banner;
 pub mod person;
 pub mod playback_settings;
 
