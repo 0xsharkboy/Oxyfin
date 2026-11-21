@@ -30,6 +30,12 @@ pub const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 pub const SPEEDS: [f64; 6] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 /// Longest wait for the player to unload the previous media before loading the next.
 pub const UNLOAD_GRACE: Duration = Duration::from_millis(500);
+/// Wait between two requests for the subtitles of the playing item, while the
+/// server lists no new one after [`PlaybackCommand::ReloadSubtitles`].
+pub const SUBTITLE_RETRY: Duration = Duration::from_secs(1);
+/// How many times the subtitles of the playing item are asked again after
+/// [`PlaybackCommand::ReloadSubtitles`], while the server lists no new one.
+pub const SUBTITLE_RETRIES: u32 = 10;
 
 /// Durations driving the controller's timers.
 ///
@@ -46,6 +52,9 @@ pub struct PlaybackTimings {
     /// loading the next one. mpv reports no unload for a media stopped
     /// before it started.
     pub unload_grace: Duration,
+    /// Wait between two requests for the subtitles of the playing item after
+    /// [`PlaybackCommand::ReloadSubtitles`], while the server lists none new.
+    pub subtitle_retry: Duration,
 }
 
 impl Default for PlaybackTimings {
@@ -55,6 +64,7 @@ impl Default for PlaybackTimings {
             next_up_countdown_tick: Duration::from_secs(1),
             shutdown_timeout: SHUTDOWN_TIMEOUT,
             unload_grace: UNLOAD_GRACE,
+            subtitle_retry: SUBTITLE_RETRY,
         }
     }
 }
@@ -207,6 +217,20 @@ pub enum PlaybackCommand {
     /// Change how subtitles look. Applies at once, even with nothing
     /// playing, and again before each item loads.
     SetSubtitleStyle(SubtitleStyle),
+    /// Show the subtitle files the server added to the playing item since it
+    /// loaded, such as one just downloaded with [`Catalog::download_subtitle`],
+    /// and select the one in `select_language`, or else the first of them. The
+    /// server lists a downloaded file once it has refreshed the item, so the
+    /// controller asks for the subtitles of the item every
+    /// [`PlaybackTimings::subtitle_retry`], at most [`SUBTITLE_RETRIES`] more
+    /// times. Answered with [`PlaybackEvent::SubtitlesReloaded`], after
+    /// [`PlaybackEvent::TracksChanged`] when a file was added.
+    ///
+    /// [`Catalog::download_subtitle`]: crate::Catalog::download_subtitle
+    ReloadSubtitles {
+        /// Language to select, as an ISO 639-2 code such as `fre`.
+        select_language: String,
+    },
     /// Ask for the statistics of the loaded item, answered with
     /// [`PlaybackEvent::Stats`]; ignored while nothing is loaded.
     RequestStats,
@@ -337,6 +361,13 @@ pub enum PlaybackEvent {
     Stopped,
     /// Playback or a command failed.
     Error(PlaybackError),
+    /// The answer to [`PlaybackCommand::ReloadSubtitles`]: whether a new
+    /// subtitle file was added to the playing item. Not sent when the item
+    /// stops or another one loads first.
+    SubtitlesReloaded {
+        /// Whether a file was added.
+        added: bool,
+    },
     /// The statistics asked with [`PlaybackCommand::RequestStats`].
     Stats(Box<StatsReport>),
     /// The server no longer accepts the session; playback stopped.

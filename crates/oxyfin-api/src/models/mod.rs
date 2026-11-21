@@ -19,4 +19,4 @@ pub use playback::{MediaSourceInfo, MediaStream, PlaybackInfoResponse};
 pub use segments::MediaSegmentDto;
 pub use system::PublicSystemInfo;
 pub(crate) use user::AuthenticationResult;
-pub use user::UserDto;
+pub use user::{UserDto, UserPolicy};

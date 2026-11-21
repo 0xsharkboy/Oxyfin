@@ -60,6 +60,11 @@ async fn playback_info_decodes() {
             .collect();
         assert_eq!(subtitles.len(), 1, "{label}");
         assert!(subtitles[0].is_external, "{label}");
+        assert_eq!(
+            subtitles[0].path.as_deref(),
+            Some("/media/movies/Test Movie (2020)/Test Movie (2020).en.srt"),
+            "{label}"
+        );
     }
 }
 

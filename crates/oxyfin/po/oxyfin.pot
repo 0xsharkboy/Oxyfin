@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-20 20:52+0000\n"
+"POT-Creation-Date: 2026-11-20 23:42+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -591,6 +591,294 @@ msgctxt "StatsPanel"
 msgid "I to close"
 msgstr ""
 
+#: crates/oxyfin/ui/components/subtitle_search.slint:52
+msgctxt "SubtitleSearch"
+msgid "English"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:53
+msgctxt "SubtitleSearch"
+msgid "French"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:54
+msgctxt "SubtitleSearch"
+msgid "Spanish"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:55
+msgctxt "SubtitleSearch"
+msgid "German"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:56
+msgctxt "SubtitleSearch"
+msgid "Italian"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:57
+msgctxt "SubtitleSearch"
+msgid "Portuguese"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:58
+msgctxt "SubtitleSearch"
+msgid "Dutch"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:59
+msgctxt "SubtitleSearch"
+msgid "Swedish"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:60
+msgctxt "SubtitleSearch"
+msgid "Norwegian"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:61
+msgctxt "SubtitleSearch"
+msgid "Danish"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:62
+msgctxt "SubtitleSearch"
+msgid "Finnish"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:63
+msgctxt "SubtitleSearch"
+msgid "Icelandic"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:64
+msgctxt "SubtitleSearch"
+msgid "Polish"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:65
+msgctxt "SubtitleSearch"
+msgid "Czech"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:66
+msgctxt "SubtitleSearch"
+msgid "Slovak"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:67
+msgctxt "SubtitleSearch"
+msgid "Hungarian"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:68
+msgctxt "SubtitleSearch"
+msgid "Romanian"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:69
+msgctxt "SubtitleSearch"
+msgid "Bulgarian"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:70
+msgctxt "SubtitleSearch"
+msgid "Greek"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:71
+msgctxt "SubtitleSearch"
+msgid "Russian"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:72
+msgctxt "SubtitleSearch"
+msgid "Ukrainian"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:73
+msgctxt "SubtitleSearch"
+msgid "Croatian"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:74
+msgctxt "SubtitleSearch"
+msgid "Serbian"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:75
+msgctxt "SubtitleSearch"
+msgid "Slovenian"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:76
+msgctxt "SubtitleSearch"
+msgid "Estonian"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:77
+msgctxt "SubtitleSearch"
+msgid "Latvian"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:78
+msgctxt "SubtitleSearch"
+msgid "Lithuanian"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:79
+msgctxt "SubtitleSearch"
+msgid "Turkish"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:80
+msgctxt "SubtitleSearch"
+msgid "Arabic"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:81
+msgctxt "SubtitleSearch"
+msgid "Hebrew"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:82
+msgctxt "SubtitleSearch"
+msgid "Persian"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:83
+msgctxt "SubtitleSearch"
+msgid "Hindi"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:84
+msgctxt "SubtitleSearch"
+msgid "Thai"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:85
+msgctxt "SubtitleSearch"
+msgid "Vietnamese"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:86
+msgctxt "SubtitleSearch"
+msgid "Indonesian"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:87
+msgctxt "SubtitleSearch"
+msgid "Malay"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:88
+msgctxt "SubtitleSearch"
+msgid "Chinese"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:89
+msgctxt "SubtitleSearch"
+msgid "Japanese"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:90
+msgctxt "SubtitleSearch"
+msgid "Korean"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:91
+msgctxt "SubtitleSearch"
+msgid "Catalan"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:133
+msgctxt "ResultRow"
+msgid "1 download"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:133
+msgctxt "ResultRow"
+msgid "{} downloads"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:170
+msgctxt "ResultRow"
+msgid "Perfect match"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:175
+msgctxt "ResultRow"
+msgid "Forced"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:178
+msgctxt "ResultRow"
+msgid "Hearing impaired"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:187
+msgctxt "ResultRow"
+msgid "Download"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:196
+msgctxt "ResultRow"
+msgid "Downloading…"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:214
+msgctxt "ResultRow"
+msgid "Added"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:233
+#: crates/oxyfin/ui/components/subtitle_search.slint:233
+msgctxt "SubtitleSearchDialog"
+msgid "Find subtitles"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:285
+msgctxt "SubtitleSearchDialog"
+msgid "Close"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:300
+msgctxt "SubtitleSearchDialog"
+msgid "Language"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:315
+msgctxt "SubtitleSearchDialog"
+msgid "Other…"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:335
+msgctxt "SubtitleSearchDialog"
+msgid "Searching…"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:359
+msgctxt "SubtitleSearchDialog"
+msgid "No subtitles found in this language."
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:367
+msgctxt "SubtitleSearchDialog"
+msgid "Subtitles found"
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:391
+msgctxt "SubtitleSearchDialog"
+msgid ""
+"Subtitles come from your server's subtitle providers and are saved next to "
+"the video."
+msgstr ""
+
+#: crates/oxyfin/ui/components/subtitle_search.slint:403
+msgctxt "SubtitleSearchDialog"
+msgid "Other languages"
+msgstr ""
+
 #: crates/oxyfin/ui/components/top_bar.slint:21
 msgctxt "TopBar"
 msgid "Navigation"
@@ -626,84 +914,89 @@ msgctxt "TopBar"
 msgid "Settings"
 msgstr ""
 
-#: crates/oxyfin/ui/components/track_menu.slint:188
+#: crates/oxyfin/ui/components/track_menu.slint:238
 msgctxt "DelayRow"
 msgid "Delay"
 msgstr ""
 
-#: crates/oxyfin/ui/components/track_menu.slint:236
+#: crates/oxyfin/ui/components/track_menu.slint:286
 msgctxt "DelayRow"
 msgid "Reset"
 msgstr ""
 
-#: crates/oxyfin/ui/components/track_menu.slint:276
+#: crates/oxyfin/ui/components/track_menu.slint:329
 msgctxt "TrackMenu"
 msgid "Forced"
 msgstr ""
 
-#: crates/oxyfin/ui/components/track_menu.slint:276
+#: crates/oxyfin/ui/components/track_menu.slint:329
 msgctxt "TrackMenu"
 msgid "External"
 msgstr ""
 
-#: crates/oxyfin/ui/components/track_menu.slint:280
+#: crates/oxyfin/ui/components/track_menu.slint:333
 msgctxt "TrackMenu"
 msgid "Audio and subtitles"
 msgstr ""
 
-#: crates/oxyfin/ui/components/track_menu.slint:284
+#: crates/oxyfin/ui/components/track_menu.slint:337
 msgctxt "TrackMenu"
 msgid "AUDIO"
 msgstr ""
 
-#: crates/oxyfin/ui/components/track_menu.slint:298
+#: crates/oxyfin/ui/components/track_menu.slint:351
 msgctxt "TrackMenu"
 msgid "Audio delay"
 msgstr ""
 
-#: crates/oxyfin/ui/components/track_menu.slint:299
+#: crates/oxyfin/ui/components/track_menu.slint:352
 msgctxt "TrackMenu"
 msgid "Decrease the audio delay"
 msgstr ""
 
-#: crates/oxyfin/ui/components/track_menu.slint:300
+#: crates/oxyfin/ui/components/track_menu.slint:353
 msgctxt "TrackMenu"
 msgid "Increase the audio delay"
 msgstr ""
 
-#: crates/oxyfin/ui/components/track_menu.slint:301
+#: crates/oxyfin/ui/components/track_menu.slint:354
 msgctxt "TrackMenu"
 msgid "Reset the audio delay"
 msgstr ""
 
-#: crates/oxyfin/ui/components/track_menu.slint:313
+#: crates/oxyfin/ui/components/track_menu.slint:366
 msgctxt "TrackMenu"
 msgid "SUBTITLES"
 msgstr ""
 
-#: crates/oxyfin/ui/components/track_menu.slint:317
+#: crates/oxyfin/ui/components/track_menu.slint:370
 msgctxt "TrackMenu"
 msgid "Off"
 msgstr ""
 
-#: crates/oxyfin/ui/components/track_menu.slint:327
+#: crates/oxyfin/ui/components/track_menu.slint:380
 msgctxt "TrackMenu"
 msgid "Subtitle delay"
 msgstr ""
 
-#: crates/oxyfin/ui/components/track_menu.slint:328
+#: crates/oxyfin/ui/components/track_menu.slint:381
 msgctxt "TrackMenu"
 msgid "Decrease the subtitle delay"
 msgstr ""
 
-#: crates/oxyfin/ui/components/track_menu.slint:329
+#: crates/oxyfin/ui/components/track_menu.slint:382
 msgctxt "TrackMenu"
 msgid "Increase the subtitle delay"
 msgstr ""
 
-#: crates/oxyfin/ui/components/track_menu.slint:330
+#: crates/oxyfin/ui/components/track_menu.slint:383
 msgctxt "TrackMenu"
 msgid "Reset the subtitle delay"
+msgstr ""
+
+#: crates/oxyfin/ui/components/track_menu.slint:396
+msgctxt "TrackMenu"
+msgid "Find subtitles online…"
 msgstr ""
 
 #: crates/oxyfin/ui/screens/collection.slint:53
@@ -1088,47 +1381,47 @@ msgctxt "PersonScreen"
 msgid "Retry"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:190
+#: crates/oxyfin/ui/screens/player.slint:199
 msgctxt "PlayerScreen"
 msgid "Player"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:362
+#: crates/oxyfin/ui/screens/player.slint:379
 msgctxt "PlayerScreen"
 msgid "Back"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:542
+#: crates/oxyfin/ui/screens/player.slint:564
 msgctxt "PlayerScreen"
 msgid "Skip intro"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:542
+#: crates/oxyfin/ui/screens/player.slint:564
 msgctxt "PlayerScreen"
 msgid "Skip recap"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:542
+#: crates/oxyfin/ui/screens/player.slint:564
 msgctxt "PlayerScreen"
 msgid "Skip preview"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:542
+#: crates/oxyfin/ui/screens/player.slint:564
 msgctxt "PlayerScreen"
 msgid "Skip credits"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:567
+#: crates/oxyfin/ui/screens/player.slint:589
 msgctxt "PlayerScreen"
 msgid "Audio delay"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:567
+#: crates/oxyfin/ui/screens/player.slint:589
 msgctxt "PlayerScreen"
 msgid "Subtitle delay"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:570
+#: crates/oxyfin/ui/screens/player.slint:592
 msgctxt "PlayerScreen"
 msgid "{}: {}"
 msgstr ""
@@ -1603,109 +1896,114 @@ msgctxt "StartingScreen"
 msgid "Starting"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:257
+#: crates/oxyfin/ui/theme.slint:270
 msgctxt "Messages"
 msgid "Series"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:262
+#: crates/oxyfin/ui/theme.slint:275
 msgctxt "Messages"
 msgid "Server found (Jellyfin {})"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:264
+#: crates/oxyfin/ui/theme.slint:277
 msgctxt "Messages"
 msgid "Server found: {} (Jellyfin {})"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:270
+#: crates/oxyfin/ui/theme.slint:283
 msgctxt "Messages"
 msgid "Chapter {}"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:277
+#: crates/oxyfin/ui/theme.slint:290
 msgctxt "Messages"
 msgid "{}{}.{} s"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:283
+#: crates/oxyfin/ui/theme.slint:296
 msgctxt "Messages"
 msgid "Cannot reach the server. Check the address and your connection."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:286
+#: crates/oxyfin/ui/theme.slint:299
 msgctxt "Messages"
 msgid "This server address is not valid."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:289
+#: crates/oxyfin/ui/theme.slint:302
 msgctxt "Messages"
 msgid "This Jellyfin version is not supported (installed / required: {})."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:292
+#: crates/oxyfin/ui/theme.slint:305
 msgctxt "Messages"
 msgid "Incorrect username or password."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:295
+#: crates/oxyfin/ui/theme.slint:308
 msgctxt "Messages"
 msgid "Quick Connect is disabled on this server."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:298
+#: crates/oxyfin/ui/theme.slint:311
 msgctxt "Messages"
 msgid "The Quick Connect code has expired."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:301
+#: crates/oxyfin/ui/theme.slint:314
 msgctxt "Messages"
 msgid "The server ran into an error. Please try again later."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:304
+#: crates/oxyfin/ui/theme.slint:317
 msgctxt "Messages"
 msgid "The server sent a response Oxyfin does not understand."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:307
+#: crates/oxyfin/ui/theme.slint:320
 msgctxt "Messages"
 msgid "Oxyfin could not read or save its settings."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:310
+#: crates/oxyfin/ui/theme.slint:323
 msgctxt "Messages"
 msgid "Your session has expired. Please sign in again."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:313
+#: crates/oxyfin/ui/theme.slint:326
 msgctxt "Messages"
 msgid ""
 "The system keyring is unavailable, so your sign-in token is stored in a file "
 "only you can read."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:316
+#: crates/oxyfin/ui/theme.slint:329
 msgctxt "Messages"
 msgid "The server offers no version of this item that Oxyfin can play."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:319
+#: crates/oxyfin/ui/theme.slint:332
 msgctxt "Messages"
 msgid "There is nothing left to play in this series."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:322
+#: crates/oxyfin/ui/theme.slint:335
 msgctxt "Messages"
 msgid "This item could not be loaded."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:325
+#: crates/oxyfin/ui/theme.slint:338
 msgctxt "Messages"
 msgid "The player could not complete that action."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:328
+#: crates/oxyfin/ui/theme.slint:341
 msgctxt "Messages"
 msgid "Playback is not available in this build of Oxyfin."
+msgstr ""
+
+#: crates/oxyfin/ui/theme.slint:344
+msgctxt "Messages"
+msgid "The server did not add this subtitle. Try another one."
 msgstr ""

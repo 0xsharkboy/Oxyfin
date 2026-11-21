@@ -6,7 +6,8 @@ use tokio::sync::Mutex;
 use tokio::time::{Duration, Instant};
 
 use oxyfin_api::{
-    BaseItemDto, BaseItemKind, ItemFields, ItemId, ItemSortBy, ItemsQuery, Session, SortOrder,
+    BaseItemDto, BaseItemKind, ItemFields, ItemId, ItemSortBy, ItemsQuery, RemoteSubtitleInfo,
+    Session, SortOrder,
 };
 
 use crate::models::{
@@ -548,5 +549,31 @@ impl Catalog {
             return Ok(false);
         }
         Ok(self.session.quick_connect_authorize(&code).await?)
+    }
+
+    /// Whether the user may search and download subtitles, as the server's policy for them says.
+    pub async fn can_manage_subtitles(&self) -> Result<bool> {
+        Ok(self.session.me().await?.policy.can_manage_subtitles())
+    }
+
+    /// Asks the server's subtitle providers for subtitles of `item` in `language`, given in
+    /// any form [`subtitle_language`] reads; a code it does not know is sent as given.
+    ///
+    /// [`subtitle_language`]: crate::subtitle_language
+    pub async fn search_subtitles(
+        &self,
+        item: &ItemId,
+        language: &str,
+    ) -> Result<Vec<RemoteSubtitleInfo>> {
+        let code = crate::subtitle_language(language).unwrap_or(language);
+        Ok(self.session.search_subtitles(item, code).await?)
+    }
+
+    /// Makes the server download a subtitle found by [`Catalog::search_subtitles`] and keep
+    /// it with `item`. [`PlaybackCommand::ReloadSubtitles`] then shows it in the playing item.
+    ///
+    /// [`PlaybackCommand::ReloadSubtitles`]: crate::PlaybackCommand::ReloadSubtitles
+    pub async fn download_subtitle(&self, item: &ItemId, id: &str) -> Result<()> {
+        Ok(self.session.download_subtitle(item, id).await?)
     }
 }

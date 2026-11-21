@@ -58,6 +58,7 @@ mod catalog;
 mod config;
 mod error;
 mod images;
+mod languages;
 mod models;
 mod paths;
 mod playback;
@@ -74,21 +75,22 @@ pub use error::{CoreError, Result};
 pub use images::{
     CacheBudgets, DEFAULT_DISK_BUDGET, DEFAULT_MEMORY_BUDGET, IMAGE_FETCHES, ImageCache, ImageSize,
 };
+pub use languages::{same_language, subtitle_language, subtitle_languages};
 pub use models::{
     CollectionDetails, CollectionLink, Episode, ImageRef, ItemKind, ItemSummary, Library,
     LibraryKind, MovieDetails, Page, Person, PersonDetails, PersonKind, PersonTitle, Season,
     SeriesDetails, UserState,
 };
-pub use oxyfin_api::DiscoveredServer;
+pub use oxyfin_api::{DiscoveredServer, RemoteSubtitleInfo};
 pub use paths::Paths;
 pub use playback::{
     AudioOption, AudioPick, CHAPTER_RESTART_GRACE, COUNTDOWNS, Chapter, HdrFormat, HdrInfo,
     MediaPlayer, PROGRESS_INTERVAL, PlayMethod, PlayMode, PlaybackCommand, PlaybackController,
     PlaybackError, PlaybackEvent, PlaybackHandle, PlaybackPrefs, PlaybackStats, PlaybackTimings,
     PlaybackTitle, PlayerEventSink, PlayerEvents, QUALITIES, Quality, SEEK_STEP, SHUTDOWN_TIMEOUT,
-    SPEEDS, SegmentKind, SkippableSegment, StatsReport, SubtitleOption, SubtitlePick,
-    TRACK_MEMORY_LIMIT, TrackChoice, TrackMemory, UNLOAD_GRACE, best_audio, best_subtitle,
-    chapter_at, next_chapter, player_events, previous_chapter, start_at,
+    SPEEDS, SUBTITLE_RETRIES, SUBTITLE_RETRY, SegmentKind, SkippableSegment, StatsReport,
+    SubtitleOption, SubtitlePick, TRACK_MEMORY_LIMIT, TrackChoice, TrackMemory, UNLOAD_GRACE,
+    best_audio, best_subtitle, chapter_at, next_chapter, player_events, previous_chapter, start_at,
 };
 pub use presence::{PRESENCE_ASSET, PRESENCE_TEXT_LIMIT, Presence, TMDB_IMAGES, presence_for};
 pub use quick_connect::{QUICK_CONNECT_POLL_INTERVAL, QuickConnect, quick_connect_code};

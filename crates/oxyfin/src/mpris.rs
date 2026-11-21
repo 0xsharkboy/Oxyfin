@@ -264,6 +264,7 @@ impl PlayerState {
             | PlaybackEvent::NextUpReady { .. }
             | PlaybackEvent::SegmentSkipped { .. }
             | PlaybackEvent::NextUpCancelled
+            | PlaybackEvent::SubtitlesReloaded { .. }
             | PlaybackEvent::Stats(_) => {}
         }
         false

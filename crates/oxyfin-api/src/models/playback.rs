@@ -28,6 +28,8 @@ pub struct MediaStream {
     pub is_hearing_impaired: bool,
     /// Whether the stream lives in a separate file.
     pub is_external: bool,
+    /// Path of the file on the server, for a stream in a separate file.
+    pub path: Option<String>,
     /// Whether the stream is a text subtitle, which the server can deliver as a separate file.
     pub is_text_subtitle_stream: bool,
     /// Number of audio channels.
@@ -55,6 +57,7 @@ impl Default for MediaStream {
             is_forced: false,
             is_hearing_impaired: false,
             is_external: false,
+            path: None,
             is_text_subtitle_stream: false,
             channels: None,
             channel_layout: None,

@@ -32,6 +32,7 @@ mod quick_connect;
 mod segments;
 mod server;
 mod session;
+mod subtitles;
 mod ticks;
 mod trickplay;
 mod user_data;
@@ -49,12 +50,13 @@ pub use models::{
     BaseItemDto, BaseItemKind, BaseItemPerson, ChapterInfo, ImageType, ItemFields, ItemSortBy,
     ItemsQuery, MediaSegmentDto, MediaSegmentType, MediaSourceInfo, MediaStream, MediaStreamType,
     PlaybackInfoResponse, PublicSystemInfo, QueryResult, SortOrder, SubtitleDeliveryMethod,
-    TrickplayInfoDto, UserDto, UserItemDataDto,
+    TrickplayInfoDto, UserDto, UserItemDataDto, UserPolicy,
 };
 pub use playback::{PlayMethod, PlaybackOptions, PlaybackReport, StreamSource};
 pub use quick_connect::{QuickConnectSecret, QuickConnectState};
 pub use server::Server;
 pub use session::Session;
+pub use subtitles::RemoteSubtitleInfo;
 pub use ticks::{TICKS_PER_SECOND, Ticks};
 pub use version::{MINIMUM_SERVER_VERSION, ServerVersion};
 

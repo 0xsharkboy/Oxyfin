@@ -4162,3 +4162,188 @@ async fn next_sent_before_a_remembered_audio_request_is_kept() {
         h.loaded_ids()
     );
 }
+
+/// The fixture playback info once the server lists a French subtitle file
+/// downloaded next to the movie: it comes first, so every stream index moves up.
+fn playback_info_with_french_file() -> Value {
+    let mut info = fixture("playback_info");
+    let source = &mut info["MediaSources"][0];
+    let Some(streams) = source["MediaStreams"].as_array_mut() else {
+        panic!("bad fixture");
+    };
+    for stream in streams.iter_mut() {
+        let index = stream["Index"].as_i64().unwrap_or_default();
+        stream["Index"] = json!(index + 1);
+    }
+    streams.insert(
+        0,
+        json!({
+            "Index": 0,
+            "Type": "Subtitle",
+            "Codec": "subrip",
+            "Language": "fre",
+            "DisplayTitle": "French - SUBRIP - External",
+            "IsExternal": true,
+            "IsTextSubtitleStream": true,
+            "Path": "/media/movies/Test Movie (2020)/Test Movie (2020).fr.srt",
+        }),
+    );
+    source["DefaultAudioStreamIndex"] = json!(3);
+    source["DefaultSubtitleStreamIndex"] = json!(1);
+    info
+}
+
+/// The `TracksChanged` that follows a `ReloadSubtitles`, with the calls made to the player.
+async fn reload_french(
+    h: &mut Harness,
+) -> (
+    Vec<oxyfin_core::AudioOption>,
+    Vec<oxyfin_core::SubtitleOption>,
+) {
+    h.handle.send(PlaybackCommand::ReloadSubtitles {
+        select_language: "fre".to_owned(),
+    });
+    let event = wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::TracksChanged { .. })
+    })
+    .await;
+    let PlaybackEvent::TracksChanged { audio, subtitles } = event else {
+        unreachable!();
+    };
+    (audio, subtitles)
+}
+
+#[tokio::test]
+async fn reload_adds_new_external_track() {
+    let mut h = harness(quiet()).await;
+    h.start().await;
+    mount_playback_info(&h.mock, playback_info_with_french_file()).await;
+
+    let (audio, subtitles) = reload_french(&mut h).await;
+    let reloaded = wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::SubtitlesReloaded { .. })
+    })
+    .await;
+    assert_eq!(reloaded, PlaybackEvent::SubtitlesReloaded { added: true });
+
+    let calls = h.player.calls();
+    let added: Vec<_> = calls
+        .iter()
+        .filter_map(|call| match call {
+            Call::AddExternal { url, language, .. } => Some((url.clone(), language.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(added.len(), 2, "{calls:?}");
+    assert!(
+        added[1].0.ends_with(&format!(
+            "/Videos/{MOVIE_ID}/{MOVIE_ID}/Subtitles/0/Stream.srt"
+        )),
+        "{added:?}"
+    );
+    assert_eq!(added[1].1.as_deref(), Some("fre"));
+    assert_eq!(calls.last(), Some(&Call::SelectSubtitle(Some(TrackId(2)))));
+
+    let shown: Vec<_> = subtitles
+        .iter()
+        .map(|s| (s.index, s.language.as_deref(), s.external, s.selected))
+        .collect();
+    assert_eq!(
+        shown,
+        vec![(0, Some("fre"), true, true), (1, Some("eng"), true, false)]
+    );
+    let audio: Vec<_> = audio.iter().map(|a| (a.index, a.selected)).collect();
+    assert_eq!(audio, vec![(3, true), (4, false)]);
+
+    let progress = wait_requests(&h.mock, PROGRESS, 1).await;
+    let last = &progress[progress.len() - 1];
+    assert_eq!(last["SubtitleStreamIndex"], json!(0));
+    assert_eq!(last["AudioStreamIndex"], json!(3));
+
+    // The tracks mpv lists afterwards map to the new indexes.
+    let mut tracks = file_tracks();
+    tracks.push(external_track(false));
+    let mut french = external_track(true);
+    french.id = TrackId(2);
+    tracks.push(french);
+    h.sink.send(PlayerEvent::Tracks(tracks));
+    h.handle.send(PlaybackCommand::SelectAudio(4));
+    let call = h
+        .player
+        .wait_call(|call| *call == Call::SelectAudio(Some(TrackId(2))))
+        .await;
+    assert_eq!(call, Call::SelectAudio(Some(TrackId(2))));
+    h.handle.send(PlaybackCommand::SelectSubtitle(Some(1)));
+    h.player
+        .wait_call(|call| *call == Call::SelectSubtitle(Some(TrackId(1))))
+        .await;
+}
+
+#[tokio::test]
+async fn reload_waits_for_the_server_to_list_the_new_subtitle() {
+    let mut h = harness(PlaybackTimings {
+        subtitle_retry: Duration::from_millis(20),
+        ..quiet()
+    })
+    .await;
+    h.start().await;
+    Mock::given(method("POST"))
+        .and(path(format!("/Items/{MOVIE_ID}/PlaybackInfo")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("playback_info")))
+        .up_to_n_times(2)
+        .with_priority(1)
+        .mount(&h.mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(format!("/Items/{MOVIE_ID}/PlaybackInfo")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(playback_info_with_french_file()))
+        .with_priority(2)
+        .mount(&h.mock)
+        .await;
+
+    let (_, subtitles) = reload_french(&mut h).await;
+
+    assert!(subtitles.iter().any(|s| s.index == 0 && s.selected));
+    assert_eq!(
+        bodies(&h.mock, &format!("/Items/{MOVIE_ID}/PlaybackInfo"))
+            .await
+            .len(),
+        4
+    );
+}
+
+#[tokio::test]
+async fn reload_without_a_new_subtitle_changes_nothing() {
+    let mut h = harness(PlaybackTimings {
+        subtitle_retry: Duration::from_millis(5),
+        ..quiet()
+    })
+    .await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::ReloadSubtitles {
+        select_language: "fre".to_owned(),
+    });
+    let reloaded = wait_event(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::SubtitlesReloaded { .. })
+    })
+    .await;
+    assert_eq!(reloaded, PlaybackEvent::SubtitlesReloaded { added: false });
+    let info = format!("/Items/{MOVIE_ID}/PlaybackInfo");
+    let asked = bodies(&h.mock, &info).await.len();
+    assert_eq!(asked, 2 + oxyfin_core::SUBTITLE_RETRIES as usize);
+    let seen = h.stop().await;
+    assert!(
+        !seen.iter().any(|e| matches!(
+            e,
+            PlaybackEvent::TracksChanged { .. } | PlaybackEvent::Error(_)
+        )),
+        "{seen:?}"
+    );
+    let adds = h
+        .player
+        .calls()
+        .iter()
+        .filter(|call| matches!(call, Call::AddExternal { .. }))
+        .count();
+    assert_eq!(adds, 1);
+}

@@ -1309,3 +1309,53 @@ async fn authorize_device_with_an_empty_code_asks_nothing() {
             .is_empty()
     );
 }
+
+#[tokio::test]
+async fn subtitle_management_follows_the_user_policy() {
+    for (enabled, admin, allowed) in [
+        (false, true, true),
+        (true, false, true),
+        (false, false, false),
+    ] {
+        let mock = MockServer::start().await;
+        let mut me = fixture("users_me");
+        me["Policy"]["EnableSubtitleManagement"] = json!(enabled);
+        me["Policy"]["IsAdministrator"] = json!(admin);
+        mount(&mock, "GET", "/Users/Me", me).await;
+        let can = catalog(&mock).can_manage_subtitles().await.unwrap();
+        assert_eq!(can, allowed, "enabled {enabled}, admin {admin}");
+    }
+}
+
+#[tokio::test]
+async fn subtitle_search_uses_the_bibliographic_code() {
+    let mock = MockServer::start().await;
+    mount(
+        &mock,
+        "GET",
+        &format!("/Items/{MOVIE_ID}/RemoteSearch/Subtitles/fre"),
+        json!([{"Id": "s1", "Name": "Film.FR", "ProviderName": "Open Subtitles"}]),
+    )
+    .await;
+    let found = catalog(&mock)
+        .search_subtitles(&ItemId::from(MOVIE_ID), "fra")
+        .await
+        .unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].id, "s1");
+}
+
+#[tokio::test]
+async fn subtitle_download_errors_are_core_errors() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!("/Items/{MOVIE_ID}/RemoteSearch/Subtitles/s1")))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&mock)
+        .await;
+    let error = catalog(&mock)
+        .download_subtitle(&ItemId::from(MOVIE_ID), "s1")
+        .await
+        .unwrap_err();
+    assert_eq!(error, CoreError::Server { status: 500 });
+}

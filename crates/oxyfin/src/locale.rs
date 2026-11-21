@@ -1,5 +1,7 @@
 //! Language selection: maps the system locale to one of the bundled translations.
 
+use std::sync::Mutex;
+
 /// Language code of a locale such as `fr_FR.UTF-8`, or `None` for `C`, `POSIX` and empty values.
 pub fn language_of(locale: &str) -> Option<String> {
     let language = locale.split(['.', '@', '_', '-']).next()?.trim();
@@ -37,18 +39,36 @@ fn detect(
         .or_else(|| system().and_then(|locale| language_of(&locale)))
 }
 
+/// Language of the interface, once [`select_language`] chose it.
+static INTERFACE_LANGUAGE: Mutex<Option<String>> = Mutex::new(None);
+
+/// The language the interface shows, as an ISO 639-1 code such as `fr`; `en`
+/// before [`select_language`] runs.
+pub fn interface_language() -> String {
+    INTERFACE_LANGUAGE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .unwrap_or_else(|| "en".to_owned())
+}
+
 /// Selects the bundled translation for the system language; English when there is none.
 ///
 /// Must be called after the first window is created.
 pub fn select_language() {
     let language = detect(|name| std::env::var(name).ok(), sys_locale::get_locale);
     let wanted = language.as_deref().unwrap_or("en");
-    if let Err(error) = slint::select_bundled_translation(wanted) {
-        log::debug!("no translation for {wanted}, using English: {error}");
-        if let Err(error) = slint::select_bundled_translation("en") {
-            log::debug!("cannot select English: {error}");
+    let selected = match slint::select_bundled_translation(wanted) {
+        Ok(()) => wanted,
+        Err(error) => {
+            log::debug!("no translation for {wanted}, using English: {error}");
+            if let Err(error) = slint::select_bundled_translation("en") {
+                log::debug!("cannot select English: {error}");
+            }
+            "en"
         }
-    }
+    };
+    *INTERFACE_LANGUAGE.lock().unwrap_or_else(|e| e.into_inner()) = Some(selected.to_owned());
 }
 
 #[cfg(test)]
