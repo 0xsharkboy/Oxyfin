@@ -315,13 +315,31 @@ pub type Connector = Box<dyn FnMut() -> io::Result<Box<dyn Stream>> + Send>;
 /// Where the Discord app may listen, most likely first.
 #[cfg(unix)]
 pub fn socket_dirs() -> Vec<PathBuf> {
-    let mut bases: Vec<PathBuf> = ["XDG_RUNTIME_DIR", "TMPDIR", "TMP", "TEMP"]
-        .iter()
-        .filter_map(std::env::var_os)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .collect();
-    bases.push(PathBuf::from("/tmp"));
+    socket_dirs_in(|name| std::env::var_os(name))
+}
+
+/// Where the Discord app may listen, reading the environment with `var`.
+///
+/// Only the runtime directory when there is one: shared directories such as
+/// `/tmp` would let another user pose as Discord.
+#[cfg(unix)]
+pub fn socket_dirs_in(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Vec<PathBuf> {
+    let set = |name: &str| {
+        var(name)
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+    };
+    let bases = match set("XDG_RUNTIME_DIR") {
+        Some(runtime) => vec![runtime],
+        None => {
+            let mut bases: Vec<PathBuf> = ["TMPDIR", "TMP", "TEMP"]
+                .iter()
+                .filter_map(|name| set(name))
+                .collect();
+            bases.push(PathBuf::from("/tmp"));
+            bases
+        }
+    };
     let mut dirs = Vec::new();
     for base in bases {
         for sub in ["", "app/com.discordapp.Discord", "snap.discord"] {
@@ -360,6 +378,9 @@ pub fn socket_dirs() -> Vec<PathBuf> {
 }
 
 /// Opens a stream to the first Discord app listening in `dirs`.
+///
+/// The pipe has no timeout: a Discord that stops answering holds the Discord
+/// thread until it closes the pipe, never the interface.
 #[cfg(windows)]
 pub fn connect(dirs: &[PathBuf]) -> io::Result<Box<dyn Stream>> {
     for dir in dirs {
@@ -967,6 +988,31 @@ mod tests {
             assert_eq!(set["cmd"], "SET_ACTIVITY");
             assert_eq!(attempts.load(Ordering::SeqCst), 2);
             discord.shutdown(WAIT);
+        }
+
+        #[test]
+        fn a_runtime_dir_is_the_only_place_looked_at() {
+            let env = |runtime: Option<&'static str>| {
+                move |name: &str| {
+                    match name {
+                        "XDG_RUNTIME_DIR" => runtime,
+                        "TMPDIR" => Some("/tmp"),
+                        _ => None,
+                    }
+                    .map(std::ffi::OsString::from)
+                }
+            };
+            assert_eq!(
+                socket_dirs_in(env(Some("/run/user/1000"))),
+                vec![
+                    PathBuf::from("/run/user/1000"),
+                    PathBuf::from("/run/user/1000/app/com.discordapp.Discord"),
+                    PathBuf::from("/run/user/1000/snap.discord"),
+                ]
+            );
+            let shared = socket_dirs_in(env(None));
+            assert_eq!(shared[0], PathBuf::from("/tmp"));
+            assert_eq!(shared.len(), 3);
         }
 
         #[test]
