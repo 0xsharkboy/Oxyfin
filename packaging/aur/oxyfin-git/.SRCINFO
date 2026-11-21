@@ -1,0 +1,27 @@
+pkgbase = oxyfin-git
+	pkgdesc = Native client for Jellyfin media servers
+	pkgver = r286.dda5b26
+	pkgrel = 1
+	url = https://github.com/0xsharkboy/Oxyfin
+	arch = x86_64
+	arch = aarch64
+	license = GPL-3.0-only
+	makedepends = git
+	makedepends = cargo
+	makedepends = cmake
+	depends = dbus
+	depends = fontconfig
+	depends = glibc
+	depends = hicolor-icon-theme
+	depends = libgcc
+	depends = libglvnd
+	depends = libxkbcommon
+	depends = mpv
+	depends = wayland
+	provides = oxyfin
+	conflicts = oxyfin
+	options = !lto
+	source = oxyfin::git+https://github.com/0xsharkboy/Oxyfin.git
+	sha256sums = SKIP
+
+pkgname = oxyfin-git
