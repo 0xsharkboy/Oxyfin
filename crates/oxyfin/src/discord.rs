@@ -481,54 +481,57 @@ impl Worker {
                 Err(RecvTimeoutError::Timeout) => {}
             }
             let now = Instant::now();
-            if due.is_some_and(|due| due <= now) || refresh <= now {
+            let tick = refresh <= now;
+            if due.is_some_and(|due| due <= now) || tick {
                 due = None;
                 refresh = now + self.retry;
-                self.sync(&watching);
+                self.sync(&watching, tick);
             }
         }
     }
 
-    fn sync(&mut self, watching: &Watching) {
-        let next = watching.presence(unix_now());
-        if !differs(self.shown.as_ref(), next.as_ref()) {
-            if !watching.enabled() {
-                self.ipc = None;
-            }
+    /// Shows what `watching` calls for. On a refresh `tick`, the activity
+    /// shown is sent again even unchanged, so a Discord that restarted since
+    /// gets it back.
+    fn sync(&mut self, watching: &Watching, tick: bool) {
+        let Some(presence) = watching.presence(unix_now()) else {
+            self.leave();
+            self.disconnect();
+            return;
+        };
+        let resend = tick && self.shown.is_some();
+        if !resend && !differs(self.shown.as_ref(), Some(&presence)) {
             return;
         }
-        match next {
-            None => {
-                self.leave();
-                if watching.enabled() {
+        if self.ipc.is_none() {
+            if Instant::now() < self.next_attempt {
+                return;
+            }
+            self.next_attempt = Instant::now() + self.retry;
+            match (self.connector)().and_then(Ipc::handshake) {
+                Ok(ipc) => self.ipc = Some(ipc),
+                Err(error) => {
+                    log::debug!("cannot reach Discord: {error}");
                     return;
                 }
+            }
+        }
+        let Some(ipc) = self.ipc.as_mut() else { return };
+        match ipc.set_activity(Some(&presence)) {
+            Ok(()) => self.shown = Some(presence),
+            Err(error) => {
+                log::warn!("Discord did not take the activity: {error}");
                 self.ipc = None;
+                self.shown = None;
             }
-            Some(presence) => {
-                if self.ipc.is_none() {
-                    if Instant::now() < self.next_attempt {
-                        return;
-                    }
-                    self.next_attempt = Instant::now() + self.retry;
-                    match (self.connector)().and_then(Ipc::handshake) {
-                        Ok(ipc) => self.ipc = Some(ipc),
-                        Err(error) => {
-                            log::debug!("cannot reach Discord: {error}");
-                            return;
-                        }
-                    }
-                }
-                let Some(ipc) = self.ipc.as_mut() else { return };
-                match ipc.set_activity(Some(&presence)) {
-                    Ok(()) => self.shown = Some(presence),
-                    Err(error) => {
-                        log::warn!("Discord did not take the activity: {error}");
-                        self.ipc = None;
-                        self.shown = None;
-                    }
-                }
-            }
+        }
+    }
+
+    /// Closes the connection while nothing is shown; the next activity
+    /// connects again at once.
+    fn disconnect(&mut self) {
+        if self.ipc.take().is_some() {
+            self.next_attempt = Instant::now();
         }
     }
 
@@ -708,6 +711,8 @@ mod tests {
         use std::sync::atomic::{AtomicUsize, Ordering};
 
         const WAIT: Duration = Duration::from_secs(5);
+        /// Forwarded by the fakes when the app closes the connection.
+        const HUNG_UP: u32 = u32::MAX;
 
         fn read_frame(stream: &mut UnixStream) -> Option<(u32, Value)> {
             let mut header = [0; 8];
@@ -748,7 +753,40 @@ mod tests {
                             return;
                         }
                     }
+                    if frames.send((HUNG_UP, Value::Null)).is_err() {
+                        return;
+                    }
                 }
+            });
+            received
+        }
+
+        /// A fake Discord that quits after showing the first activity, as when the user closes it.
+        fn short_lived_discord(dir: &Path) -> Receiver<(u32, Value)> {
+            let socket = dir.join("discord-ipc-0");
+            let listener = UnixListener::bind(&socket).unwrap();
+            let (frames, received) = mpsc::channel();
+            thread::spawn(move || {
+                let Ok((mut stream, _)) = listener.accept() else {
+                    return;
+                };
+                while let Some((opcode, payload)) = read_frame(&mut stream) {
+                    let answer = if opcode == OP_HANDSHAKE {
+                        json!({ "cmd": "DISPATCH", "evt": "READY", "data": { "v": 1 } })
+                    } else {
+                        json!({ "cmd": payload["cmd"], "evt": null, "nonce": payload["nonce"] })
+                    };
+                    write_frame(&mut stream, OP_FRAME, &answer);
+                    let shown = opcode == OP_FRAME;
+                    let _ = frames.send((opcode, payload));
+                    if shown {
+                        break;
+                    }
+                }
+                drop(listener);
+                let _ = std::fs::remove_file(&socket);
+                let _ = stream.shutdown(std::net::Shutdown::Both);
+                let _ = frames.send((HUNG_UP, Value::Null));
             });
             received
         }
@@ -881,6 +919,53 @@ mod tests {
             assert_eq!(opcode, OP_HANDSHAKE);
             let (_, set) = frames.recv_timeout(WAIT).unwrap();
             assert_eq!(set["cmd"], "SET_ACTIVITY");
+            discord.shutdown(WAIT);
+        }
+
+        #[test]
+        fn the_activity_comes_back_after_discord_restarts() {
+            let dir = tempfile::tempdir().unwrap();
+            let frames = short_lived_discord(dir.path());
+            let (discord, _) = start(dir.path(), true, Duration::from_millis(200));
+            play(&discord);
+            // Paused, the activity has no times that drift and would be sent again anyway.
+            discord.update(Update::Event(PlaybackEvent::Paused(true)));
+            assert_eq!(frames.recv_timeout(WAIT).unwrap().0, OP_HANDSHAKE);
+            assert_eq!(frames.recv_timeout(WAIT).unwrap().0, OP_FRAME);
+            assert_eq!(frames.recv_timeout(WAIT).unwrap().0, HUNG_UP);
+
+            let frames = fake_discord(dir.path(), false);
+            let (opcode, _) = frames.recv_timeout(WAIT).unwrap();
+            assert_eq!(opcode, OP_HANDSHAKE);
+            let (_, set) = frames.recv_timeout(WAIT).unwrap();
+            assert_eq!(
+                set["args"]["activity"]["state"],
+                "S02E05 · The Pact · Paused"
+            );
+            discord.shutdown(WAIT);
+        }
+
+        #[test]
+        fn the_connection_closes_while_nothing_plays() {
+            let dir = tempfile::tempdir().unwrap();
+            let frames = fake_discord(dir.path(), false);
+            let (discord, attempts) = start(dir.path(), true, RETRY);
+            play(&discord);
+            frames.recv_timeout(WAIT).unwrap();
+            frames.recv_timeout(WAIT).unwrap();
+
+            discord.update(Update::Event(PlaybackEvent::Stopped));
+            let (_, clear) = frames.recv_timeout(WAIT).unwrap();
+            assert!(clear["args"].get("activity").is_none());
+            assert_eq!(frames.recv_timeout(WAIT).unwrap().0, HUNG_UP);
+
+            discord.update(loading());
+            discord.update(ready());
+            let (opcode, _) = frames.recv_timeout(Duration::from_secs(2)).unwrap();
+            assert_eq!(opcode, OP_HANDSHAKE);
+            let (_, set) = frames.recv_timeout(WAIT).unwrap();
+            assert_eq!(set["cmd"], "SET_ACTIVITY");
+            assert_eq!(attempts.load(Ordering::SeqCst), 2);
             discord.shutdown(WAIT);
         }
 
