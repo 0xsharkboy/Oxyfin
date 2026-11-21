@@ -199,6 +199,13 @@ impl Player {
         self.set_property("sid", track_value(track))
     }
 
+    /// Removes the subtitle track `track`, such as an external file to add
+    /// again once it changed on the server.
+    pub fn remove_subtitle(&self, track: TrackId) -> Result<(), PlayerError> {
+        self.require_loaded()?;
+        self.command("sub-remove", &[&track.0.to_string()])
+    }
+
     /// Adds the subtitle file at `url` (an absolute path or a full URL, matched
     /// against the `external-filename` of mpv) as an external track and returns
     /// the subtitle id of the new track.

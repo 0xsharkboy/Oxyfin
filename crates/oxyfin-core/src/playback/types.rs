@@ -224,7 +224,8 @@ pub enum PlaybackCommand {
     /// controller asks for the subtitles of the item every
     /// [`PlaybackTimings::subtitle_retry`], at most [`SUBTITLE_RETRIES`] more
     /// times. When the item loads again first, as for another quality, the
-    /// request waits until it is ready. Answered with
+    /// request waits until it is ready. A file downloaded again in a language
+    /// the item already has replaces it, once no new file came. Answered with
     /// [`PlaybackEvent::SubtitlesReloaded`], after [`PlaybackEvent::TracksChanged`]
     /// when a file was added.
     ///

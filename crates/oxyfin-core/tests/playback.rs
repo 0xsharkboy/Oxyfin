@@ -4454,3 +4454,35 @@ async fn a_subtitle_request_with_nothing_playing_is_answered() {
         PlaybackEvent::SubtitlesReloaded { added: false }
     );
 }
+
+#[tokio::test]
+async fn a_file_downloaded_again_in_the_language_replaces_its_track() {
+    let mock = MockServer::start().await;
+    mount_playback_info(&mock, playback_info_with_french_file()).await;
+    let mut h = harness_on(
+        mock,
+        PlaybackTimings {
+            subtitle_retry: Duration::from_millis(5),
+            ..quiet()
+        },
+    )
+    .await;
+    h.start().await;
+    // The French file (index 0) is track 1, the English one track 2.
+    let calls_before = h.player.calls().len();
+    reload_subtitles(&h);
+
+    assert_eq!(
+        reloaded(&mut h).await,
+        PlaybackEvent::SubtitlesReloaded { added: true }
+    );
+    let calls = h.player.calls()[calls_before..].to_vec();
+    let french = format!("/Videos/{MOVIE_ID}/{MOVIE_ID}/Subtitles/0/Stream.srt");
+    let removed = position_of(&calls, &Call::RemoveSubtitle(TrackId(1)));
+    let added = calls
+        .iter()
+        .position(|call| matches!(call, Call::AddExternal { url, .. } if url.ends_with(&french)))
+        .unwrap_or_else(|| panic!("the French file is not added again: {calls:?}"));
+    assert!(removed < added, "{calls:?}");
+    assert_eq!(calls.last(), Some(&Call::SelectSubtitle(Some(TrackId(3)))));
+}

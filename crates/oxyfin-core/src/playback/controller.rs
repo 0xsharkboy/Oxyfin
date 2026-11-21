@@ -10,7 +10,8 @@ use oxyfin_api::{
     SubtitleDeliveryMethod, Ticks,
 };
 use oxyfin_player::{
-    PlayerError, PlayerEvent, SeekTarget, SubtitleAppearance, Track, TrackKind, UnloadReason,
+    PlayerError, PlayerEvent, SeekTarget, SubtitleAppearance, Track, TrackId, TrackKind,
+    UnloadReason,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::oneshot;
@@ -21,7 +22,7 @@ use super::current::{Current, Siblings, mark_selected};
 use super::loader::{LoadFailure, LoadMessage, LoadRequest, LoadStage, Loader, Prepared, Resume};
 use super::media_player::{MediaPlayer, PlayerEvents};
 use super::quality::Quality;
-use super::refresh::{RefreshRequest, Refreshed, Wanted, added, remapped};
+use super::refresh::{RefreshRequest, Refreshed, Wanted, added, in_language, remapped};
 use super::reporter::{ReportKind, Reporter};
 use super::segments::SkipMemory;
 use super::track_memory::{
@@ -744,35 +745,65 @@ impl PlaybackController {
                     continue;
                 }
             };
-            tracks.push(Track {
-                id,
-                kind: TrackKind::Subtitle,
-                language: stream.language.clone(),
-                title: title.map(str::to_owned),
-                codec: stream.codec.clone(),
-                channels: None,
-                is_default: false,
-                is_forced: stream.is_forced,
-                is_external: true,
-                is_selected: false,
-                stream_index: None,
-                external_url: Some(url.clone()),
-            });
+            tracks.push(external_track(id, stream, &url));
             current.externals.push((stream.index, id));
             current.external_urls.push((stream.index, url));
         }
         // The files of the download, added just now or when the item loaded again.
-        let downloaded = added(&wanted.before, &new);
+        let mut downloaded: Vec<(i32, Option<String>)> = added(&wanted.before, &new)
+            .iter()
+            .map(|stream| (stream.index, stream.language.clone()))
+            .collect();
+        if downloaded.is_empty() {
+            // Downloaded again in a language present: the server overwrote that file.
+            for stream in in_language(&new, &wanted.language) {
+                let Some(position) = current
+                    .externals
+                    .iter()
+                    .position(|(index, _)| *index == stream.index)
+                else {
+                    continue;
+                };
+                let Some(url) = current
+                    .external_urls
+                    .iter()
+                    .find(|(index, _)| *index == stream.index)
+                    .map(|(_, url)| url.clone())
+                else {
+                    continue;
+                };
+                let old_id = current.externals[position].1;
+                if let Err(error) = self.player.remove_subtitle(old_id) {
+                    log::warn!("cannot remove the subtitle file: {error}");
+                    continue;
+                }
+                tracks.retain(|track| !(track.kind == TrackKind::Subtitle && track.id == old_id));
+                let title = stream.display_title.as_deref().or(stream.title.as_deref());
+                match self
+                    .player
+                    .add_external_subtitle(&url, title, stream.language.as_deref())
+                {
+                    Ok(id) => {
+                        current.externals[position].1 = id;
+                        tracks.push(external_track(id, stream, &url));
+                        downloaded.push((stream.index, stream.language.clone()));
+                    }
+                    Err(error) => {
+                        log::warn!("cannot add the subtitle file again: {error}");
+                        current.externals.remove(position);
+                    }
+                }
+            }
+        }
         let chosen = downloaded
             .iter()
-            .find(|stream| {
-                stream
-                    .language
+            .find(|(_, language)| {
+                language
                     .as_deref()
                     .is_some_and(|language| crate::same_language(language, &wanted.language))
             })
             .or(downloaded.first())
-            .map(|stream| stream.index);
+            .map(|(index, _)| *index);
         let track = |index: i32| {
             current
                 .externals
@@ -1441,6 +1472,28 @@ impl PlaybackController {
             self.report(ReportKind::Progress);
             self.schedule_progress();
         }
+    }
+}
+
+/// The track mpv lists for the external subtitle `stream` added from `url` as `id`.
+fn external_track(id: TrackId, stream: &MediaStream, url: &str) -> Track {
+    Track {
+        id,
+        kind: TrackKind::Subtitle,
+        language: stream.language.clone(),
+        title: stream
+            .display_title
+            .as_deref()
+            .or(stream.title.as_deref())
+            .map(str::to_owned),
+        codec: stream.codec.clone(),
+        channels: None,
+        is_default: false,
+        is_forced: stream.is_forced,
+        is_external: true,
+        is_selected: false,
+        stream_index: None,
+        external_url: Some(url.to_owned()),
     }
 }
 

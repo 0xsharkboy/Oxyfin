@@ -32,6 +32,8 @@ pub trait MediaPlayer: Send + Sync + 'static {
     fn select_audio(&self, track: Option<TrackId>) -> Result<(), PlayerError>;
     /// Selects a subtitle track, or none.
     fn select_subtitle(&self, track: Option<TrackId>) -> Result<(), PlayerError>;
+    /// Removes a subtitle track.
+    fn remove_subtitle(&self, track: TrackId) -> Result<(), PlayerError>;
     /// Adds an external subtitle file and returns its subtitle track id.
     fn add_external_subtitle(
         &self,
@@ -87,6 +89,9 @@ impl MediaPlayer for oxyfin_player::Player {
     }
     fn select_subtitle(&self, track: Option<TrackId>) -> Result<(), PlayerError> {
         oxyfin_player::Player::select_subtitle(self, track)
+    }
+    fn remove_subtitle(&self, track: TrackId) -> Result<(), PlayerError> {
+        oxyfin_player::Player::remove_subtitle(self, track)
     }
     fn add_external_subtitle(
         &self,

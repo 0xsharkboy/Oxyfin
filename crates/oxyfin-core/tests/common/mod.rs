@@ -115,6 +115,8 @@ pub enum Call {
     },
     /// `add_external_subtitle_later`: the URL of the subtitle file.
     AddExternalLater(String),
+    /// `remove_subtitle`.
+    RemoveSubtitle(TrackId),
     /// `set_subtitle_appearance`.
     SetSubtitles(SubtitleAppearance),
 }
@@ -287,6 +289,9 @@ impl MediaPlayer for FakePlayer {
         Ok(TrackId(
             self.next_subtitle.fetch_add(1, Ordering::SeqCst) + 1,
         ))
+    }
+    fn remove_subtitle(&self, track: TrackId) -> std::result::Result<(), PlayerError> {
+        self.record(Call::RemoveSubtitle(track))
     }
     fn add_external_subtitle_later(
         &self,

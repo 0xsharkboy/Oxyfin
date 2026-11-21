@@ -463,6 +463,40 @@ fn external_subtitle_is_added_and_selectable() {
 }
 
 #[test]
+fn a_removed_subtitle_can_be_added_again() {
+    let (events, on_event) = Events::new();
+    let player = headless(on_event);
+    player.load(&sample()).unwrap();
+    loaded_tracks(&events);
+
+    let url = fixture("external.srt").to_string_lossy().into_owned();
+    let externals = |event: &PlayerEvent| -> Option<Vec<_>> {
+        Some(
+            tracks_of(event)?
+                .iter()
+                .filter(|t| t.kind == TrackKind::Subtitle && t.is_external)
+                .map(|t| (t.id, t.title.clone(), t.language.clone()))
+                .collect(),
+        )
+    };
+    let first = player
+        .add_external_subtitle(&url, Some("External"), Some("fra"))
+        .unwrap();
+    events.wait_for(TIMEOUT, |e| externals(e).is_some_and(|t| t.len() == 1));
+    player.remove_subtitle(first).unwrap();
+    events.wait_for(TIMEOUT, |e| externals(e).is_some_and(|t| t.is_empty()));
+
+    let again = player
+        .add_external_subtitle(&url, Some("External"), Some("fra"))
+        .unwrap();
+    let event = events.wait_for(TIMEOUT, |e| externals(e).is_some_and(|t| !t.is_empty()));
+    assert_eq!(
+        externals(&event).unwrap(),
+        vec![(again, Some("External".to_owned()), Some("fra".to_owned()))]
+    );
+}
+
+#[test]
 fn a_subtitle_added_later_does_not_wait_for_the_server() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}/slow.srt", listener.local_addr().unwrap());

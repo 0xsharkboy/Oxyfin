@@ -40,8 +40,9 @@ pub(super) struct RefreshRequest {
 }
 
 /// Asks the server for the streams of the playing source until it lists a
-/// subtitle file it did not list before the download, then sends the source
-/// back; sends `None` when the server fails or lists none after every retry.
+/// subtitle file it did not list before the download, or after every retry a
+/// file in the language asked, then sends the source back; sends `None` when
+/// the server fails or lists neither.
 pub(super) fn spawn(
     session: Session,
     request: RefreshRequest,
@@ -70,8 +71,12 @@ pub(super) fn spawn(
                 .media_sources
                 .into_iter()
                 .find(|source| source.id == source_id);
+            // A file in a language already present overwrites it: only once no
+            // new file came, since the server may still list a new one.
+            let last = attempt == SUBTITLE_RETRIES;
             if let Some(source) = source
-                && !added(&wanted.before, &source.media_streams).is_empty()
+                && (!added(&wanted.before, &source.media_streams).is_empty()
+                    || last && !in_language(&source.media_streams, &wanted.language).is_empty())
             {
                 let _ = refreshed.send(Refreshed {
                     serial,
@@ -120,6 +125,20 @@ pub(super) fn added<'a>(old: &[MediaStream], new: &'a [MediaStream]) -> Vec<&'a 
                 && !old
                     .iter()
                     .any(|known| external_subtitle(known) && same_file(known, stream))
+        })
+        .collect()
+}
+
+/// The external subtitle streams of `streams` in `language`.
+pub(super) fn in_language<'a>(streams: &'a [MediaStream], language: &str) -> Vec<&'a MediaStream> {
+    streams
+        .iter()
+        .filter(|stream| {
+            external_subtitle(stream)
+                && stream
+                    .language
+                    .as_deref()
+                    .is_some_and(|candidate| crate::same_language(candidate, language))
         })
         .collect()
 }
