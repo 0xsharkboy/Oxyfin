@@ -130,12 +130,14 @@ export component EpisodeRow inherits Rectangle {
                     horizontal-stretch: 0;
                 }
             }
-            if root.overview != "": BodyText {
+            if root.overview != "": overview-text := BodyText {
                 accessible-role: none;
                 text: root.overview;
                 color: Theme.text-secondary;
                 wrap: word-wrap;
                 overflow: elide;
+                // A wrapped text asks for all its lines as its minimum, which would win over the maximum.
+                min-height: 0px;
                 max-height: 2 * Theme.body-line-height;
             }
         }

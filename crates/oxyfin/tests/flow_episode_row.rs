@@ -75,3 +75,21 @@ fn durations_share_the_right_edge_of_the_rows() {
         );
     }
 }
+
+#[test]
+fn a_long_overview_is_cut_after_two_lines() {
+    i_slint_backend_testing::init_no_event_loop();
+    let page = EpisodesPage::new().unwrap();
+    page.window().set_size(slint::LogicalSize::new(600., 600.));
+    page.show().unwrap();
+
+    let overviews = by_row(&page, "EpisodeRow::overview-text");
+    let long = overviews.last().unwrap();
+    let line = overviews[0].size().height;
+    assert!(line > 0., "the short overview has no height");
+    assert!(
+        long.size().height <= 2. * line + 0.5,
+        "the long overview is {} high, more than two lines of {line}",
+        long.size().height
+    );
+}
