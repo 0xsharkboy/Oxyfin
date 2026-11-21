@@ -54,7 +54,7 @@ impl Respond for SeriesItem {
 }
 
 /// Answers `Shows/<id>/Episodes`: Season 2 is fast the first time, slow the second
-/// time and fails afterwards.
+/// time and fails afterwards. Like Jellyfin, it leaves overviews out unless asked for them.
 struct Episodes {
     log: QueryLog,
     season_2_calls: Arc<Mutex<usize>>,
@@ -64,8 +64,19 @@ impl Respond for Episodes {
     fn respond(&self, request: &Request) -> ResponseTemplate {
         let query = request.url.query().unwrap_or("").to_owned();
         self.log.lock().map(|mut log| log.push(query.clone())).ok();
+        let body = |name: &str| {
+            let body = fixture(name);
+            if query.split('&').any(|pair| {
+                pair.strip_prefix("fields=")
+                    .is_some_and(|fields| fields.split("%2C").any(|field| field == "Overview"))
+            }) {
+                body
+            } else {
+                strip_overviews(&body)
+            }
+        };
         if has_param(&query, "seasonId", SEASON_1) {
-            return json(fixture("episodes_season_1"));
+            return json(body("episodes_season_1"));
         }
         let call = self
             .season_2_calls
@@ -75,13 +86,25 @@ impl Respond for Episodes {
                 *calls
             })
             .unwrap_or(1);
-        let response = json(fixture("episodes_season_2"));
+        let response = json(body("episodes_season_2"));
         match call {
             1 => response,
             2 => response.set_delay(Duration::from_millis(900)),
             _ => ResponseTemplate::new(500),
         }
     }
+}
+
+fn strip_overviews(body: &str) -> String {
+    let mut page: serde_json::Value = serde_json::from_str(body).unwrap_or_default();
+    if let Some(items) = page["Items"].as_array_mut() {
+        for item in items {
+            if let Some(item) = item.as_object_mut() {
+                item.remove("Overview");
+            }
+        }
+    }
+    page.to_string()
 }
 
 fn episode_requests(log: &QueryLog) -> Vec<String> {
@@ -232,6 +255,12 @@ fn a_series_opens_with_seasons_and_episodes() {
         let pact = wait_role(&window, "The Pact", AccessibleRole::Button).await?;
         if exists(&window, "Pilot Light") {
             return Err("an episode of another season is shown".into());
+        }
+        if pact.accessible_description().as_deref() != Some("The town braces for winter.") {
+            return Err(format!(
+                "the row of The Pact shows the overview {:?}",
+                pact.accessible_description()
+            ));
         }
         for row in [&lighthouse, &pact] {
             let (top, bottom) = (

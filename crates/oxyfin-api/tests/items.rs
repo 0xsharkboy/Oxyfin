@@ -11,7 +11,7 @@ use oxyfin_api::{
     Ticks,
 };
 use serde_json::{Value, json};
-use wiremock::matchers::{header, method, path, query_param};
+use wiremock::matchers::{header, method, path, query_param, query_param_is_missing};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn version_of(label: &str) -> &str {
@@ -257,6 +257,7 @@ async fn episodes_decode_two_episodes_of_a_season() {
             .and(authorization_is(Some(TEST_TOKEN)))
             .and(query_param("userId", TEST_USER_ID))
             .and(query_param("seasonId", "season1"))
+            .and(query_param("fields", "Overview"))
             .respond_with(ResponseTemplate::new(200).set_body_json(&body))
             .expect(1)
             .mount(&mock)
@@ -270,6 +271,27 @@ async fn episodes_decode_two_episodes_of_a_season() {
             page.items.iter().all(|i| i.r#type == BaseItemKind::Episode),
             "{label}"
         );
+    }
+}
+
+#[tokio::test]
+async fn episodes_of_a_whole_series_request_their_overview() {
+    for (label, body) in variants("shows_episodes") {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/Shows/series1/Episodes"))
+            .and(query_param("userId", TEST_USER_ID))
+            .and(query_param("fields", "Overview"))
+            .and(query_param_is_missing("seasonId"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&body))
+            .expect(1)
+            .mount(&mock)
+            .await;
+        let page = session(&mock)
+            .episodes(&ItemId::from("series1"), None)
+            .await
+            .unwrap();
+        assert!(!page.items.is_empty(), "{label}");
     }
 }
 
