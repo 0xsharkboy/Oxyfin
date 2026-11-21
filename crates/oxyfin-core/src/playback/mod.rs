@@ -8,6 +8,7 @@ mod loader;
 mod media_player;
 mod quality;
 mod queue;
+mod refresh;
 mod reporter;
 mod segments;
 mod track_memory;
@@ -30,7 +31,7 @@ pub use track_memory::{
 pub use types::{
     COUNTDOWNS, PROGRESS_INTERVAL, PlayMode, PlaybackCommand, PlaybackError, PlaybackEvent,
     PlaybackPrefs, PlaybackTimings, PlaybackTitle, SEEK_STEP, SHUTDOWN_TIMEOUT, SPEEDS,
-    StatsReport, UNLOAD_GRACE,
+    SUBTITLE_RETRIES, SUBTITLE_RETRY, StatsReport, UNLOAD_GRACE,
 };
 
 /// An audio track the user can pick.

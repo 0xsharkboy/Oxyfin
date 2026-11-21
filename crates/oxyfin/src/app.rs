@@ -366,8 +366,38 @@ impl App {
             player::reset(&window);
             player::show_quality(&window, self.manager.quality());
         }
+        self.check_subtitle_permission();
         handle.send(PlaybackCommand::Play { item, mode });
         self.dispatch(Msg::OpenPlayer);
+    }
+
+    /// Asks the server whether the user may search subtitles, which the track menu offers then.
+    #[cfg(feature = "mpv")]
+    fn check_subtitle_permission(&self) {
+        // Another account may have signed in since the last answer.
+        if let Some(window) = self.window() {
+            window.global::<crate::SubtitleSearch>().set_allowed(false);
+        }
+        let Some((id, catalog, _)) = self.services() else {
+            return;
+        };
+        self.spawn(
+            async move { catalog.can_manage_subtitles().await },
+            move |app, result| {
+                if app.services().map(|(current, _, _)| current) != Some(id) {
+                    return;
+                }
+                let allowed = result.unwrap_or_else(|error| {
+                    log::warn!("cannot read the subtitle permission: {error}");
+                    false
+                });
+                if let Some(window) = app.window() {
+                    window
+                        .global::<crate::SubtitleSearch>()
+                        .set_allowed(allowed);
+                }
+            },
+        );
     }
 
     /// Builds the player of generation `id` off the Slint thread, then plays `item` with it
@@ -1182,6 +1212,23 @@ impl App {
         let this = self.this.clone();
         player::bind(
             window,
+            Rc::new(move |command| {
+                if let Some(app) = this.upgrade() {
+                    app.send_playback(command);
+                }
+            }),
+        );
+        let (this, catalog) = (self.this.clone(), self.this.clone());
+        crate::screens::subtitle_search::bind(
+            window,
+            self.runtime.clone(),
+            &crate::locale::interface_language(),
+            Rc::new(move || {
+                catalog
+                    .upgrade()
+                    .and_then(|app| app.services())
+                    .map(|(_, catalog, _)| catalog)
+            }),
             Rc::new(move |command| {
                 if let Some(app) = this.upgrade() {
                     app.send_playback(command);

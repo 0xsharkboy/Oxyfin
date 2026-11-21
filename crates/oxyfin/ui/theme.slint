@@ -32,6 +32,8 @@ export global Theme {
     out property <brush> player-scrim-bottom: @linear-gradient(180deg, #00000000 0%, #000000d9 100%);
     out property <brush> next-up-placeholder: @linear-gradient(157deg, #335966 14%, #0f1a1f 86%);
     out property <color> menu-shadow: #00000080;
+    // Covers the player behind a dialog.
+    out property <color> dialog-scrim: #0000008c;
     // Subtitle preview, matching what mpv draws.
     out property <color> subtitle-white: #ffffff;
     out property <color> subtitle-yellow: #ffe000;
@@ -71,6 +73,15 @@ export global Theme {
     // Player menus: their usual width, and the widest the track menu grows to fit its rows.
     out property <length> menu-width: 280px;
     out property <length> menu-max-width: 420px;
+    out property <length> dialog-width: 640px;
+    out property <length> dialog-shadow-offset-y: 16px;
+    out property <length> dialog-shadow-blur: 40px;
+    // Vertical padding of a result row of a dialog list.
+    out property <length> result-padding-y: 10px;
+    // Padding of a small outlined tag, such as the tags of a subtitle result.
+    out property <length> tag-padding-x: 6px;
+    out property <length> tag-padding-y: 1px;
+    out property <length> result-icon-size: 20px;
     // Chapters menu and its thumbnails.
     out property <length> chapter-menu-width: 360px;
     // Playback statistics panel, its label column and the top and bottom padding of a row.
@@ -95,6 +106,7 @@ export global Theme {
     out property <length> radius-sm: 6px;
     out property <length> radius-md: 8px;
     out property <length> radius-lg: 12px;
+    out property <length> radius-xl: 16px;
     out property <length> radius-full: 999px;
 
     out property <length> border-thin: 1px;
@@ -249,6 +261,7 @@ export enum Message {
     load-failed,
     command-failed,
     playback-unavailable,
+    subtitle-not-added,
 }
 
 export global Messages {
@@ -326,6 +339,9 @@ export global Messages {
         }
         if m == Message.playback-unavailable {
             return @tr("Playback is not available in this build of Oxyfin.");
+        }
+        if m == Message.subtitle-not-added {
+            return @tr("The server did not add this subtitle. Try another one.");
         }
         ""
     }

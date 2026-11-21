@@ -96,6 +96,11 @@ impl TrackMap {
         }
     }
 
+    /// The tracks of the loaded media the map was built from.
+    pub(crate) fn tracks(&self) -> &[Track] {
+        &self.tracks
+    }
+
     /// The mpv audio track for a Jellyfin stream index.
     pub(crate) fn mpv_audio(&self, index: i32) -> Option<TrackId> {
         self.to_mpv.get(&(TrackKind::Audio, index)).copied()

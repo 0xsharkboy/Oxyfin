@@ -12,8 +12,9 @@ import { ChapterMenu } from "../components/chapter_menu.slint";
 import { NextEpisodeToast } from "../components/next_episode_toast.slint";
 import { SkipNotice } from "../components/skip_notice.slint";
 import { StatsPanel } from "../components/stats_panel.slint";
+import { SubtitleSearch, SubtitleSearchDialog } from "../components/subtitle_search.slint";
 
-export enum PlayerMenu { none, tracks, speed, chapters }
+export enum PlayerMenu { none, tracks, speed, chapters, subtitles }
 
 enum DelayKind { none, audio, subtitle }
 
@@ -147,6 +148,14 @@ export component PlayerScreen inherits Rectangle {
         }
     }
 
+    // A new item closes the subtitle search of the previous one.
+    property <string> search-item: SubtitleSearch.item;
+    changed search-item => {
+        if root.menu == PlayerMenu.subtitles {
+            root.menu = PlayerMenu.none;
+        }
+    }
+
     // Slint drops the focus of an element that disappears, which would silence the shortcuts:
     // the player buttons never take focus on click, and the shortcuts take it back when a
     // control reached with Tab hides.
@@ -251,6 +260,14 @@ export component PlayerScreen inherits Rectangle {
             }
             // Captured before any focused control, so the shortcuts work wherever focus is.
             capture-key-pressed(event) => {
+                // The subtitle search keeps the keys for its own buttons, but Escape closes it.
+                if root.menu == PlayerMenu.subtitles {
+                    if event.text == Key.Escape {
+                        root.escape();
+                        return accept;
+                    }
+                    return reject;
+                }
                 // mpv default bindings: Ctrl with plus or minus for the audio delay.
                 if event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta {
                     if event.text == "+" || event.text == "=" {
@@ -460,6 +477,11 @@ export component PlayerScreen inherits Rectangle {
                 }
                 audio-delay: root.audio-delay;
                 subtitle-delay: root.subtitle-delay;
+                can-find-subtitles: SubtitleSearch.allowed;
+                find-subtitles => {
+                    root.menu = PlayerMenu.subtitles;
+                    SubtitleSearch.opened();
+                }
                 select-subtitle(index) => {
                     root.command-select-subtitle(index);
                 }
@@ -604,6 +626,31 @@ export component PlayerScreen inherits Rectangle {
                 x: max(Theme.space-sm, min(parent.width - self.width - Theme.space-sm, controls.x + controls.seek-hover-x - self.width / 2));
                 y: controls.y + controls.seek-top - self.height - Theme.space-sm;
                 preview: root.preview;
+            }
+
+            if root.menu == PlayerMenu.subtitles: Rectangle {
+                background: Theme.dialog-scrim;
+
+                // Clicks on the scrim close the dialog and never reach the player.
+                TouchArea {
+                    clicked => {
+                        root.menu = PlayerMenu.none;
+                        keys.focus();
+                    }
+                    double-clicked => { }
+                }
+
+                SubtitleSearchDialog {
+                    width: min(Theme.dialog-width, parent.width - 2 * Theme.space-xl);
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    limit: parent.height - 2 * Theme.space-3xl;
+                    item: root.subtitle.is-empty ? root.title : root.title + " · " + root.subtitle;
+                    close => {
+                        root.menu = PlayerMenu.none;
+                        keys.focus();
+                    }
+                }
             }
         }
     }

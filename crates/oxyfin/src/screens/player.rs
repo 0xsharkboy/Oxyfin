@@ -250,7 +250,8 @@ pub fn leave(window: &AppWindow) {
 /// in the notice banner when the event calls for one.
 pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
     match event {
-        PlaybackEvent::Loading { title, .. } => {
+        PlaybackEvent::Loading { item, title } => {
+            crate::screens::subtitle_search::follow_item(window, &item);
             let (title, subtitle) = playback_title(&title);
             window.set_player_title(title);
             window.set_player_subtitle(subtitle);
@@ -345,6 +346,9 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
         PlaybackEvent::Stats(report) => {
             let words = Words(window.global::<StatsTitles>());
             window.set_player_stats(ModelRc::new(VecModel::from(stat_sections(&report, &words))));
+        }
+        PlaybackEvent::SubtitlesReloaded { added } => {
+            crate::screens::subtitle_search::reloaded(window, added);
         }
         PlaybackEvent::Ended | PlaybackEvent::SessionExpired => {}
         PlaybackEvent::Error(error @ PlaybackError::Command { .. }) => {
@@ -738,6 +742,7 @@ fn show_tracks(
     subtitles: &[oxyfin_core::SubtitleOption],
 ) {
     window.set_player_audio(ModelRc::new(VecModel::from(audio_rows(audio))));
+    crate::screens::subtitle_search::follow_audio(window, audio);
     window.set_player_subtitles(ModelRc::new(VecModel::from(subtitle_rows(subtitles))));
 }
 
