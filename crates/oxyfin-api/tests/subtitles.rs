@@ -55,6 +55,12 @@ async fn user_policy_subtitle_management() {
     let policy = me_with(without).await.policy;
     assert_eq!(policy, UserPolicy::default());
     assert!(!policy.can_manage_subtitles());
+
+    let mut null = fixture("12.4.0", "users_me");
+    null["Policy"] = Value::Null;
+    let policy = me_with(null).await.policy;
+    assert_eq!(policy, UserPolicy::default());
+    assert!(!policy.can_manage_subtitles());
 }
 
 #[tokio::test]
