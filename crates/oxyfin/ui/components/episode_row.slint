@@ -121,8 +121,9 @@ export component EpisodeRow inherits Rectangle {
                     accessible-role: none;
                     text: root.title;
                     overflow: elide;
+                    horizontal-stretch: 1;
                 }
-                if root.minutes > 0: LabelText {
+                if root.minutes > 0: duration := LabelText {
                     accessible-role: none;
                     text: @tr("{} min", root.minutes);
                     color: Theme.text-muted;
