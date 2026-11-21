@@ -15,7 +15,12 @@ const EXIT_GRACE: Duration = Duration::from_secs(3);
 /// How long the exit waits for the Discord activity to clear.
 const DISCORD_GRACE: Duration = Duration::from_secs(1);
 
+#[allow(clippy::print_stdout)]
 fn main() -> ExitCode {
+    if launch::version_requested(std::env::args_os().skip(1)) {
+        println!("{}", launch::version_line());
+        return ExitCode::SUCCESS;
+    }
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     match run() {
         Ok(()) => ExitCode::SUCCESS,

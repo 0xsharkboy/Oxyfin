@@ -6,6 +6,9 @@ use std::ffi::OsStr;
 /// Command-line flag that opens the window fullscreen for this launch, whatever the setting.
 pub const FULLSCREEN_FLAG: &str = "--fullscreen";
 
+/// Command-line flags that print the version and exit.
+pub const VERSION_FLAGS: [&str; 2] = ["--version", "-V"];
+
 /// Logical window size, as `WIDTHxHEIGHT`.
 pub const WINDOW_SIZE_VAR: &str = "OXYFIN_WINDOW_SIZE";
 
@@ -19,6 +22,20 @@ pub const SCALE_FACTOR_VAR: &str = "OXYFIN_SCALE_FACTOR";
 pub fn fullscreen_requested<A: AsRef<OsStr>>(args: impl IntoIterator<Item = A>) -> bool {
     args.into_iter()
         .any(|arg| arg.as_ref() == OsStr::new(FULLSCREEN_FLAG))
+}
+
+/// Whether the command-line arguments, without the program name, ask for the version.
+pub fn version_requested<A: AsRef<OsStr>>(args: impl IntoIterator<Item = A>) -> bool {
+    args.into_iter().any(|arg| {
+        VERSION_FLAGS
+            .iter()
+            .any(|flag| arg.as_ref() == OsStr::new(flag))
+    })
+}
+
+/// The line printed for the version flags, such as `oxyfin 0.1.0`.
+pub fn version_line() -> String {
+    format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
 }
 
 /// Parses a positive, finite scale factor.
@@ -62,6 +79,22 @@ mod tests {
             "fullscreen",
             "-f"
         ]));
+    }
+
+    #[test]
+    fn the_version_flags_are_found_among_the_arguments() {
+        assert!(version_requested(["--version"]));
+        assert!(version_requested(["--fullscreen", "-V"]));
+        assert!(!version_requested(Vec::<String>::new()));
+        assert!(!version_requested(["--version=1", "version", "-v"]));
+    }
+
+    #[test]
+    fn the_version_line_names_the_binary_and_its_version() {
+        assert_eq!(
+            version_line(),
+            format!("oxyfin {}", env!("CARGO_PKG_VERSION"))
+        );
     }
 
     #[test]
