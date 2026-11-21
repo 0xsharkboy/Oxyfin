@@ -21,6 +21,7 @@ pkgbase = oxyfin-git
 	provides = oxyfin
 	conflicts = oxyfin
 	options = !lto
+	options = !debug
 	source = oxyfin::git+https://github.com/0xsharkboy/Oxyfin.git
 	sha256sums = SKIP
 

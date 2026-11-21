@@ -12,7 +12,8 @@ depends=('dbus' 'fontconfig' 'glibc' 'hicolor-icon-theme' 'libgcc' 'libglvnd' 'l
 makedepends=('git' 'cargo' 'cmake')
 provides=('oxyfin')
 conflicts=('oxyfin')
-options=('!lto')
+# makepkg's LTO flags turn the C objects of aws-lc-sys into bitcode that the Rust link step cannot use.
+options=('!lto' '!debug')
 source=("oxyfin::git+https://github.com/0xsharkboy/Oxyfin.git")
 sha256sums=('SKIP')
 
