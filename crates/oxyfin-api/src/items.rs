@@ -87,6 +87,8 @@ impl Session {
     }
 
     /// Lists the episodes of a series, optionally of one season (`GET Shows/{id}/Episodes`).
+    ///
+    /// Asks for their overview, which the server leaves out unless it is requested.
     pub async fn episodes(
         &self,
         series_id: &ItemId,
@@ -96,6 +98,7 @@ impl Session {
         if let Some(season) = season_id {
             params.push(("seasonId", season.to_string()));
         }
+        params.push(("fields", ItemFields::Overview.as_str().to_owned()));
         self.get_items(&format!("Shows/{series_id}/Episodes"), &params)
             .await
     }
