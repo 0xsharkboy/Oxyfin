@@ -152,6 +152,13 @@ fn scroll_down(window: &oxyfin::AppWindow) {
         });
 }
 
+/// Opacity of the solid layer of the top bar.
+fn bar_backing(window: &oxyfin::AppWindow) -> f32 {
+    ElementHandle::find_by_element_id(window, "TopBar::backing")
+        .next()
+        .map_or(0., |backing| backing.computed_opacity())
+}
+
 fn vertical_centre(element: &ElementHandle) -> f32 {
     element.absolute_position().y + element.size().height / 2.
 }
@@ -239,8 +246,15 @@ fn a_series_opens_with_seasons_and_episodes() {
         }
         wait_visible(&window, "A generated test show.").await?;
         wait_role(&window, "Resume S02E05", AccessibleRole::Button).await?;
+        if bar_backing(&window) > 0.01 {
+            return Err("the top bar is solid before the page scrolls".into());
+        }
 
         scroll_down(&window);
+        wait_until("a solid top bar over the scrolled page", || {
+            bar_backing(&window) > 0.99
+        })
+        .await?;
         wait_role(&window, "Cast and crew", AccessibleRole::List).await?;
         wait_role(&window, "Gia Gate", AccessibleRole::Button).await?;
         let season_2 = wait_role(&window, "Season 2", AccessibleRole::Button).await?;

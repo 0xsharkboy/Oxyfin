@@ -317,6 +317,7 @@ export component PersonScreen inherits Rectangle {
     }
 
     top-bar := TopBar {
+        scrolled-by: -flick.content-y;
         y: 0;
         height: self.preferred-height;
         current: root.page;

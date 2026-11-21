@@ -134,7 +134,7 @@ export component HomeScreen inherits Rectangle {
         year > 0 ? "\{year} \u{b7} \{duration}" : duration
     }
 
-    Flickable {
+    flick := Flickable {
         content-width: self.width;
         content-height: content.preferred-height;
 
@@ -191,6 +191,7 @@ export component HomeScreen inherits Rectangle {
     }
 
     top-bar := TopBar {
+        scrolled-by: -flick.content-y;
         y: 0;
         height: self.preferred-height;
         current: TopBarPage.home;
