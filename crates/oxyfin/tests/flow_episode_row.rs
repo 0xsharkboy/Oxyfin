@@ -8,8 +8,10 @@ use slint::ComponentHandle;
 mod page {
     slint::slint! {
         import { EpisodeRow } from "ui/components/episode_row.slint";
+        import { Theme } from "ui/theme.slint";
 
         export component EpisodesPage inherits Window {
+            out property <length> line-height: Theme.body-line-height;
             VerticalLayout {
                 EpisodeRow { number: "1"; title: "Short"; minutes: 24; }
                 EpisodeRow { number: "2"; title: "A somewhat longer episode title"; overview: "A short overview."; minutes: 25; }
@@ -85,8 +87,15 @@ fn a_long_overview_is_cut_after_two_lines() {
 
     let overviews = by_row(&page, "EpisodeRow::overview-text");
     let long = overviews.last().unwrap();
-    let line = overviews[0].size().height;
-    assert!(line > 0., "the short overview has no height");
+    let short = overviews[0].size().height;
+    // Font metrics differ between platforms, so the bound is the theme's line height.
+    let line = page.get_line_height();
+    assert!(short > 0., "the short overview has no height");
+    assert!(
+        long.size().height > short,
+        "the long overview did not wrap: {} high",
+        long.size().height
+    );
     assert!(
         long.size().height <= 2. * line + 0.5,
         "the long overview is {} high, more than two lines of {line}",
