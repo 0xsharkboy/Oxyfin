@@ -24,10 +24,13 @@ mod page {
         import { Banner } from "ui/components/banner.slint";
         import { Icons } from "ui/icons.slint";
         import { PlayerControls } from "ui/components/player_controls.slint";
+        import { Theme } from "ui/theme.slint";
 
         export component ComponentsPage inherits Window {
             callback sign-in-clicked();
             callback other-clicked(string);
+            // Space the top bar leaves above its tabs.
+            out property <length> top-bar-offset: Theme.space-sm;
 
             VerticalLayout {
                 TopBar { }
@@ -130,4 +133,26 @@ fn button_runs_its_accessible_action_and_messages_are_translated() {
         .global::<Messages>()
         .invoke_message_text(Message::SessionExpired, "".into());
     assert!(!text.is_empty());
+}
+
+#[test]
+fn top_bar_leaves_room_under_the_window_edge() {
+    i_slint_backend_testing::init_no_event_loop();
+
+    let page = ComponentsPage::new().unwrap();
+    page.window()
+        .set_size(slint::LogicalSize::new(1280., 1400.));
+    page.show().unwrap();
+    let bar = ElementHandle::find_by_accessible_label(&page, "Navigation")
+        .find(|element| element.accessible_role() == Some(AccessibleRole::TabList))
+        .unwrap();
+    let home = ElementHandle::find_by_accessible_label(&page, "Home")
+        .find(|element| element.accessible_role() == Some(AccessibleRole::Tab))
+        .unwrap();
+    assert_eq!(bar.absolute_position().y, 0.0);
+    assert_eq!(
+        home.absolute_position().y,
+        page.get_top_bar_offset(),
+        "the tabs must start one small space under the top of the bar"
+    );
 }
