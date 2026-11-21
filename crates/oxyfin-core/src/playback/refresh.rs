@@ -83,14 +83,27 @@ fn external_count(streams: &[MediaStream]) -> i32 {
     i32::try_from(count).unwrap_or(i32::MAX)
 }
 
+/// Whether two external streams are the same file: by path, or by language,
+/// codec and title when the server gives no path.
+fn same_file(known: &MediaStream, stream: &MediaStream) -> bool {
+    match (&known.path, &stream.path) {
+        (Some(known), Some(path)) => known == path,
+        _ => {
+            known.language == stream.language
+                && known.codec == stream.codec
+                && known.title == stream.title
+        }
+    }
+}
+
 /// The external subtitle streams of `new` that `old` does not have, told apart by their file.
 pub(super) fn added<'a>(old: &[MediaStream], new: &'a [MediaStream]) -> Vec<&'a MediaStream> {
     new.iter()
         .filter(|stream| {
             external_subtitle(stream)
-                && !old.iter().any(|known| {
-                    external_subtitle(known) && known.path.is_some() && known.path == stream.path
-                })
+                && !old
+                    .iter()
+                    .any(|known| external_subtitle(known) && same_file(known, stream))
         })
         .collect()
 }
@@ -98,7 +111,8 @@ pub(super) fn added<'a>(old: &[MediaStream], new: &'a [MediaStream]) -> Vec<&'a 
 /// The index in `new` of the stream at `index` in `old`.
 ///
 /// Jellyfin lists external streams first, so a new file moves the streams of
-/// the media itself by the number of files added; files are matched by path.
+/// the media itself by the number of files added; files are matched as
+/// [`added`] does.
 pub(super) fn remapped(old: &[MediaStream], new: &[MediaStream], index: i32) -> Option<i32> {
     let stream = old.iter().find(|stream| stream.index == index)?;
     if stream.is_external {
@@ -107,8 +121,7 @@ pub(super) fn remapped(old: &[MediaStream], new: &[MediaStream], index: i32) -> 
             .find(|candidate| {
                 candidate.is_external
                     && candidate.r#type == stream.r#type
-                    && candidate.path.is_some()
-                    && candidate.path == stream.path
+                    && same_file(stream, candidate)
             })
             .map(|candidate| candidate.index);
     }
@@ -168,5 +181,32 @@ mod tests {
         let added: Vec<i32> = added(&old, &new).iter().map(|s| s.index).collect();
         assert_eq!(added, vec![1]);
         assert!(super::added(&new, &new).is_empty());
+    }
+
+    fn unnamed(index: i32, language: &str) -> MediaStream {
+        MediaStream {
+            index,
+            r#type: MediaStreamType::Subtitle,
+            is_external: true,
+            language: Some(language.to_owned()),
+            codec: Some("subrip".to_owned()),
+            title: Some("Downloaded".to_owned()),
+            ..MediaStream::default()
+        }
+    }
+
+    #[test]
+    fn files_without_a_path_are_told_apart_by_language_codec_and_title() {
+        let old = vec![unnamed(0, "eng"), stream(1, MediaStreamType::Video, None)];
+        let new = vec![
+            unnamed(0, "eng"),
+            unnamed(1, "fre"),
+            stream(2, MediaStreamType::Video, None),
+        ];
+        let added: Vec<i32> = added(&old, &new).iter().map(|s| s.index).collect();
+        assert_eq!(added, vec![1]);
+        assert!(super::added(&new, &new).is_empty());
+        assert_eq!(remapped(&old, &new, 0), Some(0));
+        assert_eq!(remapped(&old, &new, 1), Some(2));
     }
 }
