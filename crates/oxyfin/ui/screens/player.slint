@@ -101,6 +101,12 @@ export component PlayerScreen inherits Rectangle {
     property <bool> menu-open: root.menu != PlayerMenu.none || root.stats-visible;
     // The delay a shortcut changed, shown for a moment over the video.
     property <DelayKind> osd: DelayKind.none;
+    // A click on the video waits out the double-click interval of Slint before it toggles pause.
+    property <bool> click-pending;
+    // The pause indicator: whether it shows pause, whether it shows at all, and whether it fades.
+    property <bool> indicator-paused;
+    property <bool> indicator-active;
+    property <bool> indicator-fading;
     // False once the pointer rested for the hide delay while playing.
     property <bool> awake: true;
     // The controls stay up while the pointer rests on them, such as on the seek bar preview.
@@ -124,6 +130,18 @@ export component PlayerScreen inherits Rectangle {
         }
         root.osd = kind;
         osd-timer.restart();
+    }
+
+    function on-video(y: length) -> bool {
+        !root.controls-visible || (y >= top-bar.height && y < controls.y)
+    }
+
+    function pause-from-click() {
+        root.indicator-paused = !root.paused;
+        root.command-set-paused(root.indicator-paused);
+        root.indicator-fading = false;
+        root.indicator-active = true;
+        indicator-hold.restart();
     }
 
     function toggle-stats() {
@@ -232,6 +250,32 @@ export component PlayerScreen inherits Rectangle {
         }
     }
 
+    click-timer := Timer {
+        interval: 500ms;
+        running: root.click-pending;
+        triggered => {
+            root.click-pending = false;
+            root.pause-from-click();
+        }
+    }
+
+    indicator-hold := Timer {
+        interval: Theme.pause-indicator-hold;
+        running: root.indicator-active && !root.indicator-fading;
+        triggered => {
+            root.indicator-fading = true;
+        }
+    }
+
+    indicator-end := Timer {
+        interval: Theme.pause-indicator-fade;
+        running: root.indicator-fading;
+        triggered => {
+            root.indicator-active = false;
+            root.indicator-fading = false;
+        }
+    }
+
     hide-timer := Timer {
         interval: 3s;
         running: root.awake && !root.paused && !root.menu-open && !root.scrubbing && !root.loading && !root.has-error && !root.pointer-on-controls;
@@ -254,10 +298,16 @@ export component PlayerScreen inherits Rectangle {
             root.reveal();
         }
         clicked => {
-            root.close-menus();
+            if root.menu-open {
+                root.close-menus();
+            } else if root.on-video(self.mouse-y) {
+                root.click-pending = true;
+            }
             keys.focus();
         }
+        // Slint calls `clicked` first, so the pause of that click is still pending.
         double-clicked => {
+            root.click-pending = false;
             root.toggle-fullscreen();
         }
 
@@ -623,6 +673,28 @@ export component PlayerScreen inherits Rectangle {
                         text: Messages.delay-text(osd-pill.value);
                         vertical-alignment: center;
                     }
+                }
+            }
+
+            if root.indicator-active: Rectangle {
+                accessible-role: image;
+                accessible-label: root.indicator-paused ? @tr("Paused") : @tr("Playing");
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: Theme.pause-indicator-size;
+                height: self.width;
+                border-radius: self.width / 2;
+                background: Theme.pause-indicator-background;
+                opacity: root.indicator-fading ? 0 : 1;
+                animate opacity { duration: Theme.pause-indicator-fade; }
+
+                Image {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: Theme.pause-indicator-icon;
+                    height: self.width;
+                    source: root.indicator-paused ? Icons.pause : Icons.play;
+                    colorize: Theme.text-primary;
                 }
             }
 

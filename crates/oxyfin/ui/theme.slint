@@ -33,6 +33,7 @@ export global Theme {
     // Player overlays, readable over any video.
     out property <brush> player-scrim-top: @linear-gradient(180deg, #000000bf 0%, #00000000 100%);
     out property <brush> player-scrim-bottom: @linear-gradient(180deg, #00000000 0%, #000000d9 100%);
+    out property <color> pause-indicator-background: #0000008c;
     out property <brush> next-up-placeholder: @linear-gradient(157deg, #335966 14%, #0f1a1f 86%);
     out property <color> menu-shadow: #00000080;
     // Covers the player behind a dialog.
@@ -131,6 +132,11 @@ export global Theme {
     out property <length> chapter-gap-width: 3px;
     out property <length> chapter-gap-height: 8px;
     // Tick on the seek bar at the hovered time.
+    // The round pause indicator over the video, and how long it stays before fading out.
+    out property <length> pause-indicator-size: 88px;
+    out property <length> pause-indicator-icon: 40px;
+    out property <duration> pause-indicator-hold: 200ms;
+    out property <duration> pause-indicator-fade: 500ms;
     out property <length> seek-marker-width: 2px;
     out property <length> seek-marker-height: 12px;
     // Side padding of the seek preview label.
