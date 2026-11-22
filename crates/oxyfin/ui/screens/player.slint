@@ -604,6 +604,7 @@ export component PlayerScreen inherits Rectangle {
             if root.stats-visible: StatsPanel {
                 x: parent.width - self.width - Theme.space-2xl;
                 y: root.menu-bottom - self.height;
+                limit: root.menu-max-height;
                 sections: root.stats;
             }
 

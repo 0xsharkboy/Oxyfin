@@ -596,3 +596,20 @@ fn the_next_episode_toast_stays_beside_the_stats() {
         .unwrap_or_else(|| panic!("no next episode toast"));
     assert_beside_panel(&window, &toast);
 }
+
+#[test]
+fn the_stats_stay_under_the_top_bar_of_a_short_window() {
+    let (window, _sent) = player_window();
+    window.window().set_size(LogicalSize::new(1280., 420.));
+    press(&window, "i");
+    player::apply(&window, PlaybackEvent::Stats(Box::new(full_report())));
+    let back = button(&window, "Back");
+    // The top bar ends space-3xl under the back button.
+    let bar_bottom = edges(&back).3 + 48.0;
+    let (_, top, _, bottom) = edges(&panel(&window));
+    assert!(
+        top >= bar_bottom,
+        "the panel starts at {top}, under the top bar at {bar_bottom}"
+    );
+    assert!(bottom > top, "the panel still shows");
+}
