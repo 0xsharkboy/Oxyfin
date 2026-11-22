@@ -1,6 +1,6 @@
 //! The `?` key opens the keyboard shortcuts dialog from home and from the player; Escape and a
 //! click outside close it, keys never reach the screen behind it, and `?` typed in a text field
-//! stays text.
+//! stays text (sign-in, search, Quick Connect code).
 
 mod common;
 
@@ -139,6 +139,12 @@ fn question_mark_opens_the_shortcuts_and_escape_or_a_click_outside_closes_them()
     i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(600));
     assert!(sent.borrow().is_empty(), "the click outside does not pause");
     assert!(!window.window().is_fullscreen());
+    press(&window, " ");
+    assert_eq!(
+        *sent.borrow(),
+        vec![PlaybackCommand::SetPaused(true)],
+        "the player keeps the keys after a click outside"
+    );
 
     window.set_screen(Screen::SignIn);
     let password = input(&window, "Password");
@@ -152,5 +158,14 @@ fn question_mark_opens_the_shortcuts_and_escape_or_a_click_outside_closes_them()
     click(&window, &search);
     press(&window, "?");
     assert_eq!(search.accessible_value().as_deref(), Some("?"));
+    assert!(!is_open(&window));
+
+    // Tall enough for the Devices section, below the fold at 720 px.
+    window.window().set_size(LogicalSize::new(1280., 2000.));
+    window.set_screen(Screen::Settings);
+    let code = input(&window, "Quick Connect code");
+    click(&window, &code);
+    press(&window, "?");
+    assert_eq!(code.accessible_value().as_deref(), Some("?"));
     assert!(!is_open(&window));
 }
