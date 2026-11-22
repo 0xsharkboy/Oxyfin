@@ -215,6 +215,8 @@ export component SettingsScreen inherits Rectangle {
     callback clear-image-cache();
     // Whether the logs were copied since the settings opened.
     in property <bool> logs-copied;
+    // Whether the last copy could not reach the clipboard.
+    in property <bool> logs-copy-failed;
     callback copy-logs();
     callback open-logs();
 
@@ -543,11 +545,17 @@ export component SettingsScreen inherits Rectangle {
                             }
                             Button {
                                 label: @tr("Open folder");
-                                style: ButtonStyle.secondary;
+                                style: root.logs-copy-failed ? ButtonStyle.primary : ButtonStyle.secondary;
                                 clicked => {
                                     root.open-logs();
                                 }
                             }
+                        }
+                        if root.logs-copy-failed: LabelText {
+                            accessible-role: text;
+                            text: @tr("The clipboard cannot be reached. Open the folder and attach oxyfin.log to the report.");
+                            color: Theme.danger;
+                            wrap: word-wrap;
                         }
                         ActionRow {
                             label: @tr("Keyboard shortcuts");

@@ -290,6 +290,8 @@ export component AppWindow inherits Window {
     in property <int> settings-image-cache-kb: -1;
     callback settings-clear-image-cache();
     in property <bool> settings-logs-copied;
+    // The last "Copy logs" could not reach the clipboard.
+    in property <bool> settings-logs-copy-failed;
     callback settings-copy-logs();
     callback settings-open-logs();
     in property <string> app-version;
@@ -847,6 +849,7 @@ export component AppWindow inherits Window {
                 root.settings-clear-image-cache();
             }
             logs-copied: root.settings-logs-copied;
+            logs-copy-failed: root.settings-logs-copy-failed;
             copy-logs => {
                 root.settings-copy-logs();
             }
@@ -893,11 +896,16 @@ export component AppWindow inherits Window {
         height: 0;
     }
 
-    // Puts `text` on the clipboard.
-    public function copy-to-clipboard(text: string) {
+    // Puts `text` on the clipboard and tells whether it got there: the platform reports no
+    // failure, so the clipboard is read back.
+    public function copy-to-clipboard(text: string) -> bool {
         clipboard.text = text;
         clipboard.select-all();
         clipboard.copy();
         clipboard.text = "";
+        clipboard.paste();
+        let copied = clipboard.text == text;
+        clipboard.text = "";
+        copied
     }
 }

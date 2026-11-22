@@ -55,6 +55,9 @@ const MPRIS_ART_HEIGHT: u32 = 512;
 /// Opens a folder in the file manager.
 type FolderOpener = dyn Fn(&std::path::Path);
 
+/// Puts text on the clipboard of a window and tells whether it got there.
+type Clipboard = dyn Fn(&AppWindow, &str) -> bool;
+
 /// How long a notice that needs no action stays on screen.
 pub const NOTICE_DURATION: Duration = Duration::from_secs(5);
 
@@ -88,6 +91,7 @@ pub struct App {
     inhibitor: RefCell<Option<crate::inhibit::Inhibitor>>,
     discord: RefCell<Option<crate::discord::Discord>>,
     folder_opener: RefCell<Rc<FolderOpener>>,
+    clipboard: RefCell<Rc<Clipboard>>,
     pub(crate) sign_in: SignInController,
     pub(crate) home: HomeController,
     pub(crate) library: LibraryController,
@@ -138,6 +142,9 @@ impl App {
             inhibitor: RefCell::new(None),
             discord: RefCell::new(None),
             folder_opener: RefCell::new(Rc::new(crate::logs::open_folder)),
+            clipboard: RefCell::new(Rc::new(|window: &AppWindow, text: &str| {
+                window.invoke_copy_to_clipboard(text.into())
+            })),
             sign_in: SignInController::default(),
             home: HomeController::default(),
             library: LibraryController::default(),
@@ -881,8 +888,19 @@ impl App {
             &crate::logs::header(&mpv_version()),
             host.as_deref(),
         );
-        window.invoke_copy_to_clipboard(text.into());
-        window.set_settings_logs_copied(true);
+        let clipboard = Rc::clone(&*self.clipboard.borrow());
+        let copied = clipboard(&window, &text);
+        if !copied {
+            log::warn!("the logs could not be copied to the clipboard");
+        }
+        window.set_settings_logs_copied(copied);
+        window.set_settings_logs_copy_failed(!copied);
+    }
+
+    /// Replaces what puts text on the clipboard and tells whether it got there, for tests.
+    #[doc(hidden)]
+    pub fn set_clipboard(&self, clipboard: impl Fn(&AppWindow, &str) -> bool + 'static) {
+        *self.clipboard.borrow_mut() = Rc::new(clipboard);
     }
 
     fn open_logs(&self) {

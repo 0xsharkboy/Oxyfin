@@ -40,6 +40,7 @@ pub fn show(window: &AppWindow, session: Option<&SessionInfo>) {
     });
     window.set_settings_image_cache_kb(-1);
     window.set_settings_logs_copied(false);
+    window.set_settings_logs_copy_failed(false);
     // A code still being sent keeps its state until the server answers.
     if window.get_settings_authorize_state() != AuthorizeState::Busy {
         window.set_settings_authorize_state(AuthorizeState::Idle);
@@ -215,9 +216,11 @@ mod tests {
 
         window.set_settings_image_cache_kb(12);
         window.set_settings_logs_copied(true);
+        window.set_settings_logs_copy_failed(true);
         show(&window, Some(&info(None)));
         assert_eq!(window.get_settings_image_cache_kb(), -1);
         assert!(!window.get_settings_logs_copied());
+        assert!(!window.get_settings_logs_copy_failed());
     }
 
     #[test]
