@@ -103,6 +103,8 @@ export component PlayerScreen inherits Rectangle {
     property <PlayerMenu> menu: PlayerMenu.none;
     // A menu or the statistics show above the bar; one at a time.
     property <bool> menu-open: root.menu != PlayerMenu.none || root.stats-visible;
+    // The menus cover the skip column, unlike the statistics, which leave room for it.
+    property <bool> popup-open: root.menu != PlayerMenu.none;
     // The delay a shortcut or the volume the wheel changed, shown for a moment over the video.
     property <OsdKind> osd: OsdKind.none;
     // Wheel scrolling not yet turned into volume steps.
@@ -122,6 +124,8 @@ export component PlayerScreen inherits Rectangle {
     property <length> button-size: 24px + 2 * Theme.space-sm;
     property <length> menu-bottom: controls.y + Theme.space-3xl - Theme.space-xl;
     property <length> menu-max-height: root.menu-bottom - top-bar.height;
+    // Right edge of the skip column and the next episode toast, left of the statistics.
+    property <length> stack-right: root.width - Theme.space-2xl - (root.stats-visible ? Theme.stats-panel-width + Theme.space-sm : 0);
 
     function reveal() {
         root.awake = true;
@@ -206,7 +210,7 @@ export component PlayerScreen inherits Rectangle {
         }
     }
     // Stays up while the controls hide, like the skip buttons of common players.
-    property <bool> skip-visible: root.skip-kind != SkipKind.none && !root.toast-visible && !root.menu-open && !root.loading && !root.has-error;
+    property <bool> skip-visible: root.skip-kind != SkipKind.none && !root.toast-visible && !root.popup-open && !root.loading && !root.has-error;
     changed skip-visible => {
         if !self.skip-visible {
             keys.focus();
@@ -215,7 +219,7 @@ export component PlayerScreen inherits Rectangle {
 
     // Serial of the last skip whose notice timed out or was answered.
     property <int> skip-notice-done: 0;
-    property <bool> skip-notice-visible: root.skipped.kind != SkipKind.none && root.skipped.serial != root.skip-notice-done && !root.toast-visible && !root.menu-open && !root.loading && !root.has-error;
+    property <bool> skip-notice-visible: root.skipped.kind != SkipKind.none && root.skipped.serial != root.skip-notice-done && !root.toast-visible && !root.popup-open && !root.loading && !root.has-error;
     changed skipped => {
         if skip-notice-timer.running {
             skip-notice-timer.restart();
@@ -625,7 +629,7 @@ export component PlayerScreen inherits Rectangle {
             VerticalLayout {
                 width: self.preferred-width;
                 height: self.preferred-height;
-                x: parent.width - self.width - Theme.space-2xl;
+                x: root.stack-right - self.width;
                 y: (root.controls-visible ? root.menu-bottom : parent.height - Theme.space-2xl) - self.height;
                 spacing: Theme.space-sm;
 
@@ -660,7 +664,7 @@ export component PlayerScreen inherits Rectangle {
             }
 
             if root.next-up.visible: NextEpisodeToast {
-                x: parent.width - self.width - Theme.space-2xl;
+                x: root.stack-right - self.width;
                 y: (root.controls-visible ? root.menu-bottom : parent.height - Theme.space-2xl) - self.height;
                 next-up: root.next-up;
                 play-now => {

@@ -12,7 +12,8 @@ use i_slint_backend_testing::{AccessibleRole, ElementHandle, ElementQuery};
 use oxyfin::screens::player;
 use oxyfin::{AppWindow, Screen, StatRow};
 use oxyfin_core::{
-    HdrFormat, HdrInfo, PlayMethod, PlaybackCommand, PlaybackEvent, PlaybackStats, StatsReport,
+    Episode, HdrFormat, HdrInfo, PlayMethod, PlaybackCommand, PlaybackEvent, PlaybackStats,
+    SegmentKind, SkippableSegment, StatsReport, UserState,
 };
 use slint::platform::{Key, WindowEvent};
 use slint::{ComponentHandle, LogicalSize, Model};
@@ -497,4 +498,101 @@ fn hdr_and_transcode_reasons_are_worded_for_people() {
         ),
         "an unknown reason shows as the server names it"
     );
+}
+
+/// Left, top, right and bottom edges of `element`.
+fn edges(element: &ElementHandle) -> (f32, f32, f32, f32) {
+    let position = element.absolute_position();
+    let size = element.size();
+    (
+        position.x,
+        position.y,
+        position.x + size.width,
+        position.y + size.height,
+    )
+}
+
+fn panel(window: &AppWindow) -> ElementHandle {
+    find(window, TITLE, AccessibleRole::Groupbox).unwrap_or_else(|| panic!("no statistics panel"))
+}
+
+/// Asserts that `element` ends space-sm left of the panel, on the panel's bottom line.
+fn assert_beside_panel(window: &AppWindow, element: &ElementHandle) {
+    let (_, _, right, bottom) = edges(element);
+    let (panel_left, _, _, panel_bottom) = edges(&panel(window));
+    assert_eq!(right, panel_left - 8.0, "space-sm left of the panel");
+    assert_eq!(bottom, panel_bottom, "on the panel's bottom line");
+}
+
+#[test]
+fn skipping_still_works_beside_the_stats() {
+    let (window, sent) = player_window();
+    player::apply(&window, PlaybackEvent::Position(Duration::from_secs(30)));
+    player::apply(
+        &window,
+        PlaybackEvent::Segment(Some(SkippableSegment {
+            kind: SegmentKind::Intro,
+            start: Duration::from_secs(20),
+            end: Duration::from_secs(60),
+        })),
+    );
+    press(&window, "i");
+    player::apply(&window, PlaybackEvent::Stats(Box::new(full_report())));
+    i_slint_backend_testing::mock_elapsed_time(Duration::ZERO);
+
+    let skip = find(&window, "Skip intro", AccessibleRole::Button)
+        .unwrap_or_else(|| panic!("the statistics hide the skip button"));
+    assert_beside_panel(&window, &skip);
+    sent.borrow_mut().clear();
+    press(&window, "s");
+    assert!(
+        sent.borrow().contains(&PlaybackCommand::SkipSegment),
+        "{:?}",
+        sent.borrow()
+    );
+
+    player::apply(
+        &window,
+        PlaybackEvent::SegmentSkipped {
+            kind: SegmentKind::Recap,
+            from: Duration::from_secs(20),
+        },
+    );
+    i_slint_backend_testing::mock_elapsed_time(Duration::ZERO);
+    let notice = find(&window, "Recap skipped", AccessibleRole::Groupbox)
+        .unwrap_or_else(|| panic!("the statistics hide the skip notice"));
+    let (_, _, right, _) = edges(&notice);
+    assert_eq!(right, edges(&panel(&window)).0 - 8.0);
+    assert!(shows_stats(&window));
+}
+
+#[test]
+fn the_next_episode_toast_stays_beside_the_stats() {
+    let (window, _sent) = player_window();
+    press(&window, "i");
+    player::apply(&window, PlaybackEvent::Stats(Box::new(full_report())));
+    player::apply(&window, PlaybackEvent::Ended);
+    player::apply(
+        &window,
+        PlaybackEvent::NextUpReady {
+            episode: Box::new(Episode {
+                id: "50d3822a34079d70485f1bf36c274c35".into(),
+                series_id: "9ea196e7ccc3ae17d2c3f75c3ab34406".into(),
+                series_name: Some("Series".into()),
+                season_id: None,
+                title: "The Return".into(),
+                season_number: Some(1),
+                number: Some(2),
+                label: Some("S01E02".into()),
+                overview: None,
+                thumb: None,
+                duration: None,
+                user: UserState::default(),
+            }),
+        },
+    );
+    i_slint_backend_testing::mock_elapsed_time(Duration::ZERO);
+    let toast = find(&window, "Next episode", AccessibleRole::Groupbox)
+        .unwrap_or_else(|| panic!("no next episode toast"));
+    assert_beside_panel(&window, &toast);
 }

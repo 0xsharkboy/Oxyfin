@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-22 19:40+0000\n"
+"POT-Creation-Date: 2026-11-22 20:57+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1699,67 +1699,67 @@ msgctxt "PersonScreen"
 msgid "Retry"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:232
+#: crates/oxyfin/ui/screens/player.slint:236
 msgctxt "PlayerScreen"
 msgid "Player"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:461
+#: crates/oxyfin/ui/screens/player.slint:465
 msgctxt "PlayerScreen"
 msgid "Back"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:651
+#: crates/oxyfin/ui/screens/player.slint:655
 msgctxt "PlayerScreen"
 msgid "Skip intro"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:651
+#: crates/oxyfin/ui/screens/player.slint:655
 msgctxt "PlayerScreen"
 msgid "Skip recap"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:651
+#: crates/oxyfin/ui/screens/player.slint:655
 msgctxt "PlayerScreen"
 msgid "Skip preview"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:651
+#: crates/oxyfin/ui/screens/player.slint:655
 msgctxt "PlayerScreen"
 msgid "Skip credits"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:675
+#: crates/oxyfin/ui/screens/player.slint:679
 msgctxt "PlayerScreen"
 msgid "Volume"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:675
+#: crates/oxyfin/ui/screens/player.slint:679
 msgctxt "PlayerScreen"
 msgid "Audio delay"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:675
+#: crates/oxyfin/ui/screens/player.slint:679
 msgctxt "PlayerScreen"
 msgid "Subtitle delay"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:676
+#: crates/oxyfin/ui/screens/player.slint:680
 msgctxt "PlayerScreen"
 msgid "{}%"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:679
+#: crates/oxyfin/ui/screens/player.slint:683
 msgctxt "PlayerScreen"
 msgid "{}: {}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:712
+#: crates/oxyfin/ui/screens/player.slint:716
 msgctxt "PlayerScreen"
 msgid "Paused"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:712
+#: crates/oxyfin/ui/screens/player.slint:716
 msgctxt "PlayerScreen"
 msgid "Playing"
 msgstr ""
