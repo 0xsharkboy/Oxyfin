@@ -4,8 +4,10 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use oxyfin_api::ItemId;
 use oxyfin_core::{
-    BrowseQuery, BrowseSource, ContentKind, CoreError, ItemSummary, Page, SortField, WatchFilter,
+    BrowseQuery, BrowseSource, ContentKind, CoreError, ItemSummary, Page, SortField, UserState,
+    WatchFilter,
 };
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
@@ -144,7 +146,7 @@ impl LibraryController {
             self.publish(&window);
         }
         self.load_genres(app);
-        self.request(app, 0, true);
+        self.request(app, 0, PAGE_SIZE, true);
     }
 
     /// Loads again the posters of the cards still without one, after their loads were aborted.
@@ -167,10 +169,22 @@ impl LibraryController {
         load_posters(app, id, &window, &self.cards, &missing, &self.loads);
     }
 
-    /// The page came back from the player.
+    /// The page came back from the player or holds stale data: every page loaded is asked again
+    /// in one request, and the grid keeps its place.
     pub(crate) fn refresh(&self, app: &Rc<App>) {
         if self.tab.get().is_some() {
-            self.request(app, 0, false);
+            let loaded = u32::try_from(self.items.borrow().len()).unwrap_or(u32::MAX);
+            self.request(app, 0, loaded.max(PAGE_SIZE), false);
+        }
+    }
+
+    /// Item `id` changed to `user`: its card shows it at once, and the pages are asked again only
+    /// when the change can take the card out of the grid.
+    pub(crate) fn patch(&self, app: &Rc<App>, id: &ItemId, user: &UserState) {
+        let Some(tab) = self.tab.get() else { return };
+        patch_card(&self.items, &self.cards, id, user);
+        if self.settings(tab).watch != WatchFilter::All || tab == LibraryTab::Favorites {
+            self.refresh(app);
         }
     }
 
@@ -248,7 +262,7 @@ impl LibraryController {
                 self.ready.get(),
             )
         {
-            self.request(app, loaded as u32, false);
+            self.request(app, loaded as u32, PAGE_SIZE, false);
         }
     }
 
@@ -256,14 +270,14 @@ impl LibraryController {
     pub(crate) fn retry(&self, app: &Rc<App>) {
         if self.tab.get().is_some() {
             self.load_genres(app);
-            self.request(app, 0, true);
+            self.request(app, 0, PAGE_SIZE, true);
         }
     }
 
     /// Asks again for the page after the last one loaded, which failed.
     pub(crate) fn retry_more(&self, app: &Rc<App>) {
         if self.tab.get().is_some() {
-            self.request(app, self.items.borrow().len() as u32, false);
+            self.request(app, self.items.borrow().len() as u32, PAGE_SIZE, false);
         }
     }
 
@@ -284,7 +298,7 @@ impl LibraryController {
         if let Some(window) = app.window() {
             self.publish(&window);
         }
-        self.request(app, 0, true);
+        self.request(app, 0, PAGE_SIZE, true);
     }
 
     fn publish(&self, window: &AppWindow) {
@@ -366,9 +380,9 @@ impl LibraryController {
         self.publish(&window);
     }
 
-    /// Requests the page starting at `start`. A first page replaces the content;
+    /// Requests `limit` items starting at `start`. A first page replaces the content;
     /// `clear` empties the grid at once instead of when the answer arrives.
-    fn request(&self, app: &Rc<App>, start: u32, clear: bool) {
+    fn request(&self, app: &Rc<App>, start: u32, limit: u32, clear: bool) {
         let (Some(tab), Some((id, catalog, _))) = (self.tab.get(), app.services()) else {
             return;
         };
@@ -400,7 +414,7 @@ impl LibraryController {
             genre: settings.genre,
             watch: settings.watch,
             start,
-            limit: PAGE_SIZE,
+            limit,
         };
         app.spawn(
             async move { catalog.browse(&query).await },
@@ -441,24 +455,71 @@ impl LibraryController {
                 return;
             }
         };
-        let previous: Vec<CardData> = if start == 0 {
-            self.cards.iter().collect()
-        } else {
-            Vec::new()
-        };
-        if start == 0 {
-            self.items.borrow_mut().clear();
-            self.cards.set_vec(Vec::new());
-        }
         self.ready.set(true);
         self.total.set(page.total);
         window.set_library_total(i32::try_from(page.total).unwrap_or(i32::MAX));
-        let (new_cards, missing) = cards_with_posters(&page.items, &previous);
-        self.items.borrow_mut().extend(page.items.iter().cloned());
-        for data in new_cards {
-            self.cards.push(data);
-        }
+        let missing = add_page(&self.items, &self.cards, start, page.items);
         load_posters(app, id, &window, &self.cards, &missing, &self.loads);
+    }
+}
+
+/// Adds the items of a page starting at `start` to a grid; a first page replaces the grid,
+/// keeping the cards that stay the same. Returns the items whose poster has to be loaded.
+pub(crate) fn add_page(
+    items: &RefCell<Vec<ItemSummary>>,
+    cards: &VecModel<CardData>,
+    start: u32,
+    page: Vec<ItemSummary>,
+) -> Vec<ItemSummary> {
+    if start != 0 {
+        let (new_cards, missing) = cards_with_posters(&page, &[]);
+        items.borrow_mut().extend(page);
+        for data in new_cards {
+            cards.push(data);
+        }
+        return missing;
+    }
+    let previous: Vec<CardData> = cards.iter().collect();
+    let (new_cards, missing) = cards_with_posters(&page, &previous);
+    *items.borrow_mut() = page;
+    let same_items = previous.len() == new_cards.len()
+        && previous
+            .iter()
+            .zip(&new_cards)
+            .all(|(old, new)| old.id == new.id);
+    if same_items {
+        // Rows set one by one keep their cards, with the focus and the scroll position.
+        for (index, (old, new)) in previous.iter().zip(new_cards).enumerate() {
+            if *old != new {
+                cards.set_row_data(index, new);
+            }
+        }
+    } else {
+        cards.set_vec(new_cards);
+    }
+    missing
+}
+
+/// Shows `user` on the card of item `id`, keeping its poster.
+pub(crate) fn patch_card(
+    items: &RefCell<Vec<ItemSummary>>,
+    cards: &VecModel<CardData>,
+    id: &ItemId,
+    user: &UserState,
+) {
+    let mut items = items.borrow_mut();
+    let Some(item) = items.iter_mut().find(|item| item.id == *id) else {
+        return;
+    };
+    item.user = user.clone();
+    let Some(index) = cards.iter().position(|card| card.id == item.id.as_str()) else {
+        return;
+    };
+    if let Some(old) = cards.row_data(index) {
+        let mut data = card(item);
+        data.image = old.image;
+        data.has_image = old.has_image;
+        cards.set_row_data(index, data);
     }
 }
 

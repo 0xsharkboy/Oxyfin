@@ -4,14 +4,15 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
-use oxyfin_core::{CoreError, ItemSummary, Page};
-use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
+use oxyfin_api::ItemId;
+use oxyfin_core::{CoreError, ItemSummary, Page, UserState};
+use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
 use crate::app::App;
 use crate::images::PageLoads;
 use crate::present::core_error_message;
 use crate::screens::library::{
-    PAGE_SIZE, cards_with_posters, load_posters, open_detail, should_load_more, target_of,
+    PAGE_SIZE, add_page, load_posters, open_detail, patch_card, should_load_more, target_of,
 };
 use crate::state::{GenerationId, Msg, Screen};
 use crate::{CardData, Messages};
@@ -56,11 +57,20 @@ impl SearchController {
         }
     }
 
-    /// The page came back from the player: the first page of the current text loads again.
+    /// The page came back from the player or holds stale data: every page of results loaded is
+    /// asked again in one request, and the grid keeps its place.
     pub(crate) fn refresh(&self, app: &Rc<App>) {
         let query = self.query.borrow().clone();
         if self.active.get() && self.ready.get() && !query.is_empty() {
-            self.request(app, query, 0, false);
+            let loaded = u32::try_from(self.items.borrow().len()).unwrap_or(u32::MAX);
+            self.request(app, query, 0, loaded.max(PAGE_SIZE), false);
+        }
+    }
+
+    /// Item `id` changed to `user`: its card shows it at once.
+    pub(crate) fn patch(&self, id: &ItemId, user: &UserState) {
+        if self.active.get() {
+            patch_card(&self.items, &self.cards, id, user);
         }
     }
 
@@ -138,7 +148,7 @@ impl SearchController {
             )
         {
             let query = self.query.borrow().clone();
-            self.request(app, query, loaded as u32, false);
+            self.request(app, query, loaded as u32, PAGE_SIZE, false);
         }
     }
 
@@ -146,7 +156,7 @@ impl SearchController {
     pub(crate) fn retry(&self, app: &Rc<App>) {
         let query = self.query.borrow().clone();
         if self.active.get() && !query.is_empty() {
-            self.request(app, query, 0, true);
+            self.request(app, query, 0, PAGE_SIZE, true);
         }
     }
 
@@ -154,7 +164,13 @@ impl SearchController {
     pub(crate) fn retry_more(&self, app: &Rc<App>) {
         let query = self.query.borrow().clone();
         if self.active.get() && !query.is_empty() {
-            self.request(app, query, self.items.borrow().len() as u32, false);
+            self.request(
+                app,
+                query,
+                self.items.borrow().len() as u32,
+                PAGE_SIZE,
+                false,
+            );
         }
     }
 
@@ -166,7 +182,7 @@ impl SearchController {
             }
             return;
         }
-        self.request(app, text, 0, true);
+        self.request(app, text, 0, PAGE_SIZE, true);
     }
 
     /// Nothing is sent for the text: the results on screen stay and no loading is shown.
@@ -200,9 +216,9 @@ impl SearchController {
         }
     }
 
-    /// Requests the page of `text` starting at `start`. A first page replaces the
+    /// Requests `limit` results of `text` starting at `start`. A first page replaces the
     /// results; `clear` empties the grid at once instead of when the answer arrives.
-    fn request(&self, app: &Rc<App>, text: String, start: u32, clear: bool) {
+    fn request(&self, app: &Rc<App>, text: String, start: u32, limit: u32, clear: bool) {
         let Some((id, catalog, _)) = app.services() else {
             return;
         };
@@ -229,7 +245,7 @@ impl SearchController {
             window.set_search_loading_more(start > 0);
         }
         app.spawn(
-            async move { catalog.search(&text, start, PAGE_SIZE).await },
+            async move { catalog.search(&text, start, limit).await },
             move |app, result| app.search.answered(app, load, id, start, result),
         );
     }
@@ -267,23 +283,10 @@ impl SearchController {
                 return;
             }
         };
-        let previous: Vec<CardData> = if start == 0 {
-            self.cards.iter().collect()
-        } else {
-            Vec::new()
-        };
-        if start == 0 {
-            self.items.borrow_mut().clear();
-            self.cards.set_vec(Vec::new());
-        }
         self.ready.set(true);
         self.total.set(page.total);
         window.set_search_total(i32::try_from(page.total).unwrap_or(i32::MAX));
-        let (new_cards, missing) = cards_with_posters(&page.items, &previous);
-        self.items.borrow_mut().extend(page.items.iter().cloned());
-        for data in new_cards {
-            self.cards.push(data);
-        }
+        let missing = add_page(&self.items, &self.cards, start, page.items);
         load_posters(app, id, &window, &self.cards, &missing, &self.loads);
     }
 }

@@ -10,7 +10,7 @@ use oxyfin_api::{ItemId, Session};
 use oxyfin_core::{
     Catalog, Config, CoreError, ImageCache, Paths, SessionManager, SignedIn, TokenVault,
 };
-use oxyfin_core::{PlayMode, PlaybackCommand};
+use oxyfin_core::{PlayMode, PlaybackCommand, UserState};
 use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode};
 use tokio::runtime::Handle;
 use tokio::task::{AbortHandle, JoinHandle};
@@ -194,11 +194,15 @@ impl App {
         self.state.borrow().screen()
     }
 
-    /// The user state of an item changed on the current screen: it reloads, and the screens
-    /// below reload when they show again.
-    pub(crate) fn item_changed(self: &Rc<Self>) {
+    /// The user state of item `id` changed to `user` on the current screen: a grid shows it on
+    /// its card, other screens reload, and the screens below reload when they show again.
+    pub(crate) fn item_changed(self: &Rc<Self>, id: &ItemId, user: &UserState) {
         let screen = self.screen();
-        self.refresh(&screen);
+        match &screen {
+            Screen::Library(_) => self.library.patch(self, id, user),
+            Screen::Search => self.search.patch(id, user),
+            _ => self.refresh(&screen),
+        }
         self.dispatch(Msg::ItemChanged(screen));
     }
 

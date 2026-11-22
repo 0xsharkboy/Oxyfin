@@ -361,6 +361,7 @@ impl MenuController {
         let Some((generation, catalog, _)) = app.services() else {
             return;
         };
+        let item = id.clone();
         app.spawn(
             async move {
                 match change {
@@ -377,7 +378,7 @@ impl MenuController {
                     return;
                 }
                 match result {
-                    Ok(_) => app.item_changed(),
+                    Ok(user) => app.item_changed(&item, &user),
                     Err(CoreError::SessionExpired) => app.dispatch(Msg::Expired(generation)),
                     Err(error) => {
                         log::warn!("cannot change the item: {error}");
