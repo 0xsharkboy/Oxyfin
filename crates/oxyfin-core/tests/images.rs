@@ -536,3 +536,48 @@ async fn image_fetches_run_at_most_six_at_a_time() {
     // Seven fetches of 500 ms take two waves: the seventh waits for a free slot.
     assert!(started.elapsed() >= std::time::Duration::from_millis(950));
 }
+
+#[tokio::test]
+async fn disk_usage_counts_the_stored_images() {
+    let mock = MockServer::start().await;
+    serve(&mock, "aaa", b"123456").await;
+    serve(&mock, "bbb", b"1234").await;
+    let dir = TempDir::new().unwrap();
+    let cache = cache(&mock, &dir, 1024);
+    assert_eq!(cache.disk_usage().await, 0);
+    cache.get(&image("aaa", "t"), SIZE).await.unwrap();
+    cache.get(&image("bbb", "t"), SIZE).await.unwrap();
+    let images = Paths::under(dir.path()).cache_dir.join("images");
+    std::fs::write(images.join(".partial.tmp"), b"half").unwrap();
+    assert_eq!(cache.disk_usage().await, 10);
+}
+
+#[tokio::test]
+async fn clear_empties_disk_and_memory() {
+    let mock = MockServer::start().await;
+    serve(&mock, "aaa", b"pixels").await;
+    let dir = TempDir::new().unwrap();
+    let cache = cache(&mock, &dir, 1024);
+    cache.get(&image("aaa", "t"), SIZE).await.unwrap();
+    assert_eq!(requests(&mock).await, 1);
+
+    cache.clear().await.unwrap();
+    assert_eq!(cache.disk_usage().await, 0);
+    let images = Paths::under(dir.path()).cache_dir.join("images");
+    let left = std::fs::read_dir(&images).map_or(0, |entries| entries.count());
+    assert_eq!(left, 0);
+
+    let bytes = cache.get(&image("aaa", "t"), SIZE).await.unwrap();
+    assert_eq!(&*bytes, b"pixels");
+    assert_eq!(requests(&mock).await, 2);
+    assert_eq!(cache.disk_usage().await, 6);
+}
+
+#[tokio::test]
+async fn clear_without_a_cache_directory_succeeds() {
+    let mock = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let cache = cache(&mock, &dir, 1024);
+    cache.clear().await.unwrap();
+    assert_eq!(cache.disk_usage().await, 0);
+}

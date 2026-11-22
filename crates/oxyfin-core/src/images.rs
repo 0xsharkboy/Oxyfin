@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime};
 
 use oxyfin_api::{ImageRequest, Session};
 
-use crate::{ImageRef, Paths, Result, TrickplaySheet};
+use crate::{CoreError, ImageRef, Paths, Result, TrickplaySheet};
 
 /// Bounding box requested for an image, in pixels.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -57,6 +57,12 @@ struct Memory {
 }
 
 impl Memory {
+    fn clear(&mut self) {
+        self.entries.clear();
+        self.order.clear();
+        self.used = 0;
+    }
+
     fn get(&mut self, key: &str) -> Option<Arc<[u8]>> {
         let bytes = self.entries.get(key)?.clone();
         self.order.retain(|other| other != key);
@@ -198,7 +204,7 @@ impl Trimmer {
             let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
             let name = entry.file_name();
             let name = name.to_string_lossy();
-            if name.starts_with('.') && name.ends_with(".tmp") {
+            if is_tmp(&name) {
                 let age = now.duration_since(modified).unwrap_or_default();
                 if age >= STALE_TMP_AGE {
                     let _ = tokio::fs::remove_file(entry.path()).await;
@@ -286,6 +292,48 @@ impl ImageCache {
         self.trimmer.requests.load(Ordering::SeqCst)
     }
 
+    /// Bytes the stored images take on disk, leaving out writes in progress.
+    pub async fn disk_usage(&self) -> u64 {
+        let _guard = self.trimmer.pass.lock().await;
+        let Ok(mut entries) = tokio::fs::read_dir(&self.dir).await else {
+            return 0;
+        };
+        let mut total = 0u64;
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let Ok(meta) = entry.metadata().await else {
+                continue;
+            };
+            if meta.is_file() && !is_tmp(&entry.file_name().to_string_lossy()) {
+                total += meta.len();
+            }
+        }
+        total
+    }
+
+    /// Removes every stored image from disk and memory; later requests fetch them again.
+    pub async fn clear(&self) -> Result<()> {
+        let _guard = self.trimmer.pass.lock().await;
+        self.lock().clear();
+        let mut entries = match tokio::fs::read_dir(&self.dir).await {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(storage(&error)),
+        };
+        let mut failed = None;
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|error| storage(&error))?
+        {
+            let is_file = entry.metadata().await.is_ok_and(|meta| meta.is_file());
+            if is_file && let Err(error) = tokio::fs::remove_file(entry.path()).await {
+                failed = Some(error);
+            }
+        }
+        self.trimmer.total.store(0, Ordering::SeqCst);
+        failed.map_or(Ok(()), |error| Err(storage(&error)))
+    }
+
     /// Returns the bytes of `image` scaled to fit `size`, from memory, disk or the server.
     ///
     /// At most [`IMAGE_FETCHES`] images are downloaded at a time; memory and disk hits never wait.
@@ -367,6 +415,14 @@ impl ImageCache {
         }
         result
     }
+}
+
+fn is_tmp(name: &str) -> bool {
+    name.starts_with('.') && name.ends_with(".tmp")
+}
+
+fn storage(error: &std::io::Error) -> CoreError {
+    CoreError::Storage(format!("cannot clear the image cache: {error}"))
 }
 
 fn file_name(image: &ImageRef, size: ImageSize) -> String {
