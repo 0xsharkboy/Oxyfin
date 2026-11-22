@@ -102,6 +102,7 @@ impl HomeController {
         if let Some(window) = app.window() {
             window.set_home_banner(HomeBanner::default());
             window.set_home_settled(false);
+            window.set_home_loading(false);
         }
     }
 
@@ -114,10 +115,13 @@ impl HomeController {
             self.clear(app);
             self.shown_generation.set(Some(id));
         }
-        self.loaded.set(true);
+        let first = !self.loaded.replace(true);
         if let Some(window) = app.window() {
             window.set_home_rows(ModelRc::from(Rc::clone(&self.rows)));
             window.set_home_settled(false);
+            if first {
+                window.set_home_loading(true);
+            }
         }
         let load = self.load.get();
         *self.featured.borrow_mut() = Featured {
@@ -412,6 +416,7 @@ impl HomeController {
             self.show_banner(app);
             if let Some(window) = app.window() {
                 window.set_home_settled(true);
+                window.set_home_loading(false);
             }
         }
     }

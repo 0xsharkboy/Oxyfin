@@ -6,6 +6,7 @@ import { DetailHeader } from "../components/detail_header.slint";
 import { Button, ButtonStyle } from "../components/button.slint";
 import { IconButton } from "../components/icon_button.slint";
 import { PosterRow } from "../components/poster_row.slint";
+import { Skeleton, DetailHeaderBones, CardRowBones } from "../components/skeleton.slint";
 import { BodyText } from "../components/text.slint";
 
 // What the collection page shows about its box set; Rust fills it from the core.
@@ -164,9 +165,21 @@ export component CollectionScreen inherits Rectangle {
                             }
                         }
                     }
-                    if root.loading: BodyText {
-                        text: @tr("Loading");
-                        color: Theme.text-secondary;
+                    if root.loading: Skeleton {
+                        VerticalLayout {
+                            DetailHeaderBones {
+                                genres: false;
+                            }
+                            VerticalLayout {
+                                padding-top: Theme.space-3xl + Theme.space-sm;
+
+                                CardRowBones {
+                                    inset: 0px;
+                                    title-spacing: Theme.space-lg;
+                                    card-spacing: Theme.space-xl;
+                                }
+                            }
+                        }
                     }
                     if root.error != "": BodyText {
                         text: root.error;

@@ -1,0 +1,405 @@
+import { Theme } from "../theme.slint";
+
+// A shape standing in for an element that is still loading.
+export component Bone inherits Rectangle {
+    background: Theme.bg-elevated;
+    border-radius: Theme.radius-sm;
+}
+
+// A bone for one line of text, centred in the height the real line takes.
+export component LineBone {
+    in property <length> line-height: Theme.body-line-height;
+    in property <length> thickness: Theme.bone-text;
+    in property <length> bone-width;
+
+    height: root.line-height;
+    min-width: 0px;
+    preferred-width: root.bone-width;
+
+    Bone {
+        x: 0;
+        y: (root.height - self.height) / 2;
+        width: min(root.bone-width, root.width);
+        height: root.thickness;
+    }
+}
+
+// Bones of a page that is loading. They stay hidden for a moment, so a fast answer never
+// flashes them, then a slow band of light sweeps across them.
+export component Skeleton inherits Rectangle {
+    property <bool> shown;
+
+    opacity: root.shown ? 1 : 0;
+    clip: true;
+
+    Timer {
+        interval: Theme.skeleton-delay;
+        running: !root.shown;
+        triggered => {
+            root.shown = true;
+        }
+    }
+
+    // A layout gives the bones the full width and the skeleton their height.
+    VerticalLayout {
+        @children
+    }
+
+    if root.shown: shimmer := Rectangle {
+        y: 0;
+        width: root.width;
+        height: root.height;
+        x: (2 * mod(animation-tick() / 1ms, Theme.skeleton-sweep / 1ms) / (Theme.skeleton-sweep / 1ms) - 1) * root.width;
+        background: Theme.skeleton-shimmer;
+    }
+}
+
+// Title and subtitle of a card, below its artwork.
+component CardTextBones inherits VerticalLayout {
+    in property <length> card-width;
+
+    spacing: Theme.space-2xs;
+
+    LineBone {
+        line-height: Theme.body-strong-line-height;
+        bone-width: root.card-width * 0.62;
+    }
+    LineBone {
+        line-height: Theme.caption-line-height;
+        thickness: Theme.bone-caption;
+        bone-width: root.card-width * 0.42;
+    }
+}
+
+// Bones of a `PosterCard`.
+export component PosterCardBones {
+    width: Theme.poster-width;
+
+    VerticalLayout {
+        alignment: start;
+        spacing: Theme.space-sm;
+
+        artwork := Bone {
+            height: Theme.poster-height;
+            border-radius: Theme.radius-md;
+        }
+        CardTextBones {
+            card-width: root.width;
+        }
+    }
+}
+
+// Bones of a `LandscapeCard`.
+export component LandscapeCardBones {
+    width: Theme.landscape-width;
+
+    VerticalLayout {
+        alignment: start;
+        spacing: Theme.space-sm;
+
+        artwork := Bone {
+            height: Theme.landscape-height;
+            border-radius: Theme.radius-md;
+        }
+        CardTextBones {
+            card-width: root.width;
+        }
+    }
+}
+
+// Bones of a titled row of cards, as many as the width shows.
+export component CardRowBones {
+    in property <bool> landscape;
+    // Space before the title and the first card.
+    in property <length> inset: Theme.space-3xl;
+    in property <length> title-spacing: Theme.space-md;
+    in property <length> card-spacing: Theme.space-lg;
+
+    property <length> card-width: root.landscape ? Theme.landscape-width : Theme.poster-width;
+    property <length> card-height: (root.landscape ? Theme.landscape-height : Theme.poster-height) + Theme.space-sm + Theme.body-strong-line-height + Theme.space-2xs + Theme.caption-line-height;
+    property <int> count: max(1, ceil((root.width - root.inset) / (root.card-width + root.card-spacing)));
+
+    VerticalLayout {
+        spacing: root.title-spacing;
+
+        HorizontalLayout {
+            padding-left: root.inset;
+
+            LineBone {
+                line-height: Theme.heading-line-height;
+                thickness: Theme.bone-heading;
+                bone-width: 200px;
+            }
+        }
+
+        Rectangle {
+            height: root.card-height;
+
+            if root.landscape: Rectangle {
+                for index in root.count: LandscapeCardBones {
+                    x: root.inset + index * (root.card-width + root.card-spacing);
+                    y: 0;
+                }
+            }
+            if !root.landscape: Rectangle {
+                for index in root.count: PosterCardBones {
+                    x: root.inset + index * (root.card-width + root.card-spacing);
+                    y: 0;
+                }
+            }
+        }
+    }
+}
+
+// Bones of the home banner, laid out like `Banner`.
+export component BannerBones {
+    height: Theme.banner-height;
+
+    VerticalLayout {
+        padding-left: Theme.space-3xl;
+        padding-right: Theme.space-3xl;
+        padding-bottom: Theme.space-3xl + Theme.space-2xl;
+        spacing: Theme.space-lg;
+        alignment: end;
+
+        LineBone {
+            line-height: Theme.label-line-height;
+            thickness: Theme.bone-caption;
+            bone-width: 140px;
+        }
+        LineBone {
+            line-height: Theme.display-line-height;
+            thickness: Theme.bone-display;
+            bone-width: 420px;
+        }
+        LineBone {
+            line-height: Theme.label-line-height;
+            bone-width: 300px;
+        }
+        VerticalLayout {
+            LineBone {
+                bone-width: 560px;
+            }
+            LineBone {
+                bone-width: 480px;
+            }
+        }
+        HorizontalLayout {
+            padding-top: Theme.space-sm;
+            spacing: Theme.space-md;
+            alignment: start;
+
+            Bone {
+                preferred-width: 150px;
+                height: Theme.button-height;
+                border-radius: Theme.radius-md;
+            }
+            Bone {
+                preferred-width: 120px;
+                height: Theme.button-height;
+                border-radius: Theme.radius-md;
+            }
+        }
+    }
+}
+
+// Round bones standing for a row of chips or pills.
+export component PillBones inherits HorizontalLayout {
+    in property <int> count: 3;
+    in property <length> pill-width: 90px;
+
+    spacing: Theme.space-sm;
+    alignment: start;
+
+    for index in root.count: Bone {
+        preferred-width: root.pill-width;
+        height: Theme.label-line-height + 2 * Theme.space-chip-y;
+        border-radius: Theme.radius-full;
+    }
+}
+
+// Bones of a `DetailHeader` below its back arrow: the poster, then the title, metadata,
+// genres, summary and buttons beside it.
+export component DetailHeaderBones {
+    in property <bool> genres: true;
+
+    HorizontalLayout {
+        spacing: Theme.space-3xl;
+
+        poster := Bone {
+            width: Theme.poster-width * 1.5;
+            height: Theme.poster-height * 1.5;
+            border-radius: Theme.radius-lg;
+        }
+
+        VerticalLayout {
+            alignment: end;
+            spacing: Theme.space-lg;
+            horizontal-stretch: 1;
+
+            LineBone {
+                line-height: Theme.display-line-height;
+                thickness: Theme.bone-display;
+                bone-width: 420px;
+            }
+            LineBone {
+                line-height: Theme.label-line-height;
+                bone-width: 280px;
+            }
+            if root.genres: PillBones {
+                pill-width: 80px;
+            }
+            VerticalLayout {
+                LineBone {
+                    bone-width: Theme.detail-text-width;
+                }
+                LineBone {
+                    bone-width: Theme.detail-text-width - 20px;
+                }
+                LineBone {
+                    bone-width: Theme.detail-text-width * 0.72;
+                }
+            }
+            HorizontalLayout {
+                padding-top: Theme.space-sm;
+                spacing: Theme.space-md;
+                alignment: start;
+
+                play := Bone {
+                    preferred-width: 200px;
+                    height: Theme.button-height;
+                    border-radius: Theme.radius-md;
+                }
+                Bone {
+                    preferred-width: 172px;
+                    height: Theme.button-height;
+                    border-radius: Theme.radius-md;
+                }
+            }
+        }
+    }
+}
+
+// Bones of an `EpisodeRow`, laid out like it.
+export component EpisodeRowBones {
+    HorizontalLayout {
+        padding: Theme.space-md;
+        spacing: Theme.space-lg;
+
+        VerticalLayout {
+            width: Theme.space-2xl;
+            alignment: center;
+
+            HorizontalLayout {
+                alignment: center;
+
+                Bone {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: Theme.radius-xs;
+                }
+            }
+        }
+
+        thumb := Bone {
+            width: Theme.episode-thumb-width;
+            height: Theme.episode-thumb-height;
+            border-radius: Theme.radius-md;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.episode-text-gap;
+
+            HorizontalLayout {
+                spacing: Theme.space-lg;
+
+                LineBone {
+                    line-height: Theme.body-strong-line-height;
+                    bone-width: 260px;
+                    horizontal-stretch: 1;
+                }
+                LineBone {
+                    line-height: Theme.label-line-height;
+                    thickness: Theme.bone-caption;
+                    bone-width: 48px;
+                    width: 48px;
+                }
+            }
+            VerticalLayout {
+                LineBone {
+                    bone-width: 900px;
+                }
+                LineBone {
+                    bone-width: 760px;
+                }
+            }
+        }
+    }
+}
+
+// Bones of the person page below its back arrow: photo, name, facts, biography, filters and
+// a first row of titles.
+export component PersonBones {
+    property <length> gap: Theme.space-xl;
+    property <int> count: max(1, ceil((root.width + root.gap) / (Theme.poster-width + root.gap)));
+
+    VerticalLayout {
+        spacing: Theme.space-xl;
+
+        HorizontalLayout {
+            spacing: Theme.space-3xl;
+
+            VerticalLayout {
+                alignment: start;
+
+                Bone {
+                    width: 200px;
+                    height: 200px;
+                    border-radius: Theme.radius-full;
+                }
+            }
+
+            VerticalLayout {
+                alignment: start;
+                spacing: Theme.space-md;
+                horizontal-stretch: 1;
+
+                LineBone {
+                    line-height: Theme.display-line-height;
+                    thickness: Theme.bone-display;
+                    bone-width: 320px;
+                }
+                LineBone {
+                    bone-width: 360px;
+                }
+                VerticalLayout {
+                    LineBone {
+                        bone-width: 720px;
+                    }
+                    LineBone {
+                        bone-width: 700px;
+                    }
+                    LineBone {
+                        bone-width: 520px;
+                    }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            padding-top: Theme.space-lg;
+
+            PillBones { }
+        }
+
+        Rectangle {
+            height: Theme.space-lg + Theme.poster-height + Theme.space-sm + Theme.body-strong-line-height + Theme.space-2xs + Theme.caption-line-height;
+
+            for index in root.count: PosterCardBones {
+                x: index * (Theme.poster-width + root.gap);
+                y: Theme.space-lg;
+            }
+        }
+    }
+}

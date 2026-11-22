@@ -7,6 +7,7 @@ import { Button, ButtonStyle } from "../components/button.slint";
 import { IconButton } from "../components/icon_button.slint";
 import { PosterRow } from "../components/poster_row.slint";
 import { CastRow, PersonCardData } from "../components/person_card.slint";
+import { Skeleton, DetailHeaderBones } from "../components/skeleton.slint";
 import { BodyText } from "../components/text.slint";
 
 // What the movie page shows about its movie; Rust fills it from the core.
@@ -193,9 +194,8 @@ export component MovieScreen inherits Rectangle {
                             }
                         }
                     }
-                    if root.loading: BodyText {
-                        text: @tr("Loading");
-                        color: Theme.text-secondary;
+                    if root.loading: Skeleton {
+                        DetailHeaderBones { }
                     }
                     if root.error != "": BodyText {
                         text: root.error;

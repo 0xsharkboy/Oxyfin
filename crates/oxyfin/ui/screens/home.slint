@@ -6,6 +6,7 @@ import { CardStatus } from "../components/card.slint";
 import { LandscapeCard } from "../components/landscape_card.slint";
 import { PosterRow } from "../components/poster_row.slint";
 import { RowScroller } from "../components/row_scroller.slint";
+import { Skeleton, BannerBones, CardRowBones } from "../components/skeleton.slint";
 import { BodyText, HeadingText } from "../components/text.slint";
 
 export enum HomeRowKind { landscape, poster }
@@ -138,6 +139,8 @@ export component HomeScreen inherits Rectangle {
     in property <[HomeRow]> rows;
     // True once every source of the screen has answered.
     in property <bool> settled;
+    // True during the first load of the screen, until every source has answered.
+    in property <bool> loading;
     callback open-tab(page: TopBarPage);
     callback play(id: string);
     callback open-item(id: string);
@@ -204,7 +207,10 @@ export component HomeScreen inherits Rectangle {
                     root.open-item(root.banner.card.id);
                 }
             }
-            if !root.banner.has: Rectangle {
+            if !root.banner.has && root.loading: Skeleton {
+                BannerBones { }
+            }
+            if !root.banner.has && !root.loading: Rectangle {
                 height: top-bar.height;
             }
 
@@ -215,6 +221,17 @@ export component HomeScreen inherits Rectangle {
                 }
                 open(id) => {
                     root.open-item(id);
+                }
+            }
+
+            if root.loading && root.rows.length == 0: Skeleton {
+                VerticalLayout {
+                    spacing: Theme.space-2xl;
+
+                    CardRowBones {
+                        landscape: true;
+                    }
+                    CardRowBones { }
                 }
             }
 

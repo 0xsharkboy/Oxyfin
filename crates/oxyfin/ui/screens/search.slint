@@ -76,22 +76,13 @@ export component SearchScreen inherits Rectangle {
 
             grid := PosterGrid {
                 cards: root.cards;
+                // Results of the previous text stay until the new ones arrive.
+                loading: root.query != "" && ((root.loading && root.cards.length == 0) || root.loading-more);
                 open(card) => {
                     root.open(card.id);
                 }
                 near-end => {
                     root.near-end();
-                }
-            }
-
-            if root.loading || root.loading-more: Rectangle {
-                y: parent.height - self.height;
-                height: Theme.space-3xl;
-                BodyText {
-                    text: @tr("Loading");
-                    color: Theme.text-secondary;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
                 }
             }
 

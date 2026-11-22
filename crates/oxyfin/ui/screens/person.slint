@@ -8,6 +8,7 @@ import { Chip } from "../components/chip.slint";
 import { CardStatus } from "../components/card.slint";
 import { PosterCard } from "../components/poster_card.slint";
 import { PersonPhoto } from "../components/person_card.slint";
+import { Skeleton, PersonBones } from "../components/skeleton.slint";
 import { BodyText, DisplayText, LabelText } from "../components/text.slint";
 
 // Kind of titles the person page lists.
@@ -297,9 +298,8 @@ export component PersonScreen inherits Rectangle {
                     }
                 }
 
-                if root.loading: BodyText {
-                    text: @tr("Loading");
-                    color: Theme.text-secondary;
+                if root.loading: Skeleton {
+                    PersonBones { }
                 }
                 if root.error != "": BodyText {
                     text: root.error;

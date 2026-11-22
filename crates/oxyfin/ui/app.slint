@@ -68,6 +68,8 @@ export component AppWindow inherits Window {
     in property <HomeBanner> home-banner;
     in property <[HomeRow]> home-rows;
     in property <bool> home-settled;
+    // True during the first load of the home screen.
+    in property <bool> home-loading;
     callback play(id: string);
     callback open-item(id: string);
     callback open-settings();
@@ -361,6 +363,7 @@ export component AppWindow inherits Window {
             banner: root.home-banner;
             rows: root.home-rows;
             settled: root.home-settled;
+            loading: root.home-loading;
             open-tab(page) => {
                 root.open-tab(page);
             }

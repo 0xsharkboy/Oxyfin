@@ -72,8 +72,24 @@ export global Theme {
     out property <length> context-menu-width: 290px;
     out property <length> context-menu-padding-y: 6px;
     out property <length> context-menu-icon-gap: 10px;
+    // Bones shown while a page loads: the wait before they show, so a fast answer never flashes
+    // them, the time their band of light takes to sweep across, and that band.
+    out property <duration> skeleton-delay: 150ms;
+    out property <duration> skeleton-sweep: 1800ms;
+    out property <brush> skeleton-shimmer: @linear-gradient(105deg, #ffffff00 35%, #ffffff0d 50%, #ffffff00 65%);
+    // Thickness of a bone standing for one line of text, by text style.
+    out property <length> bone-display: 40px;
+    out property <length> bone-heading: 20px;
+    out property <length> bone-text: 14px;
+    out property <length> bone-caption: 12px;
+    // A button: its 24 px icon and its padding.
+    out property <length> button-height: 24px + 2 * space-md;
+    // Featured banner of the home screen.
+    out property <length> banner-height: 520px;
     out property <length> poster-width: 160px;
     out property <length> poster-height: 240px;
+    out property <length> landscape-width: 288px;
+    out property <length> landscape-height: 162px;
     out property <length> episode-thumb-width: 224px;
     out property <length> episode-thumb-height: 126px;
     out property <length> episode-text-gap: 6px;

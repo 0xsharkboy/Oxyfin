@@ -168,8 +168,8 @@ fn library_filters_pages_and_recovers() {
 
         press(&window, "Favorites", AccessibleRole::Tab).await?;
         wait_visible(&window, "Nothing here yet").await?;
-        if exists(&window, "Loading") {
-            return Err("a loading indicator is left over an empty library".into());
+        if !common::bones(&window).is_empty() {
+            return Err("loading bones are left over an empty library".into());
         }
         if !has_param(&last(&log), "isFavorite", "true") {
             return Err(format!("no isFavorite=true in {}", last(&log)));

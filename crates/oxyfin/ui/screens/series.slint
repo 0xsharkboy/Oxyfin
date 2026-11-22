@@ -10,6 +10,7 @@ import { CardStatus } from "../components/card.slint";
 import { EpisodeRow } from "../components/episode_row.slint";
 import { PosterRow } from "../components/poster_row.slint";
 import { CastRow, PersonCardData } from "../components/person_card.slint";
+import { Skeleton, DetailHeaderBones, PillBones, EpisodeRowBones } from "../components/skeleton.slint";
 import { BodyText } from "../components/text.slint";
 
 // What the main button of the series page does.
@@ -207,12 +208,18 @@ export component SeriesScreen inherits Rectangle {
                                 }
                             }
                         }
+
+                        if root.episodes-loading: Skeleton {
+                            VerticalLayout {
+                                spacing: Theme.space-sm;
+
+                                EpisodeRowBones { }
+                                EpisodeRowBones { }
+                                EpisodeRowBones { }
+                            }
+                        }
                     }
 
-                    if root.episodes-loading: BodyText {
-                        text: @tr("Loading");
-                        color: Theme.text-secondary;
-                    }
                     if root.episodes-error != "": BodyText {
                         text: root.episodes-error;
                         color: Theme.text-secondary;
@@ -271,9 +278,18 @@ export component SeriesScreen inherits Rectangle {
                             }
                         }
                     }
-                    if root.loading: BodyText {
-                        text: @tr("Loading");
-                        color: Theme.text-secondary;
+                    if root.loading: Skeleton {
+                        VerticalLayout {
+                            DetailHeaderBones { }
+                            VerticalLayout {
+                                padding-top: Theme.space-3xl + Theme.space-lg;
+                                spacing: Theme.space-sm;
+
+                                PillBones { }
+                                EpisodeRowBones { }
+                                EpisodeRowBones { }
+                            }
+                        }
                     }
                     if root.error != "": BodyText {
                         text: root.error;

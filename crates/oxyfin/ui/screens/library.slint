@@ -133,22 +133,12 @@ export component LibraryScreen inherits Rectangle {
 
             grid := PosterGrid {
                 cards: root.cards;
+                loading: root.loading || root.loading-more;
                 open(card) => {
                     root.open(card.id);
                 }
                 near-end => {
                     root.near-end();
-                }
-            }
-
-            if root.loading || root.loading-more: Rectangle {
-                y: parent.height - self.height;
-                height: Theme.space-3xl;
-                BodyText {
-                    text: @tr("Loading");
-                    color: Theme.text-secondary;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
                 }
             }
 

@@ -389,3 +389,15 @@ pub fn manifest_dir() -> PathBuf {
     std::env::var_os("CARGO_MANIFEST_DIR")
         .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)
 }
+
+/// Bones of the skeletons in the window, shown or still waiting.
+pub fn bones(window: &impl ComponentHandle) -> Vec<ElementHandle> {
+    ElementHandle::find_by_element_type_name(window, "Bone").collect()
+}
+
+/// Whether a skeleton in the window shows its bones.
+pub fn skeleton_shown(window: &impl ComponentHandle) -> bool {
+    bones(window)
+        .iter()
+        .any(|bone| bone.computed_opacity() > 0. && bone.size().width > 0.)
+}
