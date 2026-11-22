@@ -1,0 +1,129 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../icons.slint";
+
+// Round button of a row edge; it never takes the keyboard focus, Left and Right do its job.
+component RowArrow inherits Rectangle {
+    in property <bool> forward;
+    callback clicked();
+
+    accessible-role: button;
+    accessible-label: root.forward ? @tr("Scroll right") : @tr("Scroll left");
+    accessible-action-default => {
+        root.clicked();
+    }
+
+    width: Theme.row-arrow-size;
+    height: self.width;
+    border-radius: Theme.radius-full;
+    background: touch.has-hover ? Theme.bg-hover : Theme.bg-elevated;
+    border-width: Theme.border-thin;
+    border-color: Theme.border-default;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    Image {
+        width: 24px;
+        height: 24px;
+        source: root.forward ? Icons.chevron-right : Icons.chevron-left;
+        colorize: Theme.text-primary;
+    }
+}
+
+// Sideways scrolling of a row of cards: edge arrows on hover, the wheel, and Left and Right
+// to move the focus between the cards placed inside.
+export component RowScroller inherits Rectangle {
+    // Number of cards, and the one to focus next; each card binds `focus-wanted` to it.
+    in property <int> count;
+    out property <int> wanted: -1;
+    in property <length> spacing;
+    in property <length> padding-x: Theme.space-3xl;
+
+    property <int> current: -1;
+    property <length> min-x: min(0px, flick.width - flick.content-width);
+    property <bool> can-back: flick.content-x < -0.5px;
+    property <bool> can-forward: flick.content-x > root.min-x + 0.5px;
+
+    // Called by the card at `index` when it takes the keyboard focus.
+    public function card-focused(index: int) {
+        root.current = index;
+        root.wanted = -1;
+    }
+
+    function page(direction: int) {
+        flick.content-x = clamp(flick.content-x - direction * (flick.width - Theme.row-arrow-zone), root.min-x, 0px);
+    }
+
+    height: cards.preferred-height;
+
+    hover := TouchArea {
+        keys := FocusScope {
+            focus-on-click: false;
+            focus-on-tab-navigation: false;
+            key-pressed(event) => {
+                if event.modifiers.alt || event.modifiers.control || event.modifiers.meta || event.modifiers.shift {
+                    return reject;
+                }
+                if event.text == Key.RightArrow && root.current >= 0 && root.current < root.count - 1 {
+                    root.wanted = root.current + 1;
+                    return accept;
+                }
+                if event.text == Key.LeftArrow && root.current > 0 && root.current < root.count {
+                    root.wanted = root.current - 1;
+                    return accept;
+                }
+                reject
+            }
+
+            flick := Flickable {
+                content-width: cards.preferred-width;
+                content-height: self.height;
+                animate content-x {
+                    duration: Theme.row-scroll-duration;
+                    easing: ease-out;
+                }
+
+                cards := HorizontalLayout {
+                    padding-left: root.padding-x;
+                    padding-right: root.padding-x;
+                    spacing: root.spacing;
+                    alignment: start;
+
+                    @children
+                }
+            }
+
+            if hover.has-hover && root.can-back: Rectangle {
+                x: 0;
+                width: Theme.row-arrow-zone;
+                background: Theme.row-scrim-left;
+
+                RowArrow {
+                    x: Theme.space-lg;
+                    forward: false;
+                    clicked => {
+                        root.page(-1);
+                    }
+                }
+            }
+
+            if hover.has-hover && root.can-forward: Rectangle {
+                x: parent.width - self.width;
+                width: Theme.row-arrow-zone;
+                background: Theme.row-scrim-right;
+
+                RowArrow {
+                    x: parent.width - self.width - Theme.space-lg;
+                    forward: true;
+                    clicked => {
+                        root.page(1);
+                    }
+                }
+            }
+        }
+    }
+}

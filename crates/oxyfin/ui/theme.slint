@@ -25,6 +25,9 @@ export global Theme {
     out property <brush> landscape-placeholder: @linear-gradient(157deg, #59384d 14%, #1a1424 86%);
     out property <brush> sign-in-glow: @radial-gradient(circle, #12404f99 0%, #0b0d1200 70%);
     out property <color> card-shadow: #00000066;
+    // Fades the edges of a row under its scroll arrows.
+    out property <brush> row-scrim-left: @linear-gradient(90deg, #0b0d12f2 0%, #0b0d1200 100%);
+    out property <brush> row-scrim-right: @linear-gradient(90deg, #0b0d1200 0%, #0b0d12f2 100%);
     // Behind the video until its first frame.
     out property <color> video-backdrop: #000000;
     // Player overlays, readable over any video.
@@ -51,6 +54,10 @@ export global Theme {
     out property <length> space-2xl: 32px;
     out property <length> space-3xl: 48px;
 
+    // Scroll arrows of a row: the button, and the faded edge it sits on.
+    out property <length> row-arrow-size: 44px;
+    out property <length> row-arrow-zone: 96px;
+    out property <duration> row-scroll-duration: 300ms;
     out property <length> poster-width: 160px;
     out property <length> poster-height: 240px;
     out property <length> episode-thumb-width: 224px;

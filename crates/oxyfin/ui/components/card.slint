@@ -65,7 +65,16 @@ export component MediaCard {
     in property <length> artwork-height;
     in property <brush> placeholder;
     in property <color> subtitle-color: Theme.text-muted;
+    // Becoming true gives the card the keyboard focus.
+    in property <bool> focus-wanted;
     callback clicked();
+    callback focused();
+
+    changed focus-wanted => {
+        if root.focus-wanted {
+            focus.focus();
+        }
+    }
 
     accessible-role: button;
     accessible-label: title;
@@ -95,6 +104,9 @@ export component MediaCard {
         enabled: root.enabled;
         // Clicks go to the TouchArea: a focusing FocusScope on top would swallow the first one.
         focus-on-click: false;
+        focus-gained => {
+            root.focused();
+        }
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " {
                 root.activate();
