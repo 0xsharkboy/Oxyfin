@@ -1,11 +1,13 @@
-//! Settings > Diagnostics shows the size of the image cache, and "Clear cache" empties it.
+//! Settings > Diagnostics shows the size of the image cache, and "Clear cache" empties it;
+//! Escape still leaves the settings afterwards.
 
 mod common;
 
 use common::playback_settings::{WIDTH, open_settings_prepared};
 use common::{click, wait_role, wait_until};
 use i_slint_backend_testing::{AccessibleRole, ElementHandle};
-use oxyfin::AppWindow;
+use oxyfin::{AppWindow, Screen};
+use slint::platform::{Key, WindowEvent};
 use slint::{ComponentHandle, LogicalSize};
 
 fn shown(window: &AppWindow, text: &str) -> bool {
@@ -57,7 +59,20 @@ fn the_image_cache_size_is_shown_and_cleared() {
             if left != 0 {
                 return Err(format!("{left} files left in the image cache"));
             }
-            wait_until("Clear cache disabled", || !clear_enabled(window)).await
+            wait_until("Clear cache disabled", || !clear_enabled(window)).await?;
+
+            // The focus stays on the disabled button; Escape still leaves the settings.
+            let escape = slint::SharedString::from(Key::Escape);
+            window.window().dispatch_event(WindowEvent::KeyPressed {
+                text: escape.clone(),
+            });
+            window
+                .window()
+                .dispatch_event(WindowEvent::KeyReleased { text: escape });
+            wait_until("the settings closed", || {
+                window.get_screen() != Screen::Settings
+            })
+            .await
         },
     );
 }
