@@ -36,10 +36,20 @@ impl Session {
     /// Takes an item out of Continue Watching by clearing its resume position
     /// (`POST UserItems/{id}/UserData`), leaving its played state as it is.
     pub async fn hide_from_resume(&self, id: &ItemId) -> Result<UserItemDataDto> {
+        self.set_resume_position(id, Ticks(0)).await
+    }
+
+    /// Sets the resume position of an item (`POST UserItems/{id}/UserData`), leaving its played
+    /// and favorite state as they are; a position puts it back in Continue Watching.
+    pub async fn set_resume_position(
+        &self,
+        id: &ItemId,
+        position: Ticks,
+    ) -> Result<UserItemDataDto> {
         let route = format!("UserItems/{id}/UserData");
         let query = [("userId", self.user_id().to_string())];
         let body = UserDataUpdate {
-            playback_position_ticks: Ticks(0),
+            playback_position_ticks: position,
         };
         self.server()
             .http()

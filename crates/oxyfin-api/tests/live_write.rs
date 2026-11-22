@@ -224,6 +224,18 @@ async fn hide_from_resume_drops_the_resume_entry() {
     assert!(data.is_favorite, "the other user data is kept");
     assert!(!listed(&session.resume(50).await.expect("resume").items));
 
+    let position = Ticks::from_duration(Duration::from_secs(4));
+    let data = session
+        .set_resume_position(&movie.id, position)
+        .await
+        .expect("undo");
+    assert_eq!(data.playback_position_ticks, position);
+    assert!(
+        listed(&session.resume(50).await.expect("resume").items),
+        "the position puts it back"
+    );
+    session.hide_from_resume(&movie.id).await.expect("cleanup");
+
     session.set_played(&movie.id, false).await.expect("cleanup");
     session
         .set_favorite(&movie.id, false)

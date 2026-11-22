@@ -2,6 +2,7 @@ import { Theme, Message, Messages } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { BodyText } from "text.slint";
 import { IconButton } from "icon_button.slint";
+import { Button, ButtonStyle } from "button.slint";
 
 // The message shown by the banner; `dismissible` ones stay until closed with the cross.
 export struct NoticeData {
@@ -9,12 +10,15 @@ export struct NoticeData {
     message: Message,
     detail: string,
     dismissible: bool,
+    // Offers to undo what the message tells.
+    undo: bool,
 }
 
 // Discreet banner at the top of the content for errors that belong to no field or row.
 export component NoticeBanner inherits Rectangle {
     in property <NoticeData> notice;
     callback dismiss();
+    callback undo();
 
     accessible-role: groupbox;
     accessible-label: @tr("Notice");
@@ -30,7 +34,7 @@ export component NoticeBanner inherits Rectangle {
 
     layout := HorizontalLayout {
         padding-left: Theme.space-lg;
-        padding-right: root.notice.dismissible ? Theme.space-sm : Theme.space-lg;
+        padding-right: root.notice.dismissible || root.notice.undo ? Theme.space-sm : Theme.space-lg;
         padding-top: Theme.space-sm;
         padding-bottom: Theme.space-sm;
         spacing: Theme.space-md;
@@ -42,6 +46,17 @@ export component NoticeBanner inherits Rectangle {
             text: Messages.message-text(root.notice.message, root.notice.detail);
             wrap: word-wrap;
             vertical-alignment: center;
+        }
+        if root.notice.undo: VerticalLayout {
+            alignment: center;
+            Button {
+                label: @tr("Undo");
+                style: ButtonStyle.ghost;
+                focus-on-click: false;
+                clicked => {
+                    root.undo();
+                }
+            }
         }
         if root.notice.dismissible: VerticalLayout {
             alignment: center;

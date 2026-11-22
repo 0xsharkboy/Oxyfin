@@ -5,7 +5,7 @@ mod common;
 use common::{
     TEST_TOKEN, TEST_USER_ID, authorization_is, fixture, session, to_pascal_case, variants,
 };
-use oxyfin_api::{Error, ItemId};
+use oxyfin_api::{Error, ItemId, Ticks};
 use serde_json::Value;
 use wiremock::matchers::{body_json, header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -134,4 +134,28 @@ async fn hide_from_resume_reports_status_errors() {
         .await
         .unwrap_err();
     assert!(matches!(err, Error::Status { status: 403, .. }), "{err:?}");
+}
+
+#[tokio::test]
+async fn set_resume_position_sends_the_position() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/UserItems/abc/UserData"))
+        .and(authorization_is(Some(TEST_TOKEN)))
+        .and(query_param("userId", TEST_USER_ID))
+        .and(body_json(
+            serde_json::json!({ "PlaybackPositionTicks": 7_200_000_000_i64 }),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "Played": false, "IsFavorite": false, "PlaybackPositionTicks": 7_200_000_000_i64,
+            "PlayCount": 1
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let data = session(&mock)
+        .set_resume_position(&ItemId::from("abc"), Ticks(7_200_000_000))
+        .await
+        .unwrap();
+    assert_eq!(data.playback_position_ticks, Ticks(7_200_000_000));
 }

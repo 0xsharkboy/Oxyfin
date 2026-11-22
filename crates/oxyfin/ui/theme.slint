@@ -318,6 +318,7 @@ export enum Message {
     command-failed,
     playback-unavailable,
     subtitle-not-added,
+    removed-from-resume,
 }
 
 export global Messages {
@@ -398,6 +399,9 @@ export global Messages {
         }
         if m == Message.subtitle-not-added {
             return @tr("The server did not add this subtitle. Try another one.");
+        }
+        if m == Message.removed-from-resume {
+            return @tr("Removed from Continue Watching");
         }
         ""
     }

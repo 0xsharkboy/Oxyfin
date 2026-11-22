@@ -930,6 +930,15 @@ impl App {
     /// that need no action leave after [`NOTICE_DURATION`]; the others stay
     /// until the user closes them.
     pub(crate) fn notify(&self, message: Message) {
+        self.show_notice(message, false);
+    }
+
+    /// Shows `message` with an Undo button, which calls [`crate::menu::MenuController::undo`].
+    pub(crate) fn notify_undo(&self, message: Message) {
+        self.show_notice(message, true);
+    }
+
+    fn show_notice(&self, message: Message, undo: bool) {
         let Some(window) = self.window() else { return };
         let dismissible = is_persistent(message);
         window.set_notice(NoticeData {
@@ -937,6 +946,7 @@ impl App {
             message,
             detail: Default::default(),
             dismissible,
+            undo,
         });
         if dismissible {
             self.notice_timer.stop();
@@ -949,6 +959,18 @@ impl App {
                     hide_notice(&window);
                 }
             });
+    }
+
+    /// Undo was clicked on the notice: only the notice still showing can be undone.
+    fn undo_notice(self: &Rc<Self>) {
+        let Some(window) = self.window() else { return };
+        let notice = window.get_notice();
+        if !notice.visible || !notice.undo {
+            return;
+        }
+        self.notice_timer.stop();
+        hide_notice(&window);
+        self.menu.undo(self);
     }
 
     /// The user closed the notice; closing the file-token warning acknowledges it.
@@ -1131,6 +1153,7 @@ impl App {
             }
         });
         window.on_dismiss_notice(with(|app| app.dismiss_notice()));
+        window.on_undo_notice(with(|app| app.undo_notice()));
         window.on_library_retry(with(|app| app.library.retry(app)));
         window.on_search_retry(with(|app| app.search.retry(app)));
         window.on_search_retry_more(with(|app| app.search.retry_more(app)));

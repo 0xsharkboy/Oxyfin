@@ -1631,3 +1631,26 @@ async fn a_watched_season_plays_from_its_first_episode() {
         .unwrap();
     assert_eq!(episode.title, "Test Show S01E01");
 }
+
+#[tokio::test]
+async fn restore_resume_puts_the_position_back() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!("/UserItems/{MOVIE_ID}/UserData")))
+        .and(body_json(
+            json!({"PlaybackPositionTicks": 7_200_000_000_i64}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Played": false, "IsFavorite": false, "PlaybackPositionTicks": 7_200_000_000_i64,
+            "PlayCount": 1
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let state = catalog(&mock)
+        .restore_resume(&ItemId::from(MOVIE_ID), std::time::Duration::from_secs(720))
+        .await
+        .unwrap();
+    assert!(state.can_resume());
+    assert_eq!(state.position, std::time::Duration::from_secs(720));
+}

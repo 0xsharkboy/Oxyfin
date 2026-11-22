@@ -2,6 +2,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::Duration;
 
 use oxyfin_api::ItemId;
 use oxyfin_core::{CoreError, Episode, MenuTarget, PlayMode, UserState};
@@ -20,10 +21,18 @@ struct Opened {
     target: MenuTarget,
 }
 
+/// An item taken out of Continue Watching, with the position that puts it back.
+struct Removed {
+    generation: GenerationId,
+    id: ItemId,
+    position: Duration,
+}
+
 /// Answers the menu's requests with the rows of the item, then performs the row chosen.
 #[derive(Default)]
 pub(crate) struct MenuController {
     opened: RefCell<Option<Opened>>,
+    removed: RefCell<Option<Removed>>,
 }
 
 /// Rows of a menu, grouped: a line separates two groups.
@@ -180,7 +189,8 @@ pub(crate) fn rows(
 enum Change {
     Played(bool),
     Favorite(bool),
-    HideFromResume,
+    /// Takes the item out of Continue Watching; it was resumed at that position.
+    HideFromResume(Duration),
 }
 
 fn shown_series(app: &App) -> Option<String> {
@@ -289,7 +299,10 @@ impl MenuController {
             }
             MenuAction::AddFavorite => self.change(app, id, Change::Favorite(true)),
             MenuAction::RemoveFavorite => self.change(app, id, Change::Favorite(false)),
-            MenuAction::RemoveFromResume => self.change(app, id, Change::HideFromResume),
+            MenuAction::RemoveFromResume => {
+                let position = user_of(&target).position;
+                self.change(app, id, Change::HideFromResume(position));
+            }
             MenuAction::GoToSeries => {
                 if let MenuTarget::Episode(episode) = &target {
                     open_detail(app, Screen::Series(episode.series_id.as_str().to_owned()));
@@ -367,9 +380,53 @@ impl MenuController {
                 match change {
                     Change::Played(played) => catalog.set_played(&id, played).await,
                     Change::Favorite(favorite) => catalog.set_favorite(&id, favorite).await,
-                    Change::HideFromResume => catalog.hide_from_resume(&id).await,
+                    Change::HideFromResume(_) => catalog.hide_from_resume(&id).await,
                 }
             },
+            move |app, result| {
+                if app
+                    .services()
+                    .is_none_or(|(current, ..)| current != generation)
+                {
+                    return;
+                }
+                match result {
+                    Ok(user) => {
+                        if let Change::HideFromResume(position) = change {
+                            *app.menu.removed.borrow_mut() = Some(Removed {
+                                generation,
+                                id: item.clone(),
+                                position,
+                            });
+                            app.notify_undo(Message::RemovedFromResume);
+                        }
+                        app.item_changed(&item, &user);
+                    }
+                    Err(CoreError::SessionExpired) => app.dispatch(Msg::Expired(generation)),
+                    Err(error) => {
+                        log::warn!("cannot change the item: {error}");
+                        app.notify(core_error_message(&error).0);
+                    }
+                }
+            },
+        );
+    }
+
+    /// Puts the item last taken out of Continue Watching back at its position.
+    pub(crate) fn undo(&self, app: &Rc<App>) {
+        let Some(removed) = self.removed.borrow_mut().take() else {
+            return;
+        };
+        let Some((generation, catalog, _)) = app.services() else {
+            return;
+        };
+        if generation != removed.generation {
+            return;
+        }
+        let Removed { id, position, .. } = removed;
+        let item = id.clone();
+        app.spawn(
+            async move { catalog.restore_resume(&id, position).await },
             move |app, result| {
                 if app
                     .services()
@@ -381,12 +438,21 @@ impl MenuController {
                     Ok(user) => app.item_changed(&item, &user),
                     Err(CoreError::SessionExpired) => app.dispatch(Msg::Expired(generation)),
                     Err(error) => {
-                        log::warn!("cannot change the item: {error}");
+                        log::warn!("cannot put the item back in Continue Watching: {error}");
                         app.notify(core_error_message(&error).0);
                     }
                 }
             },
         );
+    }
+}
+
+fn user_of(target: &MenuTarget) -> &UserState {
+    match target {
+        MenuTarget::Movie(movie) => &movie.user,
+        MenuTarget::Episode(episode) => &episode.user,
+        MenuTarget::Series { summary, .. } => &summary.user,
+        MenuTarget::Season { season, .. } => &season.user,
     }
 }
 

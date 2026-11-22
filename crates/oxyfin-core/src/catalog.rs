@@ -7,7 +7,7 @@ use tokio::time::{Duration, Instant};
 
 use oxyfin_api::{
     BaseItemDto, BaseItemKind, ItemFields, ItemId, ItemSortBy, ItemsQuery, RemoteSubtitleInfo,
-    Session, SortOrder,
+    Session, SortOrder, Ticks,
 };
 
 use crate::models::{
@@ -549,6 +549,15 @@ impl Catalog {
     /// Takes an item out of Continue Watching, keeping its played and favorite state.
     pub async fn hide_from_resume(&self, id: &ItemId) -> Result<UserState> {
         let data = self.session.hide_from_resume(id).await?;
+        Ok(UserState::from_dto(Some(&data)))
+    }
+
+    /// Puts an item back in Continue Watching at `position`, undoing [`Self::hide_from_resume`].
+    pub async fn restore_resume(&self, id: &ItemId, position: Duration) -> Result<UserState> {
+        let data = self
+            .session
+            .set_resume_position(id, Ticks::from_duration(position))
+            .await?;
         Ok(UserState::from_dto(Some(&data)))
     }
 

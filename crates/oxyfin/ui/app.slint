@@ -298,6 +298,7 @@ export component AppWindow inherits Window {
 
     in property <NoticeData> notice;
     callback dismiss-notice();
+    callback undo-notice();
 
     title: "Oxyfin";
     background: transparent;
@@ -873,6 +874,9 @@ export component AppWindow inherits Window {
             notice: root.notice;
             dismiss => {
                 root.dismiss-notice();
+            }
+            undo => {
+                root.undo-notice();
             }
         }
 

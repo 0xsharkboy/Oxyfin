@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-22 17:30+0000\n"
+"POT-Creation-Date: 2026-11-22 19:21+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -67,83 +67,83 @@ msgctxt "ChapterMenu"
 msgid "CHAPTERS"
 msgstr ""
 
-#: crates/oxyfin/ui/components/context_menu.slint:161
-#: crates/oxyfin/ui/components/context_menu.slint:161
+#: crates/oxyfin/ui/components/context_menu.slint:214
+#: crates/oxyfin/ui/components/context_menu.slint:214
 msgctxt "ContextMenuOverlay"
 msgid "Play"
 msgstr ""
 
-#: crates/oxyfin/ui/components/context_menu.slint:164
+#: crates/oxyfin/ui/components/context_menu.slint:217
 msgctxt "ContextMenuOverlay"
 msgid "Resume from {}"
 msgstr ""
 
-#: crates/oxyfin/ui/components/context_menu.slint:167
+#: crates/oxyfin/ui/components/context_menu.slint:220
 msgctxt "ContextMenuOverlay"
 msgid "Play from the beginning"
 msgstr ""
 
-#: crates/oxyfin/ui/components/context_menu.slint:170
+#: crates/oxyfin/ui/components/context_menu.slint:223
 msgctxt "ContextMenuOverlay"
 msgid "Play {}"
 msgstr ""
 
-#: crates/oxyfin/ui/components/context_menu.slint:173
+#: crates/oxyfin/ui/components/context_menu.slint:226
 msgctxt "ContextMenuOverlay"
 msgid "Resume {}"
 msgstr ""
 
-#: crates/oxyfin/ui/components/context_menu.slint:176
+#: crates/oxyfin/ui/components/context_menu.slint:229
 msgctxt "ContextMenuOverlay"
 msgid "Play season"
 msgstr ""
 
-#: crates/oxyfin/ui/components/context_menu.slint:179
+#: crates/oxyfin/ui/components/context_menu.slint:232
 msgctxt "ContextMenuOverlay"
 msgid "Mark as watched"
 msgstr ""
 
-#: crates/oxyfin/ui/components/context_menu.slint:182
+#: crates/oxyfin/ui/components/context_menu.slint:235
 msgctxt "ContextMenuOverlay"
 msgid "Mark as unwatched"
 msgstr ""
 
-#: crates/oxyfin/ui/components/context_menu.slint:185
+#: crates/oxyfin/ui/components/context_menu.slint:238
 msgctxt "ContextMenuOverlay"
 msgid "Mark season as watched"
 msgstr ""
 
-#: crates/oxyfin/ui/components/context_menu.slint:188
+#: crates/oxyfin/ui/components/context_menu.slint:241
 msgctxt "ContextMenuOverlay"
 msgid "Mark season as unwatched"
 msgstr ""
 
-#: crates/oxyfin/ui/components/context_menu.slint:191
+#: crates/oxyfin/ui/components/context_menu.slint:244
 msgctxt "ContextMenuOverlay"
 msgid "Add to favorites"
 msgstr ""
 
-#: crates/oxyfin/ui/components/context_menu.slint:194
+#: crates/oxyfin/ui/components/context_menu.slint:247
 msgctxt "ContextMenuOverlay"
 msgid "Remove from favorites"
 msgstr ""
 
-#: crates/oxyfin/ui/components/context_menu.slint:197
+#: crates/oxyfin/ui/components/context_menu.slint:250
 msgctxt "ContextMenuOverlay"
 msgid "Go to series"
 msgstr ""
 
-#: crates/oxyfin/ui/components/context_menu.slint:200
+#: crates/oxyfin/ui/components/context_menu.slint:253
 msgctxt "ContextMenuOverlay"
 msgid "Go to season {}"
 msgstr ""
 
-#: crates/oxyfin/ui/components/context_menu.slint:203
+#: crates/oxyfin/ui/components/context_menu.slint:256
 msgctxt "ContextMenuOverlay"
 msgid "Details"
 msgstr ""
 
-#: crates/oxyfin/ui/components/context_menu.slint:205
+#: crates/oxyfin/ui/components/context_menu.slint:258
 msgctxt "ContextMenuOverlay"
 msgid "Remove from Continue Watching"
 msgstr ""
@@ -195,7 +195,7 @@ msgctxt "DetailHeader"
 msgid "Add to favorites"
 msgstr ""
 
-#: crates/oxyfin/ui/components/episode_row.slint:150
+#: crates/oxyfin/ui/components/episode_row.slint:166
 msgctxt "EpisodeRow"
 msgid "{} min"
 msgstr ""
@@ -277,12 +277,17 @@ msgctxt "NextEpisodeToast"
 msgid "Countdown"
 msgstr ""
 
-#: crates/oxyfin/ui/components/notice_banner.slint:20
+#: crates/oxyfin/ui/components/notice_banner.slint:24
 msgctxt "NoticeBanner"
 msgid "Notice"
 msgstr ""
 
-#: crates/oxyfin/ui/components/notice_banner.slint:50
+#: crates/oxyfin/ui/components/notice_banner.slint:53
+msgctxt "NoticeBanner"
+msgid "Undo"
+msgstr ""
+
+#: crates/oxyfin/ui/components/notice_banner.slint:65
 msgctxt "NoticeBanner"
 msgid "Close"
 msgstr ""
@@ -1237,37 +1242,37 @@ msgctxt "SubtitleSearchDialog"
 msgid "Other languages"
 msgstr ""
 
-#: crates/oxyfin/ui/components/top_bar.slint:23
+#: crates/oxyfin/ui/components/top_bar.slint:25
 msgctxt "TopBar"
 msgid "Navigation"
 msgstr ""
 
-#: crates/oxyfin/ui/components/top_bar.slint:62
+#: crates/oxyfin/ui/components/top_bar.slint:71
 msgctxt "TopBar"
 msgid "Home"
 msgstr ""
 
-#: crates/oxyfin/ui/components/top_bar.slint:69
+#: crates/oxyfin/ui/components/top_bar.slint:78
 msgctxt "TopBar"
 msgid "Movies"
 msgstr ""
 
-#: crates/oxyfin/ui/components/top_bar.slint:76
+#: crates/oxyfin/ui/components/top_bar.slint:85
 msgctxt "TopBar"
 msgid "Shows"
 msgstr ""
 
-#: crates/oxyfin/ui/components/top_bar.slint:83
+#: crates/oxyfin/ui/components/top_bar.slint:92
 msgctxt "TopBar"
 msgid "Favorites"
 msgstr ""
 
-#: crates/oxyfin/ui/components/top_bar.slint:98
+#: crates/oxyfin/ui/components/top_bar.slint:107
 msgctxt "TopBar"
 msgid "Search"
 msgstr ""
 
-#: crates/oxyfin/ui/components/top_bar.slint:109
+#: crates/oxyfin/ui/components/top_bar.slint:118
 msgctxt "TopBar"
 msgid "Settings"
 msgstr ""
@@ -1357,53 +1362,53 @@ msgctxt "TrackMenu"
 msgid "Find subtitles online…"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/collection.slint:55
+#: crates/oxyfin/ui/screens/collection.slint:56
 msgctxt "CollectionScreen"
 msgid "{n} movie"
 msgid_plural "{n} movies"
 msgstr[0] ""
 msgstr[1] ""
 
-#: crates/oxyfin/ui/screens/collection.slint:55
+#: crates/oxyfin/ui/screens/collection.slint:56
 msgctxt "CollectionScreen"
 msgid "{n} title"
 msgid_plural "{n} titles"
 msgstr[0] ""
 msgstr[1] ""
 
-#: crates/oxyfin/ui/screens/collection.slint:56
+#: crates/oxyfin/ui/screens/collection.slint:57
 msgctxt "CollectionScreen"
 msgid "{} to {}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/collection.slint:57
+#: crates/oxyfin/ui/screens/collection.slint:58
 msgctxt "CollectionScreen"
 msgid "{n} watched"
 msgid_plural "{n} watched"
 msgstr[0] ""
 msgstr[1] ""
 
-#: crates/oxyfin/ui/screens/collection.slint:62
+#: crates/oxyfin/ui/screens/collection.slint:63
 msgctxt "CollectionScreen"
 msgid "Collection"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/collection.slint:129
+#: crates/oxyfin/ui/screens/collection.slint:135
 msgctxt "CollectionScreen"
 msgid "Play {}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/collection.slint:143
+#: crates/oxyfin/ui/screens/collection.slint:149
 msgctxt "CollectionScreen"
 msgid "In this collection"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/collection.slint:162
+#: crates/oxyfin/ui/screens/collection.slint:168
 msgctxt "CollectionScreen"
 msgid "Back"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/collection.slint:193
+#: crates/oxyfin/ui/screens/collection.slint:199
 msgctxt "CollectionScreen"
 msgid "Retry"
 msgstr ""
@@ -1556,170 +1561,170 @@ msgctxt "LibraryScreen"
 msgid "Nothing here yet"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/movie.slint:59
+#: crates/oxyfin/ui/screens/movie.slint:60
 msgctxt "MovieScreen"
 msgid "Movie"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/movie.slint:139
+#: crates/oxyfin/ui/screens/movie.slint:145
 msgctxt "MovieScreen"
 msgid "Resume from {}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/movie.slint:146
+#: crates/oxyfin/ui/screens/movie.slint:152
 msgctxt "MovieScreen"
 msgid "Play"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/movie.slint:172
+#: crates/oxyfin/ui/screens/movie.slint:178
 msgctxt "MovieScreen"
 msgid "More like this"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/movie.slint:191
+#: crates/oxyfin/ui/screens/movie.slint:197
 msgctxt "MovieScreen"
 msgid "Back"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/movie.slint:209
+#: crates/oxyfin/ui/screens/movie.slint:215
 msgctxt "MovieScreen"
 msgid "Retry"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:59
+#: crates/oxyfin/ui/screens/person.slint:60
 msgctxt "PersonScreen"
 msgid "January"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:62
+#: crates/oxyfin/ui/screens/person.slint:63
 msgctxt "PersonScreen"
 msgid "February"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:65
+#: crates/oxyfin/ui/screens/person.slint:66
 msgctxt "PersonScreen"
 msgid "March"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:68
+#: crates/oxyfin/ui/screens/person.slint:69
 msgctxt "PersonScreen"
 msgid "April"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:71
+#: crates/oxyfin/ui/screens/person.slint:72
 msgctxt "PersonScreen"
 msgid "May"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:74
+#: crates/oxyfin/ui/screens/person.slint:75
 msgctxt "PersonScreen"
 msgid "June"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:77
+#: crates/oxyfin/ui/screens/person.slint:78
 msgctxt "PersonScreen"
 msgid "July"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:80
+#: crates/oxyfin/ui/screens/person.slint:81
 msgctxt "PersonScreen"
 msgid "August"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:83
+#: crates/oxyfin/ui/screens/person.slint:84
 msgctxt "PersonScreen"
 msgid "September"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:86
+#: crates/oxyfin/ui/screens/person.slint:87
 msgctxt "PersonScreen"
 msgid "October"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:89
+#: crates/oxyfin/ui/screens/person.slint:90
 msgctxt "PersonScreen"
 msgid "November"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:91
+#: crates/oxyfin/ui/screens/person.slint:92
 msgctxt "PersonScreen"
 msgid "December"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:96
+#: crates/oxyfin/ui/screens/person.slint:97
 msgctxt "PersonScreen"
 msgid "Born in {}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:99
+#: crates/oxyfin/ui/screens/person.slint:100
 msgctxt "First day of a month"
 msgid "{}"
 msgstr ""
 
 #. Day, month name and year of the birth date.
-#: crates/oxyfin/ui/screens/person.slint:101
+#: crates/oxyfin/ui/screens/person.slint:102
 msgctxt "PersonScreen"
 msgid "{0} {1} {2}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:102
+#: crates/oxyfin/ui/screens/person.slint:103
 msgctxt "PersonScreen"
 msgid "Born {}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:102
+#: crates/oxyfin/ui/screens/person.slint:103
 msgctxt "PersonScreen"
 msgid "Born {} in {}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:110
+#: crates/oxyfin/ui/screens/person.slint:111
 msgctxt "PersonScreen"
 msgid "{n} title in your library"
 msgid_plural "{n} titles in your library"
 msgstr[0] ""
 msgstr[1] ""
 
-#: crates/oxyfin/ui/screens/person.slint:122
+#: crates/oxyfin/ui/screens/person.slint:123
 msgctxt "PersonScreen"
 msgid "Person"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:170
+#: crates/oxyfin/ui/screens/person.slint:176
 msgctxt "PersonScreen"
 msgid "Back"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:227
+#: crates/oxyfin/ui/screens/person.slint:233
 msgctxt "PersonScreen"
 msgid "Read less"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:227
+#: crates/oxyfin/ui/screens/person.slint:233
 msgctxt "PersonScreen"
 msgid "Read more"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:248
+#: crates/oxyfin/ui/screens/person.slint:254
 msgctxt "PersonScreen"
 msgid "All ({})"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:255
+#: crates/oxyfin/ui/screens/person.slint:261
 msgctxt "PersonScreen"
 msgid "Movies ({})"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:262
+#: crates/oxyfin/ui/screens/person.slint:268
 msgctxt "PersonScreen"
 msgid "Shows ({})"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:277
+#: crates/oxyfin/ui/screens/person.slint:283
 msgctxt "PersonScreen"
 msgid "Titles"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/person.slint:313
+#: crates/oxyfin/ui/screens/person.slint:319
 msgctxt "PersonScreen"
 msgid "Retry"
 msgstr ""
@@ -1865,38 +1870,38 @@ msgctxt "SearchScreen"
 msgid "Search movies and shows"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:86
+#: crates/oxyfin/ui/screens/series.slint:87
 msgctxt "SeriesScreen"
 msgid "Series"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:162
+#: crates/oxyfin/ui/screens/series.slint:168
 msgctxt "SeriesScreen"
 msgid "Resume {}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:162
+#: crates/oxyfin/ui/screens/series.slint:168
 msgctxt "SeriesScreen"
 msgid "Play {}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:162
+#: crates/oxyfin/ui/screens/series.slint:168
 msgctxt "SeriesScreen"
 msgid "Play"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:232
-#: crates/oxyfin/ui/screens/series.slint:232
+#: crates/oxyfin/ui/screens/series.slint:238
+#: crates/oxyfin/ui/screens/series.slint:238
 msgctxt "SeriesScreen"
 msgid "Retry"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:256
+#: crates/oxyfin/ui/screens/series.slint:262
 msgctxt "SeriesScreen"
 msgid "More like this"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:275
+#: crates/oxyfin/ui/screens/series.slint:281
 msgctxt "SeriesScreen"
 msgid "Back"
 msgstr ""
@@ -2313,114 +2318,119 @@ msgctxt "StartingScreen"
 msgid "Starting"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:324
+#: crates/oxyfin/ui/theme.slint:327
 msgctxt "Messages"
 msgid "Series"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:329
+#: crates/oxyfin/ui/theme.slint:332
 msgctxt "Messages"
 msgid "Server found (Jellyfin {})"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:331
+#: crates/oxyfin/ui/theme.slint:334
 msgctxt "Messages"
 msgid "Server found: {} (Jellyfin {})"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:337
+#: crates/oxyfin/ui/theme.slint:340
 msgctxt "Messages"
 msgid "Chapter {}"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:344
+#: crates/oxyfin/ui/theme.slint:347
 msgctxt "Messages"
 msgid "{}{}.{} s"
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:350
+#: crates/oxyfin/ui/theme.slint:353
 msgctxt "Messages"
 msgid "Cannot reach the server. Check the address and your connection."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:353
+#: crates/oxyfin/ui/theme.slint:356
 msgctxt "Messages"
 msgid "This server address is not valid."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:356
+#: crates/oxyfin/ui/theme.slint:359
 msgctxt "Messages"
 msgid "This Jellyfin version is not supported (installed / required: {})."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:359
+#: crates/oxyfin/ui/theme.slint:362
 msgctxt "Messages"
 msgid "Incorrect username or password."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:362
+#: crates/oxyfin/ui/theme.slint:365
 msgctxt "Messages"
 msgid "Quick Connect is disabled on this server."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:365
+#: crates/oxyfin/ui/theme.slint:368
 msgctxt "Messages"
 msgid "The Quick Connect code has expired."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:368
+#: crates/oxyfin/ui/theme.slint:371
 msgctxt "Messages"
 msgid "The server ran into an error. Please try again later."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:371
+#: crates/oxyfin/ui/theme.slint:374
 msgctxt "Messages"
 msgid "The server sent a response Oxyfin does not understand."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:374
+#: crates/oxyfin/ui/theme.slint:377
 msgctxt "Messages"
 msgid "Oxyfin could not read or save its settings."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:377
+#: crates/oxyfin/ui/theme.slint:380
 msgctxt "Messages"
 msgid "Your session has expired. Please sign in again."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:380
+#: crates/oxyfin/ui/theme.slint:383
 msgctxt "Messages"
 msgid ""
 "The system keyring is unavailable, so your sign-in token is stored in a file "
 "only you can read."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:383
+#: crates/oxyfin/ui/theme.slint:386
 msgctxt "Messages"
 msgid "The server offers no version of this item that Oxyfin can play."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:386
+#: crates/oxyfin/ui/theme.slint:389
 msgctxt "Messages"
 msgid "There is nothing left to play in this series."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:389
+#: crates/oxyfin/ui/theme.slint:392
 msgctxt "Messages"
 msgid "This item could not be loaded."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:392
+#: crates/oxyfin/ui/theme.slint:395
 msgctxt "Messages"
 msgid "The player could not complete that action."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:395
+#: crates/oxyfin/ui/theme.slint:398
 msgctxt "Messages"
 msgid "Playback is not available in this build of Oxyfin."
 msgstr ""
 
-#: crates/oxyfin/ui/theme.slint:398
+#: crates/oxyfin/ui/theme.slint:401
 msgctxt "Messages"
 msgid "The server did not add this subtitle. Try another one."
+msgstr ""
+
+#: crates/oxyfin/ui/theme.slint:404
+msgctxt "Messages"
+msgid "Removed from Continue Watching"
 msgstr ""
