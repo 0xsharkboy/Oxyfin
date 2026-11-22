@@ -1,3 +1,4 @@
+import { HoverCard } from "hover_card.slint";
 import { Theme, CardData } from "../theme.slint";
 import { PosterCard } from "poster_card.slint";
 import { CardStatus } from "card.slint";
@@ -69,9 +70,11 @@ export component PosterGrid inherits Rectangle {
         changed content-y => {
             root.clamp-scroll();
             root.check-end();
+            HoverCard.scrolled();
         }
 
         for card[index] in root.cards: PosterCard {
+            hover-id: card.id;
             x: root.margin + mod(index, root.columns) * (Theme.poster-width + root.column-gap);
             y: floor(index / root.columns) * (root.row-height + root.gap);
             height: root.row-height;

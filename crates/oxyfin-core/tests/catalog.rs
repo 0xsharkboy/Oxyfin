@@ -1381,3 +1381,80 @@ async fn subtitle_download_errors_are_core_errors() {
         .unwrap_err();
     assert_eq!(error, CoreError::Server { status: 500 });
 }
+
+#[tokio::test]
+async fn item_brief_of_a_movie_has_genres_rating_and_overview() {
+    let mock = MockServer::start().await;
+    let mut movie = fixture("item_movie");
+    movie["CommunityRating"] = json!(8.4);
+    Mock::given(method("GET"))
+        .and(path(format!("/Items/{MOVIE_ID}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(movie))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let brief = catalog(&mock)
+        .item_brief(&ItemId::from(MOVIE_ID))
+        .await
+        .unwrap();
+    assert_eq!(brief.summary.kind, ItemKind::Movie);
+    assert_eq!(brief.summary.year, Some(2020));
+    assert_eq!(brief.genres, ["Drama", "Comedy"]);
+    assert_eq!(brief.community_rating, Some(8.4));
+    assert!(brief.summary.overview.is_some(), "the overview is kept");
+    assert_eq!(brief.season_count, None, "a movie has no seasons");
+}
+
+#[tokio::test]
+async fn item_brief_of_a_series_counts_its_seasons() {
+    let mock = MockServer::start().await;
+    let mut series = fixture("item_series");
+    series["ChildCount"] = json!(3);
+    mount(&mock, "GET", &format!("/Items/{SERIES_ID}"), series).await;
+    let brief = catalog(&mock)
+        .item_brief(&ItemId::from(SERIES_ID))
+        .await
+        .unwrap();
+    assert_eq!(brief.summary.kind, ItemKind::Series);
+    assert_eq!(brief.season_count, Some(3));
+    assert_eq!(brief.genres, ["Animation"]);
+}
+
+#[tokio::test]
+async fn item_brief_of_an_episode_names_its_series() {
+    let mock = MockServer::start().await;
+    let id = "0366bed6b6c97d8af5be151ffc258992";
+    mount(
+        &mock,
+        "GET",
+        &format!("/Items/{id}"),
+        fixture("item_episode"),
+    )
+    .await;
+    let brief = catalog(&mock).item_brief(&ItemId::from(id)).await.unwrap();
+    assert_eq!(brief.summary.kind, ItemKind::Episode);
+    assert_eq!(brief.summary.series_name.as_deref(), Some("Test Show"));
+    assert_eq!(brief.summary.episode_label.as_deref(), Some("S01E01"));
+    assert_eq!(brief.season_count, None);
+}
+
+#[tokio::test]
+async fn item_brief_of_a_bare_item_leaves_everything_out() {
+    let mock = MockServer::start().await;
+    mount(
+        &mock,
+        "GET",
+        &format!("/Items/{MOVIE_ID}"),
+        json!({"Id": MOVIE_ID, "Name": "Bare", "Type": "Movie", "Overview": "  "}),
+    )
+    .await;
+    let brief = catalog(&mock)
+        .item_brief(&ItemId::from(MOVIE_ID))
+        .await
+        .unwrap();
+    assert_eq!(brief.summary.title, "Bare");
+    assert!(brief.genres.is_empty());
+    assert_eq!(brief.community_rating, None);
+    assert_eq!(brief.summary.overview, None);
+    assert_eq!(brief.summary.duration, None);
+}

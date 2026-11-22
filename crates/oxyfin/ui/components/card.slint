@@ -2,6 +2,7 @@ import { Theme } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { ProgressBar } from "progress_bar.slint";
 import { BodyStrongText, CaptionText } from "text.slint";
+import { HoverCard } from "hover_card.slint";
 
 export enum CardStatus { default, in-progress, watched }
 
@@ -65,10 +66,43 @@ export component MediaCard {
     in property <length> artwork-height;
     in property <brush> placeholder;
     in property <color> subtitle-color: Theme.text-muted;
+    // Item the hover card tells about; empty for a card without one.
+    in property <string> hover-id;
     // Becoming true gives the card the keyboard focus.
     in property <bool> focus-wanted;
     callback clicked();
     callback focused();
+
+    // Number of the hover card showing for this card, 0 before the first one.
+    property <int> hover-showing;
+    property <bool> hover-shown: root.hover-showing > 0 && HoverCard.owner == root.hover-showing;
+    // Set by a click, until the pointer leaves.
+    property <bool> hover-dismissed;
+    property <bool> hovered: touch.has-hover;
+    property <int> scrolls: HoverCard.scrolls;
+
+    changed hovered => {
+        if root.hovered {
+            HoverCard.hide();
+        } else {
+            root.hover-dismissed = false;
+            HoverCard.hide-for(root.hover-showing);
+        }
+    }
+    // The delay starts again at every scroll, so nothing shows while the content moves.
+    changed scrolls => {
+        if hover-timer.running {
+            hover-timer.restart();
+        }
+    }
+
+    hover-timer := Timer {
+        interval: Theme.hover-delay;
+        running: root.hover-id != "" && root.enabled && root.hovered && !root.hover-dismissed && !root.hover-shown && !HoverCard.suppressed;
+        triggered => {
+            root.hover-showing = HoverCard.show(root.hover-id, root.status == CardStatus.in-progress ? root.progress : 0, root.absolute-position.x, root.absolute-position.y, root.width);
+        }
+    }
 
     changed focus-wanted => {
         if root.focus-wanted {
@@ -96,6 +130,8 @@ export component MediaCard {
         mouse-cursor: root.enabled ? pointer : default;
         clicked => {
             focus.focus();
+            root.hover-dismissed = true;
+            HoverCard.hide-for(root.hover-showing);
             root.activate();
         }
     }

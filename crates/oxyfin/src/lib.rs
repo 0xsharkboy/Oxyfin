@@ -9,6 +9,7 @@ pub mod app;
 mod back_cache;
 pub mod discord;
 pub mod generation;
+mod hover;
 pub mod images;
 #[cfg(target_os = "linux")]
 pub mod inhibit;

@@ -11,8 +11,8 @@ use oxyfin_api::{
 };
 
 use crate::models::{
-    CollectionDetails, CollectionLink, Episode, ItemKind, ItemSummary, Library, LibraryKind,
-    MovieDetails, Page, PersonDetails, PersonTitle, Season, SeriesDetails, UserState,
+    CollectionDetails, CollectionLink, Episode, ItemBrief, ItemKind, ItemSummary, Library,
+    LibraryKind, MovieDetails, Page, PersonDetails, PersonTitle, Season, SeriesDetails, UserState,
 };
 use crate::{CoreError, Result};
 
@@ -476,6 +476,13 @@ impl Catalog {
             .iter()
             .filter_map(|dto| PersonTitle::from_dto(dto, id))
             .collect())
+    }
+
+    /// Fetches what a hovered card shows about an item, in one request whatever its kind.
+    pub async fn item_brief(&self, id: &ItemId) -> Result<ItemBrief> {
+        let dto = self.session.item(id).await?;
+        ItemBrief::from_dto(&dto)
+            .ok_or_else(|| CoreError::Decode(format!("item {id} cannot be shown")))
     }
 
     /// Fetches the details of a movie.

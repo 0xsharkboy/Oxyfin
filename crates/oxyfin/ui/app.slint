@@ -19,6 +19,7 @@ import { PersonCardData, PersonJob } from "components/person_card.slint";
 import { CollectionScreen, CollectionData } from "screens/collection.slint";
 import { TopBarPage } from "components/top_bar.slint";
 import { NoticeBanner, NoticeData } from "components/notice_banner.slint";
+import { HoverCard, HoverCardOverlay, HoverDetails, HoverKind } from "components/hover_card.slint";
 
 export { CardData, ChapterRow, Message, Messages, NextUp, QualityRow, SeekPreview, SkipKind, Skipped, StatRow, StatSection, TrackRow, TrickplayGrid } from "theme.slint";
 export { StatsTitles }
@@ -27,6 +28,7 @@ export { FoundServer, ServerState, ServerStatus }
 export { HomeBanner, HomeRow, HomeRowKind, HomeTitles }
 export { BannerKind } from "components/banner.slint";
 export { NoticeData }
+export { HoverCard, HoverDetails, HoverKind }
 export { LibraryTitles }
 export { SearchTitles }
 export { MovieData }
@@ -290,6 +292,7 @@ export component AppWindow inherits Window {
     forward-focus: keys;
     // The screens that take no focus of their own leave it here, where F11 works.
     changed screen => {
+        HoverCard.hide();
         if root.screen == Screen.starting || root.screen == Screen.sign-in || root.screen == Screen.quick-connect || root.screen == Screen.home || root.screen == Screen.library {
             keys.focus();
         }
@@ -785,6 +788,8 @@ export component AppWindow inherits Window {
                 root.sign-out();
             }
         }
+
+        HoverCardOverlay { }
 
         // Below the top bar of the screens that have one.
         if root.notice.visible: NoticeBanner {

@@ -1,0 +1,244 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { ProgressBar } from "progress_bar.slint";
+import { BodyStrongText, BodyText, CaptionText } from "text.slint";
+
+export enum HoverKind { movie, series, episode, collection }
+
+// What the hover card tells about an item; Rust fills it once the item is known.
+export struct HoverDetails {
+    id: string,
+    // Series name for an episode.
+    title: string,
+    kind: HoverKind,
+    // Label such as `S01E02` and the episode title, for an episode.
+    episode-label: string,
+    episode-title: string,
+    year: int,
+    minutes: int,
+    seasons: int,
+    // Community rating such as "8.4"; empty when there is none.
+    rating: string,
+    // At most three.
+    genres: [string],
+    overview: string,
+    progress: float,
+    // Minutes left to watch, rounded up; 0 when not started.
+    remaining-minutes: int,
+}
+
+// The card the pointer rests on, shared by every card of every screen and the overlay that
+// draws the hover card above them.
+export global HoverCard {
+    // Card showing its hover card, 0 for none; each showing gets a new number.
+    out property <int> owner;
+    out property <string> id;
+    out property <float> progress;
+    // Artwork of the hovered card, in window coordinates.
+    out property <length> anchor-x;
+    out property <length> anchor-y;
+    out property <length> anchor-width;
+    // Grows at every scroll, so a hovered card waits for the scrolling to stop.
+    out property <int> scrolls;
+    // Keeps the hover card away while something covers the cards, such as a context menu.
+    in-out property <bool> suppressed;
+    in property <HoverDetails> details;
+    // Asks for the details of `id`; they come through `details`, now or later.
+    callback requested(id: string, progress: float);
+
+    property <int> shown;
+
+    // Shows the hover card of an item beside its artwork; returns the number of this showing.
+    public function show(id: string, progress: float, x: length, y: length, width: length) -> int {
+        self.shown += 1;
+        self.owner = self.shown;
+        self.id = id;
+        self.progress = progress;
+        self.anchor-x = x;
+        self.anchor-y = y;
+        self.anchor-width = width;
+        self.requested(id, progress);
+        self.owner
+    }
+
+    public function hide() {
+        self.owner = 0;
+    }
+
+    // Hides the hover card if it still belongs to `showing`.
+    public function hide-for(showing: int) {
+        if showing > 0 && self.owner == showing {
+            self.owner = 0;
+        }
+    }
+
+    public function scrolled() {
+        self.scrolls += 1;
+        self.owner = 0;
+    }
+}
+
+// Small outlined genre name.
+component GenreTag inherits Rectangle {
+    in property <string> label;
+
+    border-radius: Theme.radius-full;
+    border-width: Theme.border-thin;
+    border-color: Theme.border-default;
+
+    HorizontalLayout {
+        padding-left: Theme.space-sm;
+        padding-right: Theme.space-sm;
+        padding-top: Theme.space-2xs;
+        padding-bottom: Theme.space-2xs;
+
+        CaptionText {
+            text: root.label;
+            color: Theme.text-secondary;
+        }
+    }
+}
+
+// Covers the window and draws the hover card beside the hovered artwork, on its right or, when
+// the window is too narrow there, on its left. It takes no input, so the cards below keep it.
+export component HoverCardOverlay inherits Rectangle {
+    property <bool> shown: HoverCard.owner > 0 && !HoverCard.suppressed && HoverCard.details.id == HoverCard.id && HoverCard.id != "";
+    property <length> right-x: HoverCard.anchor-x + HoverCard.anchor-width + Theme.space-md;
+    property <bool> fits-right: self.right-x + Theme.hover-card-width <= self.width - Theme.space-lg;
+
+    pure function duration(minutes: int) -> string {
+        if minutes <= 0 {
+            return "";
+        }
+        minutes >= 60 ? @tr("{}h {}m", floor(minutes / 60), mod(minutes, 60)) : @tr("{}m", minutes)
+    }
+
+    pure function joined(first: string, second: string) -> string {
+        if first == "" {
+            return second;
+        }
+        second == "" ? first : "\{first} \u{b7} \{second}"
+    }
+
+    pure function kind-name(kind: HoverKind) -> string {
+        if kind == HoverKind.series {
+            return @tr("Series");
+        }
+        if kind == HoverKind.episode {
+            return @tr("Episode");
+        }
+        kind == HoverKind.collection ? @tr("Collection") : @tr("Movie")
+    }
+
+    // "S01E02 · Title · 24m" for an episode, "2020 · 1h 40m" or "2021 · 3 seasons" otherwise.
+    pure function lead(details: HoverDetails) -> string {
+        let episode = root.joined(details.episode-label, details.episode-title);
+        let year = details.year > 0 ? "\{details.year}" : "";
+        let seasons = details.seasons > 0 ? @tr("{n} season" | "{n} seasons" % details.seasons) : "";
+        root.joined(root.joined(root.joined(episode, year), root.duration(details.minutes)), seasons)
+    }
+
+    if root.shown: card := Rectangle {
+        property <HoverDetails> details: HoverCard.details;
+
+        x: root.fits-right ? root.right-x : HoverCard.anchor-x - Theme.space-md - self.width;
+        y: max(Theme.space-lg, min(HoverCard.anchor-y + Theme.space-sm, root.height - self.height - Theme.space-lg));
+        width: Theme.hover-card-width;
+        height: content.preferred-height;
+
+        accessible-role: groupbox;
+        accessible-label: self.details.title;
+
+        background: Theme.bg-elevated;
+        border-radius: Theme.radius-lg;
+        border-width: Theme.border-thin;
+        border-color: Theme.border-default;
+        drop-shadow-offset-y: Theme.hover-card-shadow-offset-y;
+        drop-shadow-blur: Theme.hover-card-shadow-blur;
+        drop-shadow-color: Theme.menu-shadow;
+
+        content := VerticalLayout {
+            padding-left: Theme.space-lg;
+            padding-right: Theme.space-lg;
+            padding-top: Theme.hover-card-padding-y;
+            padding-bottom: Theme.hover-card-padding-y;
+            spacing: Theme.space-sm;
+
+            BodyStrongText {
+                text: card.details.title;
+                overflow: elide;
+            }
+
+            HorizontalLayout {
+                alignment: start;
+
+                if root.lead(card.details) != "": CaptionText {
+                    text: "\{root.lead(card.details)} \u{b7} ";
+                    color: Theme.text-secondary;
+                    overflow: elide;
+                }
+                if card.details.rating != "": HorizontalLayout {
+                    spacing: Theme.space-xs;
+
+                    VerticalLayout {
+                        alignment: center;
+
+                        Image {
+                            accessible-role: none;
+                            source: Icons.star;
+                            width: 12px;
+                            height: 12px;
+                            colorize: Theme.text-secondary;
+                        }
+                    }
+                    CaptionText {
+                        text: "\{card.details.rating} \u{b7} ";
+                        color: Theme.text-secondary;
+                    }
+                }
+                CaptionText {
+                    text: root.kind-name(card.details.kind);
+                    color: Theme.text-secondary;
+                }
+            }
+
+            if card.details.genres.length > 0: HorizontalLayout {
+                spacing: Theme.hover-tag-gap;
+                alignment: start;
+
+                for genre in card.details.genres: GenreTag {
+                    label: genre;
+                }
+            }
+
+            if card.details.overview != "": BodyText {
+                text: card.details.overview;
+                color: Theme.text-secondary;
+                wrap: word-wrap;
+                overflow: elide;
+                // A wrapped text asks for all its lines as its minimum, which would win over the maximum.
+                min-height: 0px;
+                max-height: Theme.hover-overview-lines * Theme.body-line-height;
+            }
+
+            if card.details.progress > 0 && card.details.remaining-minutes > 0: HorizontalLayout {
+                spacing: Theme.space-sm;
+                alignment: start;
+
+                VerticalLayout {
+                    alignment: center;
+
+                    ProgressBar {
+                        width: Theme.hover-progress-width;
+                        value: card.details.progress;
+                        label: remaining.text;
+                    }
+                }
+                remaining := CaptionText {
+                    text: @tr("{} left", root.duration(card.details.remaining-minutes));
+                    color: Theme.accent;
+                }
+            }
+        }
+    }
+}

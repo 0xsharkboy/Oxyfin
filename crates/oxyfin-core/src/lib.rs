@@ -77,9 +77,9 @@ pub use images::{
 };
 pub use languages::{same_language, subtitle_language, subtitle_languages};
 pub use models::{
-    CollectionDetails, CollectionLink, Episode, ImageRef, ItemKind, ItemSummary, Library,
-    LibraryKind, MovieDetails, Page, Person, PersonDetails, PersonKind, PersonTitle, Season,
-    SeriesDetails, UserState,
+    CollectionDetails, CollectionLink, Episode, ImageRef, ItemBrief, ItemKind, ItemSummary,
+    Library, LibraryKind, MovieDetails, Page, Person, PersonDetails, PersonKind, PersonTitle,
+    Season, SeriesDetails, UserState,
 };
 pub use oxyfin_api::{DiscoveredServer, RemoteSubtitleInfo};
 pub use paths::Paths;

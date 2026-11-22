@@ -1,3 +1,4 @@
+import { HoverCard } from "../components/hover_card.slint";
 import { Theme, CardData } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { TopBar, TopBarPage } from "../components/top_bar.slint";
@@ -136,6 +137,9 @@ export component PersonScreen inherits Rectangle {
             height: parent.height;
             content-width: self.width;
             content-height: max(content.preferred-height, self.height);
+            changed viewport-y => {
+                HoverCard.scrolled();
+            }
 
             // The mouse back button, on whatever lies behind the content.
             TouchArea {
@@ -278,6 +282,7 @@ export component PersonScreen inherits Rectangle {
                     }
 
                     for card[index] in root.titles: PosterCard {
+                        hover-id: card.id;
                         x: mod(index, grid.columns) * (Theme.poster-width + root.grid-gap-x);
                         y: Theme.space-lg + floor(index / grid.columns) * (grid.row-height + root.grid-gap-y);
                         height: grid.row-height;

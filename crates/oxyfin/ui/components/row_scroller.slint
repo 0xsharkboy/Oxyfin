@@ -1,3 +1,4 @@
+import { HoverCard } from "hover_card.slint";
 import { Theme } from "../theme.slint";
 import { Icons } from "../icons.slint";
 
@@ -82,6 +83,9 @@ export component RowScroller inherits Rectangle {
             flick := Flickable {
                 content-width: cards.preferred-width;
                 content-height: self.height;
+                changed viewport-x => {
+                    HoverCard.scrolled();
+                }
                 animate content-x {
                     duration: Theme.row-scroll-duration;
                     easing: ease-out;

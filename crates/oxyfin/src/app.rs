@@ -92,6 +92,7 @@ pub struct App {
     pub(crate) person: PersonController,
     pub(crate) collection: CollectionController,
     pub(crate) series: SeriesController,
+    pub(crate) hover: crate::hover::HoverController,
 }
 
 impl App {
@@ -139,6 +140,7 @@ impl App {
             person: PersonController::default(),
             collection: CollectionController::default(),
             series: SeriesController::default(),
+            hover: Default::default(),
         });
         app.bind(window);
         app.restore();
@@ -1126,6 +1128,14 @@ impl App {
                 app.movie.play(&app, mode);
             }
         });
+        let this = self.this.clone();
+        window
+            .global::<crate::HoverCard>()
+            .on_requested(move |id, progress| {
+                if let Some(app) = this.upgrade() {
+                    app.hover.request(&app, &id, progress);
+                }
+            });
         let this = self.this.clone();
         window.on_open_item(move |id| {
             if let Some(app) = this.upgrade() {

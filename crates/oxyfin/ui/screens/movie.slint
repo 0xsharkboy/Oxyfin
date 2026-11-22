@@ -1,3 +1,4 @@
+import { HoverCard } from "../components/hover_card.slint";
 import { Theme, CardData } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { TopBar, TopBarPage } from "../components/top_bar.slint";
@@ -85,6 +86,9 @@ export component MovieScreen inherits Rectangle {
             height: parent.height;
             content-width: self.width;
             content-height: max(content.preferred-height, self.height);
+            changed viewport-y => {
+                HoverCard.scrolled();
+            }
 
             // The mouse back button, on whatever lies behind the content.
             TouchArea {

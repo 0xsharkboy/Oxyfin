@@ -40,6 +40,7 @@ export component PosterRow inherits Rectangle {
             spacing: root.card-spacing;
 
             for card[index] in root.items: PosterCard {
+                hover-id: card.id;
                 title: card.title;
                 subtitle: card.subtitle;
                 image: card.image;

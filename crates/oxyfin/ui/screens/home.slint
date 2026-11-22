@@ -1,3 +1,4 @@
+import { HoverCard } from "../components/hover_card.slint";
 import { Theme, CardData } from "../theme.slint";
 import { Banner, BannerKind } from "../components/banner.slint";
 import { TopBar, TopBarPage } from "../components/top_bar.slint";
@@ -108,6 +109,7 @@ component HomeRowView inherits Rectangle {
                     spacing: Theme.space-lg;
 
                     for card[index] in root.section.items: LandscapeCard {
+                        hover-id: card.id;
                         title: card.title;
                         subtitle: card.subtitle;
                         image: card.image;
@@ -170,6 +172,9 @@ export component HomeScreen inherits Rectangle {
     flick := Flickable {
         content-width: self.width;
         content-height: content.preferred-height;
+        changed viewport-y => {
+            HoverCard.scrolled();
+        }
 
         content := VerticalLayout {
             width: parent.width;

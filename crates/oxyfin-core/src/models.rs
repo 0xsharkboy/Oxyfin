@@ -389,6 +389,35 @@ impl PersonTitle {
     }
 }
 
+/// What a card shows about an item when it is hovered.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ItemBrief {
+    /// Summary, with the overview.
+    pub summary: ItemSummary,
+    /// Genre names.
+    pub genres: Vec<String>,
+    /// Average community rating, out of 10.
+    pub community_rating: Option<f32>,
+    /// Number of seasons of a series, when the server counted any.
+    pub season_count: Option<u32>,
+}
+
+impl ItemBrief {
+    /// Converts a DTO; returns `None` for kinds the UI does not display.
+    pub fn from_dto(dto: &BaseItemDto) -> Option<Self> {
+        let summary = ItemSummary::from_dto(dto)?;
+        let season_count = dto
+            .child_count
+            .filter(|count| summary.kind == ItemKind::Series && *count > 0);
+        Some(Self {
+            summary,
+            genres: dto.genres.clone(),
+            community_rating: dto.community_rating,
+            season_count,
+        })
+    }
+}
+
 /// Full description of a movie or a standalone video.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MovieDetails {
