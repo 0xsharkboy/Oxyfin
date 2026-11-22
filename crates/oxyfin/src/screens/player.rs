@@ -153,10 +153,10 @@ pub fn bind(window: &AppWindow, send: Rc<dyn Fn(PlaybackCommand)>) {
     let (to, weak) = (send, window.as_weak());
     window.on_player_command_step_volume(move |direction| {
         let Some(window) = weak.upgrade() else { return };
-        to(PlaybackCommand::SetVolume(step_volume(
-            window.get_player_volume().into(),
-            direction,
-        )));
+        let volume = step_volume(window.get_player_volume().into(), direction);
+        // Shown at once, so that the next step starts from it before the player reports it.
+        window.set_player_volume(volume as f32);
+        to(PlaybackCommand::SetVolume(volume));
     });
 
     let weak = window.as_weak();

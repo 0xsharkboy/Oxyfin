@@ -16,7 +16,7 @@ import { SubtitleSearch, SubtitleSearchDialog } from "../components/subtitle_sea
 
 export enum PlayerMenu { none, tracks, speed, chapters, subtitles }
 
-enum DelayKind { none, audio, subtitle }
+enum OsdKind { none, audio-delay, subtitle-delay, volume }
 
 // Video player. The window is transparent here so the video drawn under the interface shows.
 export component PlayerScreen inherits Rectangle {
@@ -103,8 +103,12 @@ export component PlayerScreen inherits Rectangle {
     property <PlayerMenu> menu: PlayerMenu.none;
     // A menu or the statistics show above the bar; one at a time.
     property <bool> menu-open: root.menu != PlayerMenu.none || root.stats-visible;
-    // The delay a shortcut changed, shown for a moment over the video.
-    property <DelayKind> osd: DelayKind.none;
+    // The delay a shortcut or the volume the wheel changed, shown for a moment over the video.
+    property <OsdKind> osd: OsdKind.none;
+    // Wheel scrolling not yet turned into volume steps.
+    property <length> wheel-delta;
+    // What one notch of a mouse wheel scrolls: one volume step.
+    property <length> wheel-notch: 60px;
     // A click on the video waits out the double-click interval of Slint before it toggles pause.
     property <bool> click-pending;
     // The pause indicator: whether it shows pause, whether it shows at all, and whether it fades.
@@ -126,8 +130,8 @@ export component PlayerScreen inherits Rectangle {
         }
     }
 
-    function step-delay(kind: DelayKind, direction: int) {
-        if kind == DelayKind.audio {
+    function step-delay(kind: OsdKind, direction: int) {
+        if kind == OsdKind.audio-delay {
             root.command-step-audio-delay(direction);
         } else {
             root.command-step-subtitle-delay(direction);
@@ -248,9 +252,9 @@ export component PlayerScreen inherits Rectangle {
 
     osd-timer := Timer {
         interval: 1.5s;
-        running: root.osd != DelayKind.none;
+        running: root.osd != OsdKind.none;
         triggered => {
-            root.osd = DelayKind.none;
+            root.osd = OsdKind.none;
         }
     }
 
@@ -309,6 +313,22 @@ export component PlayerScreen inherits Rectangle {
             }
             keys.focus();
         }
+        scroll-event(event) => {
+            if root.menu-open || !root.on-video(self.mouse-y) || event.delta-y == 0 {
+                return reject;
+            }
+            if (root.wheel-delta > 0 && event.delta-y < 0) || (root.wheel-delta < 0 && event.delta-y > 0) {
+                root.wheel-delta = 0;
+            }
+            root.wheel-delta += event.delta-y;
+            if abs(root.wheel-delta) >= root.wheel-notch {
+                root.command-step-volume(root.wheel-delta > 0 ? 1 : -1);
+                root.wheel-delta = 0;
+                root.osd = OsdKind.volume;
+                osd-timer.restart();
+            }
+            accept
+        }
         // Slint calls `clicked` first, so the pause of that click is still pending.
         double-clicked => {
             root.click-pending = false;
@@ -332,9 +352,9 @@ export component PlayerScreen inherits Rectangle {
                 // mpv default bindings: Ctrl with plus or minus for the audio delay.
                 if event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta {
                     if event.text == "+" || event.text == "=" {
-                        root.step-delay(DelayKind.audio, 1);
+                        root.step-delay(OsdKind.audio-delay, 1);
                     } else if event.text == "-" {
-                        root.step-delay(DelayKind.audio, -1);
+                        root.step-delay(OsdKind.audio-delay, -1);
                     } else {
                         return reject;
                     }
@@ -377,9 +397,9 @@ export component PlayerScreen inherits Rectangle {
                 } else if event.text == Key.PageDown {
                     root.command-step-chapter(1);
                 } else if event.text == "z" {
-                    root.step-delay(DelayKind.subtitle, -1);
+                    root.step-delay(OsdKind.subtitle-delay, -1);
                 } else if event.text == "Z" || event.text == "x" || event.text == "X" {
-                    root.step-delay(DelayKind.subtitle, 1);
+                    root.step-delay(OsdKind.subtitle-delay, 1);
                 } else if event.text == Key.Escape {
                     root.escape();
                 } else {
@@ -650,12 +670,12 @@ export component PlayerScreen inherits Rectangle {
                 }
             }
 
-            if root.osd != DelayKind.none: osd-pill := Rectangle {
-                property <int> value: root.osd == DelayKind.audio ? root.audio-delay : root.subtitle-delay;
-                property <string> name: root.osd == DelayKind.audio ? @tr("Audio delay") : @tr("Subtitle delay");
+            if root.osd != OsdKind.none: osd-pill := Rectangle {
+                property <string> name: root.osd == OsdKind.volume ? @tr("Volume") : root.osd == OsdKind.audio-delay ? @tr("Audio delay") : @tr("Subtitle delay");
+                property <string> value: root.osd == OsdKind.volume ? @tr("{}%", round(root.volume)) : Messages.delay-text(root.osd == OsdKind.audio-delay ? root.audio-delay : root.subtitle-delay);
 
                 accessible-role: text;
-                accessible-label: @tr("{}: {}", self.name, Messages.delay-text(self.value));
+                accessible-label: @tr("{}: {}", self.name, self.value);
                 x: (parent.width - self.width) / 2;
                 y: 2 * Theme.space-3xl;
                 width: osd-row.preferred-width;
@@ -680,7 +700,7 @@ export component PlayerScreen inherits Rectangle {
                     }
                     BodyStrongText {
                         accessible-role: none;
-                        text: Messages.delay-text(osd-pill.value);
+                        text: osd-pill.value;
                         vertical-alignment: center;
                     }
                 }
