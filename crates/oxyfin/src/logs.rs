@@ -176,7 +176,20 @@ fn value_after(bytes: &[u8], mut at: usize) -> Option<(usize, usize)> {
         return None;
     }
     at += 1;
-    skip(&mut at, b"\"' ");
+    skip(&mut at, b" ");
+    // The Debug output of an `Option`: `Some("value")`.
+    if bytes[at..].starts_with(b"some(") {
+        at += "some(".len();
+    }
+    if let Some(&quote @ (b'"' | b'\'')) = bytes.get(at) {
+        let start = at + 1;
+        let mut end = start;
+        while end < bytes.len() && bytes[end] != quote {
+            end += if bytes[end] == b'\\' { 2 } else { 1 };
+        }
+        let end = end.min(bytes.len());
+        return (end > start).then_some((start, end));
+    }
     let start = at;
     while at < bytes.len() && !b"&\"',;)} \t\r\n".contains(&bytes[at]) {
         at += 1;
@@ -322,7 +335,21 @@ mod tests {
                 r#"{"Username":"a","Pw":"<redacted>"}"#,
             ),
             (r#""AccessToken": "tok""#, r#""AccessToken": "<redacted>""#),
-            ("password=p4ss word", "password=<redacted> word"),
+            ("password=p4ss&next=1", "password=<redacted>&next=1"),
+            (
+                r#"password="p4ss word, more" user=a"#,
+                r#"password="<redacted>" user=a"#,
+            ),
+            (
+                r#"{"Pw":"a \"quoted\" pass","Username":"a"}"#,
+                r#"{"Pw":"<redacted>","Username":"a"}"#,
+            ),
+            ("token='it is, me' rest", "token='<redacted>' rest"),
+            (
+                r#"Credentials { password: Some("p4ss word"), user: "a" }"#,
+                r#"Credentials { password: Some("<redacted>"), user: "a" }"#,
+            ),
+            ("token: Some(abc), next", "token: Some(<redacted>), next"),
         ];
         for (line, expected) in cases {
             assert_eq!(scrub(line), expected, "{line}");
