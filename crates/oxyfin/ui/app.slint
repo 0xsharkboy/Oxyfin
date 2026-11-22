@@ -203,6 +203,10 @@ export component AppWindow inherits Window {
     in property <float> player-duration;
     in property <string> player-elapsed;
     in property <string> player-total;
+    // The time left, shown instead of the total when `player-time-remaining` is set.
+    in property <string> player-remaining;
+    in-out property <bool> player-time-remaining;
+    callback player-time-remaining-changed(remaining: bool);
     in property <bool> player-paused;
     in property <float> player-volume: 100;
     in property <bool> player-muted;
@@ -647,6 +651,11 @@ export component AppWindow inherits Window {
             duration: root.player-duration;
             elapsed: root.player-elapsed;
             total: root.player-total;
+            remaining: root.player-remaining;
+            time-remaining <=> root.player-time-remaining;
+            time-remaining-changed(remaining) => {
+                root.player-time-remaining-changed(remaining);
+            }
             paused: root.player-paused;
             volume: root.player-volume;
             muted: root.player-muted;

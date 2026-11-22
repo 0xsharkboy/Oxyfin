@@ -1033,6 +1033,15 @@ impl App {
                 app.set_start_fullscreen(on);
             }
         });
+        window.set_player_time_remaining(self.manager.time_remaining());
+        let this = self.this.clone();
+        window.on_player_time_remaining_changed(move |on| {
+            if let Some(app) = this.upgrade()
+                && let Err(error) = app.manager.set_time_remaining(on)
+            {
+                log::warn!("cannot save the time display: {error}");
+            }
+        });
         let this = self.this.clone();
         window.on_settings_discord_changed(move |on| {
             if let Some(app) = this.upgrade() {

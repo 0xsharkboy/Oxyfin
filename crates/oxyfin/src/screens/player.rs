@@ -82,8 +82,7 @@ pub fn bind(window: &AppWindow, send: Rc<dyn Fn(PlaybackCommand)>) {
     window.on_player_command_skip_segment(move || {
         if let Some(window) = weak.upgrade() {
             let seconds = window.get_player_skip_end();
-            window.set_player_position(seconds);
-            window.set_player_elapsed(clock(Duration::from_secs_f32(seconds)));
+            show_position(&window, Duration::from_secs_f32(seconds.max(0.0)));
             window.set_player_seek_pending(true);
             show_current_chapter(&window);
         }
@@ -93,8 +92,7 @@ pub fn bind(window: &AppWindow, send: Rc<dyn Fn(PlaybackCommand)>) {
     window.on_player_command_seek(move |seconds| {
         let seconds = seconds.max(0.0);
         if let Some(window) = weak.upgrade() {
-            window.set_player_position(seconds);
-            window.set_player_elapsed(clock(Duration::from_secs_f32(seconds)));
+            show_position(&window, Duration::from_secs_f32(seconds.max(0.0)));
             window.set_player_seek_pending(true);
             show_current_chapter(&window);
         }
@@ -276,8 +274,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             window.set_player_has_next(has_next);
             show_tracks(window, &audio, &subtitles);
             window.set_player_seek_pending(false);
-            window.set_player_duration(duration.map_or(0.0, |duration| duration.as_secs_f32()));
-            window.set_player_total(clock(duration.unwrap_or_default()));
+            show_duration(window, duration);
             show_marks(window);
             // The statistics were cleared on loading: ask at once rather than at the next tick.
             if window.get_player_stats_visible() {
@@ -287,8 +284,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
         PlaybackEvent::Position(position) => {
             window.set_player_reported_position(position.as_secs_f32());
             if !window.get_player_scrubbing() && !window.get_player_seek_pending() {
-                window.set_player_position(position.as_secs_f32());
-                window.set_player_elapsed(clock(position));
+                show_position(window, position);
                 show_current_chapter(window);
             }
         }
@@ -303,8 +299,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             window.set_player_seek_pending(false);
             if !window.get_player_scrubbing() {
                 let position = window.get_player_reported_position();
-                window.set_player_position(position);
-                window.set_player_elapsed(clock(Duration::from_secs_f32(position.max(0.0))));
+                show_position(window, Duration::from_secs_f32(position.max(0.0)));
                 show_current_chapter(window);
             }
         }
@@ -562,10 +557,28 @@ fn trickplay(grid: &TrickplayGrid) -> Option<Trickplay> {
 fn show_progress(window: &AppWindow, position: Duration, duration: Option<Duration>) {
     window.set_player_seek_pending(false);
     window.set_player_reported_position(position.as_secs_f32());
+    show_duration(window, duration);
+    show_position(window, position);
+}
+
+/// Shows `position` on the seek bar, as the time elapsed and in the time left.
+fn show_position(window: &AppWindow, position: Duration) {
     window.set_player_position(position.as_secs_f32());
     window.set_player_elapsed(clock(position));
+    show_remaining(window);
+}
+
+/// Shows the duration of the item, unknown as zero, and the time left.
+fn show_duration(window: &AppWindow, duration: Option<Duration>) {
     window.set_player_duration(duration.map_or(0.0, |duration| duration.as_secs_f32()));
     window.set_player_total(clock(duration.unwrap_or_default()));
+    show_remaining(window);
+}
+
+/// Shows the time left in whole seconds, so that it adds up with the elapsed time to the total.
+fn show_remaining(window: &AppWindow) {
+    let left = window.get_player_duration().floor() - window.get_player_position().max(0.0).floor();
+    window.set_player_remaining(clock(Duration::from_secs_f32(left.max(0.0))));
 }
 
 /// Takes away the notice of the last automatic skip, if shown.

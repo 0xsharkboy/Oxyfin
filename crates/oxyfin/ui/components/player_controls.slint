@@ -128,6 +128,8 @@ export component PlayerControls inherits Rectangle {
     in property <float> duration;
     in property <string> elapsed;
     in property <string> total;
+    in property <string> remaining;
+    in property <bool> time-remaining;
     in property <bool> paused;
     in property <bool> has-next;
     in property <float> volume;
@@ -157,6 +159,7 @@ export component PlayerControls inherits Rectangle {
     callback toggle-chapters();
     callback toggle-speed();
     callback toggle-stats();
+    callback toggle-time();
     callback toggle-fullscreen();
     callback seek-hovered(seconds: float);
 
@@ -246,9 +249,28 @@ export component PlayerControls inherits Rectangle {
                 }
             }
 
-            LabelText {
-                text: @tr("{} / {}", root.elapsed, root.total);
-                vertical-alignment: center;
+            time := Rectangle {
+                accessible-role: button;
+                accessible-label: @tr("Time display");
+                accessible-value: time-text.text;
+                accessible-action-default => {
+                    root.toggle-time();
+                }
+                width: time-text.preferred-width;
+
+                time-text := LabelText {
+                    accessible-role: none;
+                    height: parent.height;
+                    text: root.time-remaining ? @tr("{} / −{}", root.elapsed, root.remaining) : @tr("{} / {}", root.elapsed, root.total);
+                    vertical-alignment: center;
+                }
+
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.toggle-time();
+                    }
+                }
             }
 
             Rectangle {

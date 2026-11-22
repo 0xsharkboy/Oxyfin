@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-22 14:51+0000\n"
+"POT-Creation-Date: 2026-11-22 14:58+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -313,87 +313,97 @@ msgctxt "CastRow"
 msgid "Cast and crew"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:174
+#: crates/oxyfin/ui/components/player_controls.slint:177
 msgctxt "PlayerControls"
 msgid "Seek"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:202
+#: crates/oxyfin/ui/components/player_controls.slint:205
 msgctxt "PlayerControls"
 msgid "Previous"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:212
+#: crates/oxyfin/ui/components/player_controls.slint:215
 msgctxt "PlayerControls"
 msgid "Back 10 seconds"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:222
+#: crates/oxyfin/ui/components/player_controls.slint:225
 msgctxt "PlayerControls"
 msgid "Play"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:222
+#: crates/oxyfin/ui/components/player_controls.slint:225
 msgctxt "PlayerControls"
 msgid "Pause"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:232
+#: crates/oxyfin/ui/components/player_controls.slint:235
 msgctxt "PlayerControls"
 msgid "Forward 10 seconds"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:242
+#: crates/oxyfin/ui/components/player_controls.slint:245
 msgctxt "PlayerControls"
 msgid "Next"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:250
+#: crates/oxyfin/ui/components/player_controls.slint:254
+msgctxt "PlayerControls"
+msgid "Time display"
+msgstr ""
+
+#: crates/oxyfin/ui/components/player_controls.slint:264
+msgctxt "PlayerControls"
+msgid "{} / −{}"
+msgstr ""
+
+#: crates/oxyfin/ui/components/player_controls.slint:264
 msgctxt "PlayerControls"
 msgid "{} / {}"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:266
+#: crates/oxyfin/ui/components/player_controls.slint:288
 msgctxt "PlayerControls"
 msgid "Unmute"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:266
+#: crates/oxyfin/ui/components/player_controls.slint:288
 msgctxt "PlayerControls"
 msgid "Mute"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:279
+#: crates/oxyfin/ui/components/player_controls.slint:301
 msgctxt "PlayerControls"
 msgid "Volume"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:297
+#: crates/oxyfin/ui/components/player_controls.slint:319
 msgctxt "PlayerControls"
 msgid "Chapters"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:308
+#: crates/oxyfin/ui/components/player_controls.slint:330
 msgctxt "PlayerControls"
 msgid "Audio and subtitles"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:318
+#: crates/oxyfin/ui/components/player_controls.slint:340
 msgctxt "PlayerControls"
 msgid "Playback statistics"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:329
+#: crates/oxyfin/ui/components/player_controls.slint:351
 msgctxt "PlayerControls"
 msgid "Playback settings"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:340
+#: crates/oxyfin/ui/components/player_controls.slint:362
 msgctxt "PlayerControls"
 msgid "Exit fullscreen"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:340
+#: crates/oxyfin/ui/components/player_controls.slint:362
 msgctxt "PlayerControls"
 msgid "Fullscreen"
 msgstr ""
@@ -1529,57 +1539,57 @@ msgctxt "PersonScreen"
 msgid "Retry"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:224
+#: crates/oxyfin/ui/screens/player.slint:228
 msgctxt "PlayerScreen"
 msgid "Player"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:436
+#: crates/oxyfin/ui/screens/player.slint:440
 msgctxt "PlayerScreen"
 msgid "Back"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:620
+#: crates/oxyfin/ui/screens/player.slint:630
 msgctxt "PlayerScreen"
 msgid "Skip intro"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:620
+#: crates/oxyfin/ui/screens/player.slint:630
 msgctxt "PlayerScreen"
 msgid "Skip recap"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:620
+#: crates/oxyfin/ui/screens/player.slint:630
 msgctxt "PlayerScreen"
 msgid "Skip preview"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:620
+#: crates/oxyfin/ui/screens/player.slint:630
 msgctxt "PlayerScreen"
 msgid "Skip credits"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:645
+#: crates/oxyfin/ui/screens/player.slint:655
 msgctxt "PlayerScreen"
 msgid "Audio delay"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:645
+#: crates/oxyfin/ui/screens/player.slint:655
 msgctxt "PlayerScreen"
 msgid "Subtitle delay"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:648
+#: crates/oxyfin/ui/screens/player.slint:658
 msgctxt "PlayerScreen"
 msgid "{}: {}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:681
+#: crates/oxyfin/ui/screens/player.slint:691
 msgctxt "PlayerScreen"
 msgid "Paused"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:681
+#: crates/oxyfin/ui/screens/player.slint:691
 msgctxt "PlayerScreen"
 msgid "Playing"
 msgstr ""

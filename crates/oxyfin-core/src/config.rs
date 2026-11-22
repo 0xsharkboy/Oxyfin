@@ -59,6 +59,9 @@ pub struct Config {
     /// Whether Discord shows what plays.
     #[serde(default)]
     pub discord: bool,
+    /// Whether the player shows the time left rather than the total duration.
+    #[serde(default)]
+    pub time_remaining: bool,
 }
 
 fn storage<E: std::fmt::Display>(error: E) -> CoreError {
@@ -77,6 +80,7 @@ impl Config {
             start_fullscreen: false,
             playback: PlaybackPrefs::default(),
             discord: false,
+            time_remaining: false,
         }
     }
 
@@ -232,6 +236,23 @@ mod tests {
         )
         .unwrap();
         assert!(!Config::load_or_create(&paths).unwrap().discord);
+    }
+
+    #[test]
+    fn time_remaining_round_trips_and_defaults_to_off() {
+        let (_dir, paths) = temp();
+        let mut config = Config::load_or_create(&paths).unwrap();
+        assert!(!config.time_remaining);
+        config.time_remaining = true;
+        config.save(&paths).unwrap();
+        assert!(Config::load_or_create(&paths).unwrap().time_remaining);
+
+        fs::write(
+            paths.config_dir.join("config.json"),
+            r#"{"device_id":"abc"}"#,
+        )
+        .unwrap();
+        assert!(!Config::load_or_create(&paths).unwrap().time_remaining);
     }
 
     #[test]

@@ -180,6 +180,16 @@ impl SessionManager {
         self.update(|config| config.discord = on)
     }
 
+    /// Returns whether the player shows the time left, as last saved.
+    pub fn time_remaining(&self) -> bool {
+        self.config().time_remaining
+    }
+
+    /// Saves whether the player shows the time left. The saved choice is unchanged on failure.
+    pub fn set_time_remaining(&self, on: bool) -> Result<()> {
+        self.update(|config| config.time_remaining = on)
+    }
+
     /// Returns the playback choices, as last saved.
     pub fn playback_prefs(&self) -> PlaybackPrefs {
         self.config().playback

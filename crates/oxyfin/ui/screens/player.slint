@@ -31,6 +31,9 @@ export component PlayerScreen inherits Rectangle {
     in property <float> duration;
     in property <string> elapsed;
     in property <string> total;
+    in property <string> remaining;
+    // Whether the time shows what is left rather than the total; a click on it switches.
+    in-out property <bool> time-remaining;
     in property <bool> paused;
     in property <float> volume;
     in property <bool> muted;
@@ -95,6 +98,7 @@ export component PlayerScreen inherits Rectangle {
     callback command-stats();
     // The pointer hovers or drags the seek bar at `seconds`: the preview should show that time.
     callback preview-requested(seconds: float);
+    callback time-remaining-changed(remaining: bool);
 
     property <PlayerMenu> menu: PlayerMenu.none;
     // A menu or the statistics show above the bar; one at a time.
@@ -465,6 +469,8 @@ export component PlayerScreen inherits Rectangle {
                 duration: root.duration;
                 elapsed: root.elapsed;
                 total: root.total;
+                remaining: root.remaining;
+                time-remaining: root.time-remaining;
                 paused: root.paused;
                 has-next: root.has-next;
                 volume: root.volume;
@@ -512,6 +518,10 @@ export component PlayerScreen inherits Rectangle {
                 }
                 toggle-stats => {
                     root.toggle-stats();
+                }
+                toggle-time => {
+                    root.time-remaining = !root.time-remaining;
+                    root.time-remaining-changed(root.time-remaining);
                 }
                 toggle-fullscreen => {
                     root.toggle-fullscreen();
