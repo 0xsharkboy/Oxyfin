@@ -209,6 +209,9 @@ export component CollectionScreen inherits Rectangle {
     }
 
     top-bar := TopBar {
+        back-pressed => {
+            root.back();
+        }
         scrolled-by: -flick.content-y;
         y: 0;
         height: self.preferred-height;

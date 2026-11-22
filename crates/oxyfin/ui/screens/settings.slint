@@ -577,6 +577,9 @@ export component SettingsScreen inherits Rectangle {
         }
 
         top-bar := TopBar {
+            back-pressed => {
+                root.back();
+            }
             y: 0;
             height: self.preferred-height;
             current: TopBarPage.none;

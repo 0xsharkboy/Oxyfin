@@ -18,6 +18,8 @@ export component TopBar inherits Rectangle {
     callback favorites-clicked();
     callback search-clicked();
     callback settings-clicked();
+    // The mouse back button was pressed over the bar.
+    callback back-pressed();
 
     accessible-role: tab-list;
     accessible-label: @tr("Navigation");
@@ -29,8 +31,15 @@ export component TopBar inherits Rectangle {
         opacity: clamp(root.scrolled-by / root.height, 0, 1);
     }
 
-    // Keeps the pointer from the cards scrolled under the bar.
-    TouchArea { }
+    // Keeps the pointer from the cards scrolled under the bar, and goes back with the mouse back
+    // button as the page does.
+    TouchArea {
+        pointer-event(event) => {
+            if event.button == PointerEventButton.back && event.kind == PointerEventKind.up {
+                root.back-pressed();
+            }
+        }
+    }
 
     HorizontalLayout {
         padding-top: Theme.space-sm;
