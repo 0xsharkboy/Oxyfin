@@ -31,6 +31,13 @@ export struct MenuEntry {
     divider-before: bool,
 }
 
+// Whether a key event opens the context menu: Shift+F10 or the Menu key.
+export global MenuKeys {
+    public pure function opens(event: KeyEvent) -> bool {
+        (event.text == Key.F10 && event.modifiers.shift) || event.text == Key.Menu
+    }
+}
+
 // The menu of the item a card, an episode row or a season pill was right-clicked on, shared by
 // every screen and the overlay that draws it.
 export global ContextMenu {
@@ -49,6 +56,17 @@ export global ContextMenu {
     in property <string> title;
     in property <string> subtitle;
     in property <[MenuEntry]> entries;
+    // Row under the pointer or picked with the arrows, -1 for none.
+    in-out property <int> highlighted: -1;
+    // Item whose element takes the focus back after a row chosen from the keyboard, also when
+    // the action rebuilds its row; empty for none.
+    in-out property <string> focus-id;
+    // While `focus-id` is set, the window asks with `focus-check` and the element holding the
+    // focus answers with `focus-answer`; no answer means the element is gone.
+    in-out property <int> focus-check;
+    in-out property <int> focus-answer;
+    // Grows when the element to focus is gone, so the screen takes the focus back.
+    out property <int> focus-lost;
     // Asks for the entries of item `id`.
     callback requested(serial: int, id: string, from-resume: bool);
     callback chosen(serial: int, action: MenuAction);
@@ -62,6 +80,7 @@ export global ContextMenu {
         self.anchor-x = x;
         self.anchor-y = y;
         self.by-keyboard = by-keyboard;
+        self.focus-id = "";
         HoverCard.suppressed = true;
         self.requested(self.serial, id, from-resume);
         self.serial
@@ -74,17 +93,47 @@ export global ContextMenu {
         }
     }
 
+    function step(by: int) {
+        let count = self.entries.length;
+        if count > 0 {
+            self.highlighted = self.highlighted < 0 ? (by > 0 ? 0 : count - 1) : mod(self.highlighted + by + count, count);
+        }
+    }
+
+    // Handles a key pressed while the menu is open. The window calls it before the focused
+    // element sees the key, so the focus never moves to the menu and stays usable once it closes.
+    public function key(event: KeyEvent) {
+        let count = self.entries.length;
+        if event.text == Key.Escape || MenuKeys.opens(event) {
+            self.close();
+        } else if self.ready-serial != self.serial {
+        } else if event.text == Key.DownArrow || (event.text == Key.Tab && !event.modifiers.shift) {
+            self.step(1);
+        } else if event.text == Key.UpArrow || event.text == Key.Backtab || (event.text == Key.Tab && event.modifiers.shift) {
+            self.step(-1);
+        } else if event.text == Key.Home {
+            self.highlighted = 0;
+        } else if event.text == Key.End {
+            self.highlighted = count - 1;
+        } else if (event.text == Key.Return || event.text == " ") && self.highlighted >= 0 && self.highlighted < count {
+            self.choose(self.entries[self.highlighted].action);
+        }
+    }
+
     public function choose(action: MenuAction) {
         let serial = self.serial;
+        if self.by-keyboard {
+            self.focus-id = self.id;
+            self.focus-answer = self.focus-check;
+        }
         self.close();
         self.chosen(serial, action);
     }
-}
 
-// Whether a key event opens the context menu: Shift+F10 or the Menu key.
-export global MenuKeys {
-    public pure function opens(event: KeyEvent) -> bool {
-        (event.text == Key.F10 && event.modifiers.shift) || event.text == Key.Menu
+    // The element to focus is gone: nothing waits for it any more.
+    public function focus-gone() {
+        self.focus-id = "";
+        self.focus-lost += 1;
     }
 }
 
@@ -148,13 +197,10 @@ component MenuRow inherits Rectangle {
     }
 }
 
-// Covers the window while the context menu is open: a press outside the menu, a scroll or
-// Escape closes it, and the arrows, Return and Space choose a row.
+// Covers the window while the context menu is open: a press outside the menu or a scroll closes
+// it. Keys reach the menu through `ContextMenu.key`, which the window calls.
 export component ContextMenuOverlay inherits Rectangle {
     property <bool> ready: ContextMenu.open && ContextMenu.ready-serial == ContextMenu.serial;
-    // Row under the pointer or picked with the arrows, -1 for none.
-    property <int> highlighted: -1;
-    property <int> count: ContextMenu.entries.length;
 
     pure function label(entry: MenuEntry) -> string {
         if entry.action == MenuAction.play {
@@ -233,14 +279,8 @@ export component ContextMenuOverlay inherits Rectangle {
         Icons.play
     }
 
-    function step(by: int) {
-        if root.count > 0 {
-            root.highlighted = root.highlighted < 0 ? (by > 0 ? 0 : root.count - 1) : mod(root.highlighted + by + root.count, root.count);
-        }
-    }
-
     changed ready => {
-        root.highlighted = root.ready && ContextMenu.by-keyboard ? 0 : -1;
+        ContextMenu.highlighted = root.ready && ContextMenu.by-keyboard ? 0 : -1;
     }
 
     if ContextMenu.open: Rectangle {
@@ -252,30 +292,6 @@ export component ContextMenuOverlay inherits Rectangle {
             }
             scroll-event(event) => {
                 ContextMenu.close();
-                accept
-            }
-        }
-
-        FocusScope {
-            init => {
-                self.focus();
-            }
-            key-pressed(event) => {
-                if event.text == Key.Escape || MenuKeys.opens(event) {
-                    ContextMenu.close();
-                } else if !root.ready {
-                } else if event.text == Key.DownArrow || (event.text == Key.Tab && !event.modifiers.shift) {
-                    root.step(1);
-                } else if event.text == Key.UpArrow || event.text == Key.Backtab || (event.text == Key.Tab && event.modifiers.shift) {
-                    root.step(-1);
-                } else if event.text == Key.Home {
-                    root.highlighted = 0;
-                } else if event.text == Key.End {
-                    root.highlighted = root.count - 1;
-                } else if (event.text == Key.Return || event.text == " ") && root.highlighted >= 0 && root.highlighted < root.count {
-                    ContextMenu.choose(ContextMenu.entries[root.highlighted].action);
-                }
-                // Keys never reach the screen below while the menu is open.
                 accept
             }
         }
@@ -333,9 +349,9 @@ export component ContextMenuOverlay inherits Rectangle {
                     MenuRow {
                         icon: root.icon(entry.action);
                         label: root.label(entry);
-                        highlighted: index == root.highlighted;
+                        highlighted: index == ContextMenu.highlighted;
                         hovered => {
-                            root.highlighted = index;
+                            ContextMenu.highlighted = index;
                         }
                         activated => {
                             ContextMenu.choose(entry.action);

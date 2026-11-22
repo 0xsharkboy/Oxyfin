@@ -1,4 +1,5 @@
 import { HoverCard } from "../components/hover_card.slint";
+import { ContextMenu } from "../components/context_menu.slint";
 import { Theme, CardData } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { TopBar, TopBarPage } from "../components/top_bar.slint";
@@ -63,6 +64,11 @@ export component CollectionScreen inherits Rectangle {
 
     background: Theme.bg-base;
     forward-focus: keys;
+    // The element given the focus back after a menu row is gone: the page takes the keys.
+    property <int> focus-lost: ContextMenu.focus-lost;
+    changed focus-lost => {
+        keys.focus();
+    }
 
     // Another box set may replace this one without a new page, and the clicked card took the focus.
     changed loaded => {

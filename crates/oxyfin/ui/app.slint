@@ -310,6 +310,7 @@ export component AppWindow inherits Window {
     changed screen => {
         HoverCard.hide();
         ContextMenu.close();
+        ContextMenu.focus-id = "";
         Shortcuts.close();
         if root.screen == Screen.starting || root.screen == Screen.sign-in || root.screen == Screen.quick-connect || root.screen == Screen.home || root.screen == Screen.library {
             keys.focus();
@@ -331,6 +332,11 @@ export component AppWindow inherits Window {
                 }
                 return accept;
             }
+            // The menu never takes the focus, so the focused element keeps it once the menu closes.
+            if ContextMenu.open {
+                ContextMenu.key(event);
+                return accept;
+            }
             reject
         }
         // Not captured: a text field keeps the `?` typed in it.
@@ -340,6 +346,21 @@ export component AppWindow inherits Window {
                 return accept;
             }
             reject
+        }
+
+        // Once the element given the focus back after a menu row is gone, such as a card taken
+        // out of its row, the focus comes back here and to the screen: keys keep working.
+        Timer {
+            interval: Theme.focus-check-interval;
+            running: ContextMenu.focus-id != "";
+            triggered => {
+                if ContextMenu.focus-answer != ContextMenu.focus-check {
+                    keys.focus();
+                    ContextMenu.focus-gone();
+                } else {
+                    ContextMenu.focus-check += 1;
+                }
+            }
         }
 
         // The video is drawn under the interface, so the player screen leaves the window transparent.

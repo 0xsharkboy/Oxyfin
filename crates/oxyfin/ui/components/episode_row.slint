@@ -20,12 +20,18 @@ export component EpisodeRow inherits Rectangle {
     in property <string> menu-id;
     callback clicked();
 
-    // Opening of the context menu this element asked for, 0 for none.
-    property <int> menu-opening;
-    property <bool> menu-open: ContextMenu.open;
+    // Takes the focus back after a row of its menu chosen from the keyboard, also once rebuilt.
+    property <bool> focus-return: root.menu-id != "" && ContextMenu.focus-id == root.menu-id;
+    // Answers the window while it holds that focus.
+    property <int> focus-check: focus.has-focus && root.focus-return ? ContextMenu.focus-check : -1;
 
-    changed menu-open => {
-        if !root.menu-open && root.menu-opening == ContextMenu.serial && ContextMenu.by-keyboard {
+    changed focus-check => {
+        if root.focus-check >= 0 {
+            ContextMenu.focus-answer = root.focus-check;
+        }
+    }
+    init => {
+        if root.focus-return {
             focus.focus();
         }
     }
@@ -50,7 +56,7 @@ export component EpisodeRow inherits Rectangle {
         mouse-cursor: pointer;
         pointer-event(event) => {
             if event.button == PointerEventButton.right && event.kind == PointerEventKind.down && root.menu-id != "" {
-                root.menu-opening = ContextMenu.show(root.menu-id, false, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y, false);
+                ContextMenu.show(root.menu-id, false, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y, false);
             }
         }
         clicked => {
@@ -62,13 +68,23 @@ export component EpisodeRow inherits Rectangle {
     focus := FocusScope {
         // Clicks go to the TouchArea: a focusing FocusScope on top would swallow the first one.
         focus-on-click: false;
+        focus-gained => {
+            if !root.focus-return {
+                ContextMenu.focus-id = "";
+            }
+        }
+        focus-lost => {
+            if root.focus-return {
+                ContextMenu.focus-id = "";
+            }
+        }
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " {
                 root.activate();
                 return accept;
             }
             if MenuKeys.opens(event) && root.menu-id != "" {
-                root.menu-opening = ContextMenu.show(root.menu-id, false, root.absolute-position.x + Theme.space-lg, root.absolute-position.y + Theme.space-lg, true);
+                ContextMenu.show(root.menu-id, false, root.absolute-position.x + Theme.space-lg, root.absolute-position.y + Theme.space-lg, true);
                 return accept;
             }
             reject

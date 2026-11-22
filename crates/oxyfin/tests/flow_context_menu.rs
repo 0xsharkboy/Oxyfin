@@ -31,15 +31,27 @@ mod page {
 
             preferred-width: 1000px;
             preferred-height: 600px;
+            forward-focus: keys;
 
-            VerticalLayout {
-                alignment: start;
-                padding-top: Theme.space-lg;
+            // As the app window does: the open menu takes the keys before the focused card.
+            keys := FocusScope {
+                capture-key-pressed(event) => {
+                    if ContextMenu.open {
+                        ContextMenu.key(event);
+                        return accept;
+                    }
+                    reject
+                }
 
-                PosterRow {
-                    title: "Row";
-                    items: root.cards;
-                    clicked(id) => { root.opened(id); }
+                VerticalLayout {
+                    alignment: start;
+                    padding-top: Theme.space-lg;
+
+                    PosterRow {
+                        title: "Row";
+                        items: root.cards;
+                        clicked(id) => { root.opened(id); }
+                    }
                 }
             }
 
