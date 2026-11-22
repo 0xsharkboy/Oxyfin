@@ -21,6 +21,7 @@ import { TopBarPage } from "components/top_bar.slint";
 import { NoticeBanner, NoticeData } from "components/notice_banner.slint";
 import { HoverCard, HoverCardOverlay, HoverDetails, HoverKind } from "components/hover_card.slint";
 import { ContextMenu, ContextMenuOverlay, MenuAction, MenuEntry } from "components/context_menu.slint";
+import { Shortcut, ShortcutKey, Shortcuts, ShortcutsOverlay } from "components/shortcuts_overlay.slint";
 
 export { CardData, ChapterRow, Message, Messages, NextUp, QualityRow, SeekPreview, SkipKind, Skipped, StatRow, StatSection, TrackRow, TrickplayGrid } from "theme.slint";
 export { StatsTitles }
@@ -31,6 +32,7 @@ export { BannerKind } from "components/banner.slint";
 export { NoticeData }
 export { HoverCard, HoverDetails, HoverKind }
 export { ContextMenu, MenuAction, MenuEntry }
+export { Shortcut, ShortcutKey, Shortcuts }
 export { LibraryTitles }
 export { SearchTitles }
 export { MovieData }
@@ -303,6 +305,7 @@ export component AppWindow inherits Window {
     changed screen => {
         HoverCard.hide();
         ContextMenu.close();
+        Shortcuts.close();
         if root.screen == Screen.starting || root.screen == Screen.sign-in || root.screen == Screen.quick-connect || root.screen == Screen.home || root.screen == Screen.library {
             keys.focus();
         }
@@ -314,6 +317,21 @@ export component AppWindow inherits Window {
         capture-key-pressed(event) => {
             if event.text == Key.F11 && !event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta {
                 root.toggle-fullscreen();
+                return accept;
+            }
+            // The shortcuts dialog keeps the keys, and the focus stays where it was below it.
+            if Shortcuts.open {
+                if event.text == Key.Escape || event.text == "?" {
+                    Shortcuts.close();
+                }
+                return accept;
+            }
+            reject
+        }
+        // Not captured: a text field keeps the `?` typed in it.
+        key-pressed(event) => {
+            if event.text == "?" && !event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta {
+                Shortcuts.show();
                 return accept;
             }
             reject
@@ -820,5 +838,7 @@ export component AppWindow inherits Window {
                 root.dismiss-notice();
             }
         }
+
+        ShortcutsOverlay { }
     }
 }

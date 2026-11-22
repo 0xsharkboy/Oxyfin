@@ -1,0 +1,295 @@
+import { Theme } from "../theme.slint";
+import { BodyText, CaptionText, HeadingText, LabelText } from "text.slint";
+import { HoverCard } from "hover_card.slint";
+import { ContextMenu } from "context_menu.slint";
+
+// A key of a shortcut: `text` is the `event.text` the key handlers compare, with the modifiers
+// held; `legend` replaces the drawn name, for a mouse gesture.
+export struct ShortcutKey {
+    text: string,
+    control: bool,
+    shift: bool,
+    legend: string,
+}
+
+// A row of the shortcuts dialog: what it does and the keys that do it, any of them.
+export struct Shortcut {
+    label: string,
+    keys: [ShortcutKey],
+}
+
+// The shortcuts the app implements, the only list of them, and whether the dialog is open.
+export global Shortcuts {
+    out property <bool> open;
+
+    // Handled by the player screen.
+    out property <[Shortcut]> player: [
+        { label: @tr("Play or pause"), keys: [{ text: " " }] },
+        { label: @tr("Back or forward 10 s"), keys: [{ text: Key.LeftArrow }, { text: Key.RightArrow }] },
+        { label: @tr("Volume"), keys: [{ text: Key.UpArrow }, { text: Key.DownArrow }] },
+        { label: @tr("Mute"), keys: [{ text: "m" }] },
+        { label: @tr("Fullscreen"), keys: [{ text: "f" }] },
+        { label: @tr("Speed"), keys: [{ text: "[" }, { text: "]" }] },
+        { label: @tr("Previous or next episode"), keys: [{ text: "p" }, { text: "n" }] },
+        { label: @tr("Skip intro or credits"), keys: [{ text: "s" }] },
+        { label: @tr("Previous or next chapter"), keys: [{ text: Key.PageUp }, { text: Key.PageDown }] },
+        { label: @tr("Subtitle delay"), keys: [{ text: "z" }, { text: "x" }] },
+        { label: @tr("Audio delay"), keys: [{ text: "-", control: true }, { text: "+", control: true }] },
+        { label: @tr("Playback statistics"), keys: [{ text: "i" }] },
+    ];
+
+    // Handled by the window, the pages and the cards.
+    out property <[Shortcut]> everywhere: [
+        { label: @tr("Fullscreen"), keys: [{ text: Key.F11 }] },
+        { label: @tr("Back"), keys: [{ text: Key.Escape }] },
+        { label: @tr("Move between items"), keys: [{ text: Key.Tab }] },
+        { label: @tr("Move along a row"), keys: [{ text: Key.LeftArrow }, { text: Key.RightArrow }] },
+        { label: @tr("Open the focused item"), keys: [{ text: Key.Return }] },
+        { label: @tr("Item actions"), keys: [{ text: Key.F10, shift: true }] },
+        { label: @tr("This help"), keys: [{ text: "?" }] },
+    ];
+
+    // Pointer gestures, drawn with their legend.
+    out property <[Shortcut]> mouse: [
+        { label: @tr("Play or pause the video"), keys: [{ legend: @tr("Click") }] },
+        { label: @tr("Fullscreen"), keys: [{ legend: @tr("Double click") }] },
+        { label: @tr("Volume"), keys: [{ legend: @tr("Wheel") }] },
+        { label: @tr("Scroll a row"), keys: [{ shift: true, legend: @tr("Wheel") }] },
+    ];
+
+    public function show() {
+        HoverCard.hide();
+        ContextMenu.close();
+        self.open = true;
+    }
+
+    public function close() {
+        self.open = false;
+    }
+
+    // Name drawn on the keycap of `key`.
+    public pure function legend(key: ShortcutKey) -> string {
+        if key.legend != "" {
+            return key.legend;
+        }
+        if key.text == " " {
+            return @tr("Space");
+        }
+        if key.text == Key.LeftArrow {
+            return "←";
+        }
+        if key.text == Key.RightArrow {
+            return "→";
+        }
+        if key.text == Key.UpArrow {
+            return "↑";
+        }
+        if key.text == Key.DownArrow {
+            return "↓";
+        }
+        if key.text == Key.PageUp {
+            return @tr("PgUp");
+        }
+        if key.text == Key.PageDown {
+            return @tr("PgDn");
+        }
+        if key.text == Key.Escape {
+            return @tr("Esc");
+        }
+        if key.text == Key.Tab {
+            return @tr("Tab");
+        }
+        if key.text == Key.Return {
+            return @tr("Enter");
+        }
+        if key.text == Key.F10 {
+            return "F10";
+        }
+        if key.text == Key.F11 {
+            return "F11";
+        }
+        if key.text == "-" {
+            return "−";
+        }
+        key.text.to-uppercase()
+    }
+}
+
+component Keycap inherits Rectangle {
+    in property <string> text;
+
+    height: Theme.border-thin + Theme.keycap-padding-top + Theme.caption-line-height + Theme.keycap-padding-bottom + Theme.border-thin;
+    background: Theme.bg-hover;
+    border-radius: Theme.keycap-radius;
+    border-width: Theme.border-thin;
+    border-color: Theme.border-default;
+
+    HorizontalLayout {
+        padding-left: Theme.border-thin + Theme.keycap-padding-x;
+        padding-right: Theme.border-thin + Theme.keycap-padding-x;
+        padding-top: Theme.border-thin + Theme.keycap-padding-top;
+        padding-bottom: Theme.border-thin + Theme.keycap-padding-bottom;
+
+        CaptionText {
+            text: root.text;
+            color: Theme.text-primary;
+        }
+    }
+}
+
+component ShortcutLine inherits HorizontalLayout {
+    in property <Shortcut> shortcut;
+
+    spacing: Theme.keycap-gap;
+    alignment: stretch;
+
+    BodyText {
+        horizontal-stretch: 1;
+        text: root.shortcut.label;
+        color: Theme.text-secondary;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    for key[index] in root.shortcut.keys: HorizontalLayout {
+        spacing: Theme.keycap-gap;
+
+        if key.control && (index == 0 || !root.shortcut.keys[index - 1].control): VerticalLayout {
+            alignment: center;
+            Keycap {
+                text: @tr("Ctrl");
+            }
+        }
+        if key.shift && (index == 0 || !root.shortcut.keys[index - 1].shift): VerticalLayout {
+            alignment: center;
+            Keycap {
+                text: @tr("Shift");
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Keycap {
+                text: Shortcuts.legend(key);
+            }
+        }
+    }
+}
+
+component ShortcutSection inherits VerticalLayout {
+    in property <string> title;
+    in property <[Shortcut]> shortcuts;
+
+    spacing: Theme.space-sm;
+
+    LabelText {
+        text: root.title.to-uppercase();
+        color: Theme.text-muted;
+    }
+
+    for shortcut in root.shortcuts: ShortcutLine {
+        shortcut: shortcut;
+    }
+}
+
+// The keyboard shortcuts dialog over a scrim, while `Shortcuts.open`: a click outside closes it,
+// and the window closes it on Escape.
+export component ShortcutsOverlay inherits Rectangle {
+    if Shortcuts.open: Rectangle {
+        background: Theme.dialog-scrim;
+
+        TouchArea {
+            mouse-cursor: default;
+            clicked => {
+                Shortcuts.close();
+            }
+            double-clicked => { }
+            scroll-event(event) => {
+                accept
+            }
+        }
+
+        dialog := Rectangle {
+            width: min(Theme.shortcuts-width, parent.width - 2 * Theme.space-xl);
+            height: min(content.preferred-height, parent.height - 2 * Theme.space-xl);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+
+            accessible-role: groupbox;
+            accessible-label: @tr("Keyboard shortcuts");
+
+            background: Theme.bg-elevated;
+            border-radius: Theme.radius-xl;
+            border-width: Theme.border-thin;
+            border-color: Theme.border-default;
+            drop-shadow-offset-y: Theme.dialog-shadow-offset-y;
+            drop-shadow-blur: Theme.dialog-shadow-blur;
+            drop-shadow-color: Theme.menu-shadow;
+            clip: true;
+
+            // Clicks inside the dialog never close it nor reach the screen behind.
+            TouchArea {
+                double-clicked => { }
+            }
+
+            Flickable {
+                content-width: self.width;
+                content-height: content.preferred-height;
+
+                content := VerticalLayout {
+                    padding-left: Theme.border-thin + Theme.shortcuts-padding-x;
+                    padding-right: Theme.border-thin + Theme.shortcuts-padding-x;
+                    padding-top: Theme.border-thin + Theme.space-xl;
+                    padding-bottom: Theme.border-thin + Theme.space-xl;
+                    spacing: Theme.shortcuts-title-gap;
+
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+
+                        HeadingText {
+                            horizontal-stretch: 1;
+                            text: @tr("Keyboard shortcuts");
+                            overflow: elide;
+                        }
+                        CaptionText {
+                            text: @tr("Esc to close");
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: Theme.shortcuts-column-gap;
+                        alignment: stretch;
+
+                        VerticalLayout {
+                            // No preferred width in either column, so that they share the width equally.
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            alignment: start;
+
+                            ShortcutSection {
+                                title: @tr("Player");
+                                shortcuts: Shortcuts.player;
+                            }
+                        }
+
+                        VerticalLayout {
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            alignment: start;
+                            spacing: Theme.space-xl;
+
+                            ShortcutSection {
+                                title: @tr("Everywhere");
+                                shortcuts: Shortcuts.everywhere;
+                            }
+                            ShortcutSection {
+                                title: @tr("Mouse");
+                                shortcuts: Shortcuts.mouse;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
