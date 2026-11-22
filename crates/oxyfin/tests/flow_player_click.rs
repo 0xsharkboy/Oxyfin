@@ -132,6 +132,27 @@ fn a_double_click_toggles_fullscreen_without_pausing() {
 }
 
 #[test]
+fn a_slow_second_press_of_a_double_click_does_not_pause() {
+    let (window, sent) = player_window();
+    click_at(&window, VIDEO);
+    elapse(Duration::from_millis(450));
+    window.window().dispatch_event(WindowEvent::PointerPressed {
+        position: VIDEO,
+        button: slint::platform::PointerEventButton::Left,
+    });
+    elapse(Duration::from_millis(150));
+    window
+        .window()
+        .dispatch_event(WindowEvent::PointerReleased {
+            position: VIDEO,
+            button: slint::platform::PointerEventButton::Left,
+        });
+    assert!(window.window().is_fullscreen());
+    elapse(AFTER_DOUBLE_CLICK);
+    assert!(pauses(&sent).is_empty(), "{:?}", sent.borrow());
+}
+
+#[test]
 fn a_click_with_a_menu_open_only_closes_it() {
     let (window, sent) = player_window();
     press(&window, "i");

@@ -260,7 +260,8 @@ export component PlayerScreen inherits Rectangle {
 
     click-timer := Timer {
         interval: 500ms;
-        running: root.click-pending;
+        // Held while the button is down, so a slow second press of a double click still cancels it.
+        running: root.click-pending && !surface.pressed;
         triggered => {
             root.click-pending = false;
             root.pause-from-click();
