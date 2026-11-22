@@ -63,6 +63,8 @@ impl Player {
                 }
             }
             init.set_option("hwdec", "auto-safe")?;
+            // Otherwise rendering blocks the interface thread until each frame's display time.
+            init.set_option("video-timing-offset", "0")?;
             init.set_option("keep-open", "yes")?;
             init.set_option("keep-open-pause", "no")?;
             Ok(())
@@ -597,6 +599,11 @@ mod tests {
 
     fn number(player: &Player, name: &str) -> f64 {
         read(player, name).unwrap().parse().unwrap()
+    }
+
+    #[test]
+    fn frames_are_handed_to_the_renderer_at_their_display_time() {
+        assert_eq!(number(&headless(), "video-timing-offset"), 0.0);
     }
 
     #[test]
