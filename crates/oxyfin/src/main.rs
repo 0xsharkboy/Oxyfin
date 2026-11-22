@@ -23,6 +23,7 @@ fn main() -> ExitCode {
     }
     let paths = Paths::from_system();
     oxyfin::logs::init(paths.as_ref().ok().map(oxyfin::logs::log_dir).as_deref());
+    log::info!("{} on {}", launch::version_line(), oxyfin::logs::system());
     match paths.map_err(Into::into).and_then(run) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

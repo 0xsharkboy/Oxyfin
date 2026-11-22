@@ -868,9 +868,18 @@ impl App {
 
     fn copy_logs(&self) {
         let Some(window) = self.window() else { return };
-        let text = crate::logs::recent(
+        let host = self.generation.borrow().as_ref().and_then(|generation| {
+            generation
+                .session
+                .server()
+                .base_url()
+                .host_str()
+                .map(str::to_owned)
+        });
+        let text = crate::logs::report(
             &crate::logs::log_dir(&self.paths),
-            crate::logs::RECENT_LOG_BYTES,
+            &crate::logs::header(&mpv_version()),
+            host.as_deref(),
         );
         window.invoke_copy_to_clipboard(text.into());
         window.set_settings_logs_copied(true);
@@ -1567,6 +1576,23 @@ fn show_chapter_tiles(
         if let Some(image) = crate::images::crop(&pixels, tile.x, tile.y, tile.width, tile.height) {
             show_chapter_image(weak, rows, *index, image);
         }
+    }
+}
+
+/// The libmpv version for bug reports, asked once.
+fn mpv_version() -> String {
+    #[cfg(feature = "mpv")]
+    {
+        static VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        VERSION
+            .get_or_init(|| {
+                oxyfin_player::mpv_version().unwrap_or_else(|error| format!("unknown ({error})"))
+            })
+            .clone()
+    }
+    #[cfg(not(feature = "mpv"))]
+    {
+        "not built in".to_owned()
     }
 }
 

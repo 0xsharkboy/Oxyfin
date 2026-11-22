@@ -1,5 +1,6 @@
-//! Settings > Diagnostics: "Copy logs" puts the recent log, scrubbed, on the clipboard, "Open
-//! folder" opens the log folder, and "Show" opens the keyboard shortcuts.
+//! Settings > Diagnostics: "Copy logs" puts a header and the recent log, scrubbed and without
+//! the server host, on the clipboard, "Open folder" opens the log folder, and "Show" opens the
+//! keyboard shortcuts.
 
 mod common;
 
@@ -10,7 +11,7 @@ use std::rc::Rc;
 use common::playback_settings::{WIDTH, open_settings_prepared};
 use common::{click, wait_role, wait_until};
 use i_slint_backend_testing::{AccessibleRole, ElementHandle};
-use oxyfin::logs::{LOG_FILE, log_dir};
+use oxyfin::logs::{LOG_FILE, RECENT_LOG_BYTES, log_dir};
 use oxyfin::{AppWindow, Shortcuts};
 use slint::platform::{Key, WindowEvent};
 use slint::{ComponentHandle, LogicalSize};
@@ -53,9 +54,10 @@ fn logs_are_copied_scrubbed_and_their_folder_opens() {
         |paths| {
             let dir = log_dir(paths);
             std::fs::create_dir_all(&dir).unwrap();
+            let old = "INFO oxyfin: an old line\n".repeat(4 * RECENT_LOG_BYTES / 24);
             std::fs::write(
                 dir.join(LOG_FILE),
-                "INFO oxyfin: hello from the log GET /Items?api_key=s3cr3t&x=1",
+                old + "INFO oxyfin: hello from the log GET http://127.0.0.1/Items?api_key=s3cr3t&x=1",
             )
             .unwrap();
         },
@@ -79,6 +81,23 @@ fn logs_are_copied_scrubbed_and_their_folder_opens() {
             }
             if pasted.contains("s3cr3t") || !pasted.contains("api_key=<redacted>") {
                 return Err(format!("the copied log is not scrubbed: {pasted:?}"));
+            }
+            // The single-line field turns the line breaks of the header into spaces.
+            let header = format!("oxyfin {} System: ", env!("CARGO_PKG_VERSION"));
+            if !pasted.starts_with(&header) || !pasted.contains(" mpv: ") {
+                return Err(format!(
+                    "no version header: {:?}",
+                    pasted.chars().take(80).collect::<String>()
+                ));
+            }
+            if pasted.contains("127.0.0.1") || !pasted.contains("GET http://<server>/Items") {
+                return Err("the server host is in the copied log".into());
+            }
+            if pasted.chars().count() >= 65_536 {
+                return Err(format!(
+                    "{} characters do not fit an issue",
+                    pasted.chars().count()
+                ));
             }
             if ElementHandle::find_by_accessible_label(window, "hello from the log")
                 .next()

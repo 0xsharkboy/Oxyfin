@@ -10,8 +10,9 @@ use oxyfin_core::Paths;
 /// Size at which the log file is rotated: the current and the rotated file stay under twice this.
 pub const LOG_FILE_LIMIT: u64 = 1024 * 1024;
 
-/// Bytes of the most recent log that "Copy logs" puts on the clipboard.
-pub const RECENT_LOG_BYTES: usize = 256 * 1024;
+/// Bytes of the most recent log that "Copy logs" puts on the clipboard, so that the report fits
+/// the 65,536 characters of a GitHub issue body.
+pub const RECENT_LOG_BYTES: usize = 48 * 1024;
 
 /// Name of the current log file.
 pub const LOG_FILE: &str = "oxyfin.log";
@@ -219,6 +220,82 @@ pub fn recent(dir: &Path, max: usize) -> String {
         bytes.drain(..start);
     }
     scrub(&String::from_utf8_lossy(&bytes))
+}
+
+/// What "Copy logs" puts on the clipboard: `header`, then the recent log in `dir` with every
+/// mention of `host`, the server signed in to, replaced.
+pub fn report(dir: &Path, header: &str, host: Option<&str>) -> String {
+    let log = recent(dir, RECENT_LOG_BYTES);
+    let log = match host {
+        Some(host) => redact_host(&log, host),
+        None => log,
+    };
+    format!("{header}\n\n{log}")
+}
+
+/// `text` with every mention of `host`, compared without case, replaced by `<server>`.
+pub fn redact_host(text: &str, host: &str) -> String {
+    if host.is_empty() {
+        return text.to_owned();
+    }
+    let lower = text.to_ascii_lowercase();
+    let host = host.to_ascii_lowercase();
+    let mut out = String::with_capacity(text.len());
+    let mut copied = 0;
+    while let Some(found) = lower[copied..].find(&host) {
+        let start = copied + found;
+        out.push_str(&text[copied..start]);
+        out.push_str("<server>");
+        copied = start + host.len();
+    }
+    out.push_str(&text[copied..]);
+    out
+}
+
+/// The header of a copied log: the app version, the system and the libmpv version `mpv`.
+pub fn header(mpv: &str) -> String {
+    format!(
+        "{}\nSystem: {}\nmpv: {mpv}",
+        crate::launch::version_line(),
+        system()
+    )
+}
+
+/// The operating system, its architecture and, on Linux, the desktop and session type.
+pub fn system() -> String {
+    let os = os_release()
+        .and_then(|contents| pretty_name(&contents))
+        .unwrap_or_else(|| std::env::consts::OS.to_owned());
+    let mut system = format!("{os} ({})", std::env::consts::ARCH);
+    let desktop: Vec<String> = ["XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE"]
+        .iter()
+        .filter_map(|name| std::env::var(name).ok())
+        .filter(|value| !value.is_empty())
+        .collect();
+    if !desktop.is_empty() {
+        system.push_str(", ");
+        system.push_str(&desktop.join(" "));
+    }
+    system
+}
+
+fn os_release() -> Option<String> {
+    if !cfg!(target_os = "linux") {
+        return None;
+    }
+    // Inside Flatpak, /etc holds the runtime's file and the host's is under /run/host.
+    ["/run/host/os-release", "/etc/os-release"]
+        .iter()
+        .find_map(|path| std::fs::read_to_string(path).ok())
+}
+
+/// The `PRETTY_NAME` of an os-release file, without its quotes.
+pub fn pretty_name(os_release: &str) -> Option<String> {
+    os_release.lines().find_map(|line| {
+        let value = line.strip_prefix("PRETTY_NAME=")?;
+        let value = value.trim().trim_matches(['"', '\'']);
+        (!value.is_empty()).then(|| value.to_owned())
+    })
 }
 
 /// Opens `dir` in the file manager, creating it first; the opener runs on its own thread.
@@ -526,6 +603,48 @@ mod tests {
             "old one\nold two\nnew one\nnew api_key=<redacted>\n"
         );
         assert_eq!(recent(dir.path(), 30), "new one\nnew api_key=<redacted>\n");
+    }
+
+    #[test]
+    fn the_report_fits_an_issue_and_hides_the_server() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let line = "INFO oxyfin: GET https://Media.Example.org:8096/Items done\n";
+        let log = line.repeat(4 * RECENT_LOG_BYTES / line.len());
+        std::fs::write(dir.path().join(LOG_FILE), &log).unwrap();
+        let report = report(dir.path(), "oxyfin 1.2.3", Some("media.example.org"));
+        assert!(
+            report.starts_with("oxyfin 1.2.3\n\nINFO"),
+            "{}",
+            &report[..40]
+        );
+        assert!(
+            report.chars().count() < 65_536,
+            "{}",
+            report.chars().count()
+        );
+        assert!(report.matches("/Items done").count() >= RECENT_LOG_BYTES / line.len() - 1);
+        assert!(!report.to_ascii_lowercase().contains("example.org"));
+        assert!(report.contains("GET https://<server>:8096/Items done"));
+    }
+
+    #[test]
+    fn the_header_names_the_version_and_the_system() {
+        let header = header("mpv 0.40.0");
+        let lines: Vec<&str> = header.lines().collect();
+        assert_eq!(lines[0], crate::launch::version_line());
+        assert!(lines[1].starts_with("System: "), "{header}");
+        assert!(lines[1].contains(std::env::consts::ARCH), "{header}");
+        assert_eq!(lines[2], "mpv: mpv 0.40.0");
+    }
+
+    #[test]
+    fn the_pretty_name_is_read_from_os_release() {
+        assert_eq!(
+            pretty_name("NAME=NixOS\nPRETTY_NAME=\"NixOS 25.11 (Xantusia)\"\nID=nixos\n")
+                .as_deref(),
+            Some("NixOS 25.11 (Xantusia)")
+        );
+        assert_eq!(pretty_name("NAME=Arch\n"), None);
     }
 
     #[test]
