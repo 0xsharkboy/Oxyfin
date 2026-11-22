@@ -1,4 +1,4 @@
-import { Theme } from "../theme.slint";
+import { Messages, Theme } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { ProgressBar } from "progress_bar.slint";
 import { BodyStrongText, BodyText, CaptionText } from "text.slint";
@@ -43,6 +43,11 @@ export global HoverCard {
     // Keeps the hover card away while something covers the cards, such as a context menu.
     in-out property <bool> suppressed;
     in property <HoverDetails> details;
+    // Set when a menu over the cards closes: no hover card shows until the pointer leaves the
+    // point it rested on, in window coordinates (negative for anywhere).
+    out property <bool> held;
+    out property <length> held-x;
+    out property <length> held-y;
     // Asks for the details of `id`; they come through `details`, now or later.
     callback requested(id: string, progress: float);
 
@@ -69,6 +74,20 @@ export global HoverCard {
     public function hide-for(showing: int) {
         if showing > 0 && self.owner == showing {
             self.owner = 0;
+        }
+    }
+
+    public function hold(x: length, y: length) {
+        self.held = true;
+        self.held-x = x;
+        self.held-y = y;
+        self.owner = 0;
+    }
+
+    // The pointer moved to `(x, y)` over a card.
+    public function pointer-moved(x: length, y: length) {
+        if self.held && (self.held-x < 0px || abs(x - self.held-x) > 1px || abs(y - self.held-y) > 1px) {
+            self.held = false;
         }
     }
 
@@ -106,20 +125,6 @@ export component HoverCardOverlay inherits Rectangle {
     property <length> right-x: HoverCard.anchor-x + HoverCard.anchor-width + Theme.space-md;
     property <bool> fits-right: self.right-x + Theme.hover-card-width <= self.width - Theme.space-lg;
 
-    pure function duration(minutes: int) -> string {
-        if minutes <= 0 {
-            return "";
-        }
-        minutes >= 60 ? @tr("{}h {}m", floor(minutes / 60), mod(minutes, 60)) : @tr("{}m", minutes)
-    }
-
-    pure function joined(first: string, second: string) -> string {
-        if first == "" {
-            return second;
-        }
-        second == "" ? first : "\{first} \u{b7} \{second}"
-    }
-
     pure function kind-name(kind: HoverKind) -> string {
         if kind == HoverKind.series {
             return @tr("Series");
@@ -132,10 +137,10 @@ export component HoverCardOverlay inherits Rectangle {
 
     // "S01E02 · Title · 24m" for an episode, "2020 · 1h 40m" or "2021 · 3 seasons" otherwise.
     pure function lead(details: HoverDetails) -> string {
-        let episode = root.joined(details.episode-label, details.episode-title);
+        let episode = Messages.joined(details.episode-label, details.episode-title);
         let year = details.year > 0 ? "\{details.year}" : "";
         let seasons = details.seasons > 0 ? @tr("{n} season" | "{n} seasons" % details.seasons) : "";
-        root.joined(root.joined(root.joined(episode, year), root.duration(details.minutes)), seasons)
+        Messages.joined(Messages.joined(Messages.joined(episode, year), Messages.duration(details.minutes)), seasons)
     }
 
     if root.shown: card := Rectangle {
@@ -235,7 +240,7 @@ export component HoverCardOverlay inherits Rectangle {
                     }
                 }
                 remaining := CaptionText {
-                    text: @tr("{} left", root.duration(card.details.remaining-minutes));
+                    text: Messages.time-left(card.details.remaining-minutes);
                     color: Theme.accent;
                 }
             }

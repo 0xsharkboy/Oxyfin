@@ -82,7 +82,7 @@ export component MediaCard {
     // Set by a click, until the pointer leaves.
     property <bool> hover-dismissed;
     property <bool> hovered: touch.has-hover;
-    property <int> scrolls: HoverCard.scrolls;
+    property <int> scrolls: root.hovered ? HoverCard.scrolls : 0;
     // Takes the focus back after a row of its menu chosen from the keyboard, also once rebuilt.
     property <bool> focus-return: root.hover-id != "" && ContextMenu.focus-id == root.hover-id;
     // Answers the window while it holds that focus.
@@ -116,7 +116,7 @@ export component MediaCard {
 
     hover-timer := Timer {
         interval: Theme.hover-delay;
-        running: root.hover-id != "" && root.enabled && root.hovered && !root.hover-dismissed && !root.hover-shown && !HoverCard.suppressed;
+        running: root.hover-id != "" && root.enabled && root.hovered && !root.hover-dismissed && !root.hover-shown && !HoverCard.suppressed && !HoverCard.held;
         triggered => {
             root.hover-showing = HoverCard.show(root.hover-id, root.status == CardStatus.in-progress ? root.progress : 0, root.absolute-position.x, root.absolute-position.y, root.width);
         }
@@ -147,6 +147,9 @@ export component MediaCard {
         enabled: root.enabled;
         mouse-cursor: root.enabled ? pointer : default;
         pointer-event(event) => {
+            if event.kind == PointerEventKind.move && HoverCard.held {
+                HoverCard.pointer-moved(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+            }
             if event.button == PointerEventButton.right && event.kind == PointerEventKind.down && root.enabled && root.hover-id != "" {
                 ContextMenu.show(root.hover-id, root.from-resume, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y, false, root.title, root.subtitle);
             }

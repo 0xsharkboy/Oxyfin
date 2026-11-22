@@ -1265,6 +1265,16 @@ impl App {
                 app.menu.chosen(&app, serial, action);
             }
         });
+        let weak = window.as_weak();
+        menu.on_right_pressed_outside(move |x, y| {
+            let weak = weak.clone();
+            // Once the overlay is gone, the card under the pointer gets the press and opens its menu.
+            Timer::single_shot(Duration::ZERO, move || {
+                if let Some(window) = weak.upgrade() {
+                    crate::menu::press_right(&window, x, y);
+                }
+            });
+        });
         let this = self.this.clone();
         window.on_open_item(move |id| {
             if let Some(app) = this.upgrade() {

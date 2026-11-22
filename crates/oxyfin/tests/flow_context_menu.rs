@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use i_slint_backend_testing::{AccessibleRole, ElementHandle};
-use page::{ContextMenu, HoverCard, MenuAction, MenuEntry, MenuPage, PageCard};
+use page::{ContextMenu, HoverCard, HoverDetails, MenuAction, MenuEntry, MenuPage, PageCard};
 use slint::platform::{Key, PointerEventButton, WindowEvent};
 use slint::{ComponentHandle, LogicalPosition, ModelRc, SharedString, VecModel};
 
@@ -15,11 +15,11 @@ use slint::{ComponentHandle, LogicalPosition, ModelRc, SharedString, VecModel};
 mod page {
     slint::slint! {
         import { PosterRow } from "ui/components/poster_row.slint";
-        import { HoverCard, HoverCardOverlay } from "ui/components/hover_card.slint";
+        import { HoverCard, HoverCardOverlay, HoverDetails } from "ui/components/hover_card.slint";
         import { ContextMenu, ContextMenuOverlay, MenuAction, MenuEntry } from "ui/components/context_menu.slint";
         import { CardData, Theme } from "ui/theme.slint";
 
-        export { CardData as PageCard, ContextMenu, HoverCard, MenuAction, MenuEntry }
+        export { CardData as PageCard, ContextMenu, HoverCard, HoverDetails, MenuAction, MenuEntry }
 
         export component MenuPage inherits Window {
             in property <[CardData]> cards;
@@ -119,6 +119,16 @@ fn menu_page() -> (MenuPage, Rc<RefCell<Log>>) {
             ])));
             menu.set_ready_serial(serial);
         });
+    let hovered = page.as_weak();
+    page.global::<HoverCard>().on_requested(move |id, _| {
+        if let Some(page) = hovered.upgrade() {
+            page.global::<HoverCard>().set_details(HoverDetails {
+                id: id.clone(),
+                title: format!("Hover {id}").into(),
+                ..HoverDetails::default()
+            });
+        }
+    });
     let chosen = Rc::clone(&log);
     page.global::<ContextMenu>()
         .on_chosen(move |serial, action| chosen.borrow_mut().chosen.push((serial, action)));
@@ -334,4 +344,36 @@ fn the_menu_key_opens_and_closes_the_menu() {
     special(&page, Key::Menu);
     assert!(!is_open(&page));
     assert!(log.borrow().chosen.is_empty());
+}
+
+fn hover_card_shown(page: &MenuPage, index: usize) -> bool {
+    find(page, &format!("Hover id{index}"), AccessibleRole::Groupbox).is_some()
+}
+
+fn move_to(page: &MenuPage, x: f32, y: f32) {
+    page.window().dispatch_event(WindowEvent::PointerMoved {
+        position: LogicalPosition::new(x, y),
+    });
+}
+
+fn elapse(ms: u64) {
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(ms));
+}
+
+#[test]
+fn the_hover_card_waits_for_the_pointer_to_move_after_the_menu() {
+    let (page, _) = menu_page();
+    let (x, y) = right_click(&page, 1, 30., 40.);
+    special(&page, Key::Escape);
+    // Slint sends the pointer again where it rests once the overlay is gone.
+    move_to(&page, x, y);
+    elapse(1000);
+    assert!(
+        !hover_card_shown(&page, 1),
+        "the hover card comes back under a resting pointer"
+    );
+
+    move_to(&page, x + 6., y);
+    elapse(1000);
+    assert!(hover_card_shown(&page, 1), "a move shows it again");
 }

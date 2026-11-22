@@ -49,14 +49,44 @@ export component RowScroller inherits Rectangle {
     property <bool> can-back: flick.content-x < -0.5px;
     property <bool> can-forward: flick.content-x > root.min-x + 0.5px;
 
-    // Called by the card at `index` when it takes the keyboard focus.
+    // Where the last animated scroll goes and when it started: reading `content-x` gives the
+    // animated value, so a click during the animation pages on from where the row is going.
+    property <length> target-x;
+    property <duration> target-tick: -3600s;
+    property <length> card-width: root.count > 0 ? (cards.preferred-width - 2 * root.padding-x - (root.count - 1) * root.spacing) / root.count : 0px;
+
+    // Called by the card at `index` when it takes the keyboard focus; the card is scrolled clear
+    // of the faded edges.
     public function card-focused(index: int) {
         root.current = index;
         root.wanted = -1;
+        root.reveals += 1;
+    }
+
+    // Grows at every focused card; handled once the focus has scrolled the card into view.
+    property <int> reveals;
+    changed reveals => {
+        let left = root.padding-x + root.current * (root.card-width + root.spacing);
+        let x = root.heading-x();
+        if left + x < Theme.row-arrow-zone {
+            root.scroll-to(Theme.row-arrow-zone - left);
+        } else if left + root.card-width + x > flick.width - Theme.row-arrow-zone {
+            root.scroll-to(flick.width - Theme.row-arrow-zone - left - root.card-width);
+        }
+    }
+
+    function heading-x() -> length {
+        animation-tick() - root.target-tick < Theme.row-scroll-duration ? root.target-x : flick.content-x
+    }
+
+    function scroll-to(x: length) {
+        root.target-x = clamp(x, root.min-x, 0px);
+        root.target-tick = animation-tick();
+        flick.content-x = root.target-x;
     }
 
     function page(direction: int) {
-        flick.content-x = clamp(flick.content-x - direction * (flick.width - Theme.row-arrow-zone), root.min-x, 0px);
+        root.scroll-to(root.heading-x() - direction * (flick.width - Theme.row-arrow-zone));
     }
 
     height: cards.preferred-height;

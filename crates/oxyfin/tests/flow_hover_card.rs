@@ -26,6 +26,7 @@ mod page {
             out property <length> drop: Theme.space-sm;
             out property <length> card-width: Theme.hover-card-width;
             out property <length> margin: Theme.space-lg;
+            out property <length> card-padding: Theme.space-lg;
             callback opened(string);
 
             width: 1000px;
@@ -368,4 +369,45 @@ fn missing_details_are_left_out() {
         "only the title and the kind show"
     );
     assert_eq!(progress(&card), None, "no progress for an item not started");
+}
+
+/// An episode whose meta line is longer than the card.
+fn long_episode(id: &str) -> HoverDetails {
+    HoverDetails {
+        id: id.into(),
+        title: format!("Details {id}").into(),
+        kind: HoverKind::Episode,
+        episode_label: "S12E104".into(),
+        episode_title: "A very long episode title that never seems to end at all".into(),
+        year: 2024,
+        minutes: 154,
+        rating: "8.4".into(),
+        ..HoverDetails::default()
+    }
+}
+
+#[test]
+fn a_long_meta_line_stays_inside_the_card() {
+    let (page, _) = hover_page(long_episode);
+    hover(&page, 2);
+    elapse(450);
+    let shown = hover_card(&page, "id2").unwrap_or_else(|| panic!("no hover card"));
+    let right = shown.absolute_position().x + shown.size().width - page.get_card_padding();
+    for text in shown
+        .query_descendants()
+        .match_accessible_role(AccessibleRole::Text)
+        .find_all()
+    {
+        let end = text.absolute_position().x + text.size().width;
+        assert!(
+            end <= right + 0.5,
+            "{:?} ends at {end}, past {right}",
+            text.accessible_label()
+        );
+    }
+    assert!(
+        texts(&shown).iter().any(|text| text == "Episode"),
+        "the kind stays shown: {:?}",
+        texts(&shown)
+    );
 }

@@ -322,6 +322,27 @@ export enum Message {
 }
 
 export global Messages {
+    // A length in minutes such as "1h 40m" or "24m"; empty when unknown.
+    public pure function duration(minutes: int) -> string {
+        if minutes <= 0 {
+            return "";
+        }
+        minutes >= 60 ? @tr("{}h {}m", floor(minutes / 60), mod(minutes, 60)) : @tr("{}m", minutes)
+    }
+
+    // The time left to watch, such as "12m left".
+    public pure function time-left(minutes: int) -> string {
+        @tr("{} left", Messages.duration(minutes))
+    }
+
+    // Two parts of a line joined with a middle dot, leaving out an empty one.
+    public pure function joined(first: string, second: string) -> string {
+        if first == "" {
+            return second;
+        }
+        second == "" ? first : "\{first} \u{b7} \{second}"
+    }
+
     // The kind named on the cards of the series of a person page.
     public pure function series-kind() -> string {
         @tr("Series")

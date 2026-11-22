@@ -101,6 +101,10 @@ impl SeriesController {
 
     /// A screen left the stack: the series page frees its content.
     pub(crate) fn discard(&self, app: &App, screen: &Screen) {
+        // A season asked for the page that leaves must not apply to a later one.
+        if matches!(screen, Screen::Series(_)) {
+            self.wanted_season.borrow_mut().take();
+        }
         let current = matches!(screen, Screen::Series(id) if self.current.borrow().as_deref() == Some(id.as_str()));
         if current && !app.holds(self.depth.get(), screen) {
             self.clear(app);
@@ -138,6 +142,7 @@ impl SeriesController {
 
     /// Shows a kept page again without asking the server, loading only what it still misses.
     fn restore(&self, app: &Rc<App>, page: ParkedSeries) {
+        self.wanted_season.borrow_mut().take();
         let (Some((id, ..)), Some(window)) = (app.services(), app.window()) else {
             return;
         };

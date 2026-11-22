@@ -360,3 +360,40 @@ fn the_landscape_row_of_the_home_screen_has_arrows() {
         "the next page comes in sight"
     );
 }
+
+#[test]
+fn fast_arrow_clicks_scroll_a_full_page_each() {
+    let page = row_page();
+    let page_width = WIDTH - page.get_arrow_zone();
+    hover(&page, "Long 0");
+    let arrow = find(&page, "Scroll right", AccessibleRole::Button);
+    common::click(&page, &arrow);
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(50));
+    common::click(&page, &find(&page, "Scroll right", AccessibleRole::Button));
+    settle();
+    assert_eq!(scrolled(&page), 2. * page_width);
+}
+
+#[test]
+fn the_focused_card_stays_clear_of_the_faded_edges() {
+    let page = row_page();
+    common::click(&page, &find(&page, "Long 0", AccessibleRole::Button));
+    let zone = page.get_arrow_zone();
+    for index in 1..12 {
+        press(&page, Key::RightArrow);
+        let x = x_of(&page, &format!("Long {index}")).unwrap_or(f32::NAN);
+        assert!(
+            x + page.get_card_width() <= WIDTH - zone + 0.5,
+            "Long {index} ends at {}, under the right edge",
+            x + page.get_card_width()
+        );
+    }
+    for index in (2..11).rev() {
+        press(&page, Key::LeftArrow);
+        let x = x_of(&page, &format!("Long {index}")).unwrap_or(f32::NAN);
+        assert!(
+            x >= zone - 0.5,
+            "Long {index} starts at {x}, under the left edge"
+        );
+    }
+}

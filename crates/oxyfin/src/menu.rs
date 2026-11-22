@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use oxyfin_api::ItemId;
 use oxyfin_core::{CoreError, Episode, MenuTarget, PlayMode, UserState};
+use slint::platform::WindowEvent;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::app::App;
@@ -444,6 +445,19 @@ impl MenuController {
                 }
             },
         );
+    }
+}
+
+/// Presses and releases the right button at `(x, y)`, in window coordinates.
+pub(crate) fn press_right(window: &crate::AppWindow, x: f32, y: f32) {
+    let position = slint::LogicalPosition::new(x, y);
+    let button = slint::platform::PointerEventButton::Right;
+    for event in [
+        WindowEvent::PointerMoved { position },
+        WindowEvent::PointerPressed { position, button },
+        WindowEvent::PointerReleased { position, button },
+    ] {
+        window.window().dispatch_event(event);
     }
 }
 

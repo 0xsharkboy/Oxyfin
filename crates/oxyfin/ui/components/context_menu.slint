@@ -52,6 +52,9 @@ export global ContextMenu {
     out property <length> anchor-x;
     out property <length> anchor-y;
     out property <bool> by-keyboard;
+    // Last point of the pointer over the open menu, negative when unknown.
+    out property <length> pointer-x;
+    out property <length> pointer-y;
     // Opening whose entries are set, from Rust.
     in property <int> ready-serial;
     // Header of the menu: first what the opener shows, then what Rust tells with the entries.
@@ -72,6 +75,8 @@ export global ContextMenu {
     // Asks for the entries of item `id`.
     callback requested(serial: int, id: string, from-resume: bool);
     callback chosen(serial: int, action: MenuAction);
+    // A right press outside the menu closed it; Rust presses there again for what lies below.
+    callback right-pressed-outside(x: length, y: length);
 
     // Opens the menu of `id` at a point of the window, headed with what the opener shows until
     // the entries come; returns the number of this opening.
@@ -87,6 +92,8 @@ export global ContextMenu {
         self.anchor-x = x;
         self.anchor-y = y;
         self.by-keyboard = by-keyboard;
+        self.pointer-x = by-keyboard ? -1px : x;
+        self.pointer-y = by-keyboard ? -1px : y;
         self.focus-id = "";
         HoverCard.suppressed = true;
         self.requested(self.serial, id, from-resume);
@@ -97,6 +104,7 @@ export global ContextMenu {
         if self.open {
             self.open = false;
             HoverCard.suppressed = false;
+            HoverCard.hold(self.pointer-x, self.pointer-y);
         }
     }
 
@@ -135,6 +143,11 @@ export global ContextMenu {
         }
         self.close();
         self.chosen(serial, action);
+    }
+
+    public function pointer-moved(x: length, y: length) {
+        self.pointer-x = x;
+        self.pointer-y = y;
     }
 
     // The element to focus is gone: nothing waits for it any more.
@@ -293,8 +306,14 @@ export component ContextMenuOverlay inherits Rectangle {
     if ContextMenu.open: Rectangle {
         TouchArea {
             pointer-event(event) => {
+                if event.kind == PointerEventKind.move {
+                    ContextMenu.pointer-moved(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+                }
                 if event.kind == PointerEventKind.down {
                     ContextMenu.close();
+                    if event.button == PointerEventButton.right {
+                        ContextMenu.right-pressed-outside(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+                    }
                 }
             }
             scroll-event(event) => {
