@@ -1,0 +1,348 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { BodyText, CaptionText, LabelText } from "text.slint";
+import { HoverCard } from "hover_card.slint";
+
+// What a row of the context menu does, mirroring the Rust `MenuAction`.
+export enum MenuAction {
+    play,
+    resume,
+    play-from-start,
+    play-next,
+    resume-next,
+    play-season,
+    mark-watched,
+    mark-unwatched,
+    mark-season-watched,
+    mark-season-unwatched,
+    add-favorite,
+    remove-favorite,
+    go-to-series,
+    go-to-season,
+    details,
+    remove-from-resume,
+}
+
+// A row of the context menu. `detail` fills the label: a resume time, an episode label or a
+// season number; `divider-before` draws a line above the row.
+export struct MenuEntry {
+    action: MenuAction,
+    detail: string,
+    divider-before: bool,
+}
+
+// The menu of the item a card, an episode row or a season pill was right-clicked on, shared by
+// every screen and the overlay that draws it.
+export global ContextMenu {
+    out property <bool> open;
+    // Each opening gets a new number; Rust answers with it.
+    out property <int> serial;
+    out property <string> id;
+    // True when the item was opened from Continue Watching.
+    out property <bool> from-resume;
+    // Where the menu opens, in window coordinates.
+    out property <length> anchor-x;
+    out property <length> anchor-y;
+    out property <bool> by-keyboard;
+    // Opening whose entries are set, from Rust.
+    in property <int> ready-serial;
+    in property <string> title;
+    in property <string> subtitle;
+    in property <[MenuEntry]> entries;
+    // Asks for the entries of item `id`.
+    callback requested(serial: int, id: string, from-resume: bool);
+    callback chosen(serial: int, action: MenuAction);
+
+    // Opens the menu of `id` at a point of the window; returns the number of this opening.
+    public function show(id: string, from-resume: bool, x: length, y: length, by-keyboard: bool) -> int {
+        self.serial += 1;
+        self.open = true;
+        self.id = id;
+        self.from-resume = from-resume;
+        self.anchor-x = x;
+        self.anchor-y = y;
+        self.by-keyboard = by-keyboard;
+        HoverCard.suppressed = true;
+        self.requested(self.serial, id, from-resume);
+        self.serial
+    }
+
+    public function close() {
+        if self.open {
+            self.open = false;
+            HoverCard.suppressed = false;
+        }
+    }
+
+    public function choose(action: MenuAction) {
+        let serial = self.serial;
+        self.close();
+        self.chosen(serial, action);
+    }
+}
+
+// Whether a key event opens the context menu: Shift+F10 or the Menu key.
+export global MenuKeys {
+    public pure function opens(event: KeyEvent) -> bool {
+        (event.text == Key.F10 && event.modifiers.shift) || event.text == Key.Menu
+    }
+}
+
+component MenuRow inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> highlighted;
+    callback hovered();
+    callback activated();
+
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => {
+        root.activated();
+    }
+
+    // Fixed by the theme rather than measured, so every font gives the rows of the design.
+    height: 2 * Theme.space-sm + Theme.body-line-height;
+    background: root.highlighted ? Theme.bg-hover : transparent;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        moved => {
+            root.hovered();
+        }
+        changed has-hover => {
+            if self.has-hover {
+                root.hovered();
+            }
+        }
+        clicked => {
+            root.activated();
+        }
+    }
+
+    row := HorizontalLayout {
+        padding-left: Theme.space-md;
+        padding-right: Theme.space-md;
+        padding-top: Theme.space-sm;
+        padding-bottom: Theme.space-sm;
+        spacing: Theme.context-menu-icon-gap;
+
+        VerticalLayout {
+            alignment: center;
+
+            Image {
+                accessible-role: none;
+                source: root.icon;
+                width: Theme.link-icon-size;
+                height: Theme.link-icon-size;
+                colorize: Theme.text-primary;
+            }
+        }
+
+        BodyText {
+            accessible-role: none;
+            text: root.label;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+}
+
+// Covers the window while the context menu is open: a press outside the menu, a scroll or
+// Escape closes it, and the arrows, Return and Space choose a row.
+export component ContextMenuOverlay inherits Rectangle {
+    property <bool> ready: ContextMenu.open && ContextMenu.ready-serial == ContextMenu.serial;
+    // Row under the pointer or picked with the arrows, -1 for none.
+    property <int> highlighted: -1;
+    property <int> count: ContextMenu.entries.length;
+
+    pure function label(entry: MenuEntry) -> string {
+        if entry.action == MenuAction.play {
+            return @tr("Play");
+        }
+        if entry.action == MenuAction.resume {
+            return @tr("Resume from {}", entry.detail);
+        }
+        if entry.action == MenuAction.play-from-start {
+            return @tr("Play from the beginning");
+        }
+        if entry.action == MenuAction.play-next {
+            return entry.detail == "" ? @tr("Play") : @tr("Play {}", entry.detail);
+        }
+        if entry.action == MenuAction.resume-next {
+            return @tr("Resume {}", entry.detail);
+        }
+        if entry.action == MenuAction.play-season {
+            return @tr("Play season");
+        }
+        if entry.action == MenuAction.mark-watched {
+            return @tr("Mark as watched");
+        }
+        if entry.action == MenuAction.mark-unwatched {
+            return @tr("Mark as unwatched");
+        }
+        if entry.action == MenuAction.mark-season-watched {
+            return @tr("Mark season as watched");
+        }
+        if entry.action == MenuAction.mark-season-unwatched {
+            return @tr("Mark season as unwatched");
+        }
+        if entry.action == MenuAction.add-favorite {
+            return @tr("Add to favorites");
+        }
+        if entry.action == MenuAction.remove-favorite {
+            return @tr("Remove from favorites");
+        }
+        if entry.action == MenuAction.go-to-series {
+            return @tr("Go to series");
+        }
+        if entry.action == MenuAction.go-to-season {
+            return @tr("Go to season {}", entry.detail);
+        }
+        if entry.action == MenuAction.details {
+            return @tr("Details");
+        }
+        @tr("Remove from Continue Watching")
+    }
+
+    pure function icon(action: MenuAction) -> image {
+        if action == MenuAction.play-from-start {
+            return Icons.rotate-ccw;
+        }
+        if action == MenuAction.mark-watched || action == MenuAction.mark-unwatched || action == MenuAction.mark-season-watched || action == MenuAction.mark-season-unwatched {
+            return Icons.check;
+        }
+        if action == MenuAction.add-favorite {
+            return Icons.heart;
+        }
+        if action == MenuAction.remove-favorite {
+            return Icons.heart-filled;
+        }
+        if action == MenuAction.go-to-series {
+            return Icons.chevron-right;
+        }
+        if action == MenuAction.go-to-season {
+            return Icons.list;
+        }
+        if action == MenuAction.details {
+            return Icons.eye;
+        }
+        if action == MenuAction.remove-from-resume {
+            return Icons.x;
+        }
+        Icons.play
+    }
+
+    function step(by: int) {
+        if root.count > 0 {
+            root.highlighted = root.highlighted < 0 ? (by > 0 ? 0 : root.count - 1) : mod(root.highlighted + by + root.count, root.count);
+        }
+    }
+
+    changed ready => {
+        root.highlighted = root.ready && ContextMenu.by-keyboard ? 0 : -1;
+    }
+
+    if ContextMenu.open: Rectangle {
+        TouchArea {
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.down {
+                    ContextMenu.close();
+                }
+            }
+            scroll-event(event) => {
+                ContextMenu.close();
+                accept
+            }
+        }
+
+        FocusScope {
+            init => {
+                self.focus();
+            }
+            key-pressed(event) => {
+                if event.text == Key.Escape || MenuKeys.opens(event) {
+                    ContextMenu.close();
+                } else if !root.ready {
+                } else if event.text == Key.DownArrow || (event.text == Key.Tab && !event.modifiers.shift) {
+                    root.step(1);
+                } else if event.text == Key.UpArrow || event.text == Key.Backtab || (event.text == Key.Tab && event.modifiers.shift) {
+                    root.step(-1);
+                } else if event.text == Key.Home {
+                    root.highlighted = 0;
+                } else if event.text == Key.End {
+                    root.highlighted = root.count - 1;
+                } else if (event.text == Key.Return || event.text == " ") && root.highlighted >= 0 && root.highlighted < root.count {
+                    ContextMenu.choose(ContextMenu.entries[root.highlighted].action);
+                }
+                // Keys never reach the screen below while the menu is open.
+                accept
+            }
+        }
+
+        if root.ready: panel := Rectangle {
+            x: max(Theme.space-sm, ContextMenu.anchor-x + self.width <= root.width - Theme.space-sm ? ContextMenu.anchor-x : ContextMenu.anchor-x - self.width);
+            y: max(Theme.space-sm, ContextMenu.anchor-y + self.height <= root.height - Theme.space-sm ? ContextMenu.anchor-y : ContextMenu.anchor-y - self.height);
+            width: Theme.context-menu-width;
+            height: content.preferred-height;
+
+            accessible-role: list;
+            accessible-label: ContextMenu.title;
+
+            background: Theme.bg-elevated;
+            border-radius: Theme.radius-lg;
+            border-width: Theme.border-thin;
+            border-color: Theme.border-default;
+            drop-shadow-offset-y: 8px;
+            drop-shadow-blur: 12px;
+            drop-shadow-color: Theme.menu-shadow;
+
+            // Presses between the rows must not close the menu.
+            TouchArea { }
+
+            content := VerticalLayout {
+                padding: Theme.border-thin;
+                padding-top: Theme.border-thin + Theme.context-menu-padding-y;
+                padding-bottom: Theme.border-thin + Theme.context-menu-padding-y;
+
+                VerticalLayout {
+                    padding-left: Theme.space-md;
+                    padding-right: Theme.space-md;
+                    padding-top: Theme.space-chip-y;
+                    padding-bottom: Theme.space-sm;
+                    spacing: Theme.space-2xs;
+
+                    LabelText {
+                        text: ContextMenu.title;
+                        color: Theme.text-primary;
+                        font-weight: Theme.body-strong-weight;
+                        overflow: elide;
+                    }
+                    if ContextMenu.subtitle != "": CaptionText {
+                        text: ContextMenu.subtitle;
+                        overflow: elide;
+                    }
+                }
+
+                for entry[index] in ContextMenu.entries: VerticalLayout {
+                    if entry.divider-before: Rectangle {
+                        height: Theme.border-thin;
+                        background: Theme.border-default;
+                    }
+
+                    MenuRow {
+                        icon: root.icon(entry.action);
+                        label: root.label(entry);
+                        highlighted: index == root.highlighted;
+                        hovered => {
+                            root.highlighted = index;
+                        }
+                        activated => {
+                            ContextMenu.choose(entry.action);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

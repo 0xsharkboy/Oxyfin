@@ -36,6 +36,8 @@ export struct HomeRow {
     kind: HomeRowKind,
     items: [CardData],
     error: string,
+    // True for Continue Watching, whose items can be taken out of it.
+    resume: bool,
 }
 
 // Titles of the home rows, translated here because Rust builds the rows.
@@ -110,6 +112,7 @@ component HomeRowView inherits Rectangle {
 
                     for card[index] in root.section.items: LandscapeCard {
                         hover-id: card.id;
+                        from-resume: root.section.resume;
                         title: card.title;
                         subtitle: card.subtitle;
                         image: card.image;

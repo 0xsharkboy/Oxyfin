@@ -15,6 +15,7 @@ pub mod images;
 pub mod inhibit;
 pub mod launch;
 pub mod locale;
+mod menu;
 #[cfg(target_os = "linux")]
 pub mod mpris;
 pub mod present;

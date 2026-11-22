@@ -20,6 +20,7 @@ import { CollectionScreen, CollectionData } from "screens/collection.slint";
 import { TopBarPage } from "components/top_bar.slint";
 import { NoticeBanner, NoticeData } from "components/notice_banner.slint";
 import { HoverCard, HoverCardOverlay, HoverDetails, HoverKind } from "components/hover_card.slint";
+import { ContextMenu, ContextMenuOverlay, MenuAction, MenuEntry } from "components/context_menu.slint";
 
 export { CardData, ChapterRow, Message, Messages, NextUp, QualityRow, SeekPreview, SkipKind, Skipped, StatRow, StatSection, TrackRow, TrickplayGrid } from "theme.slint";
 export { StatsTitles }
@@ -29,6 +30,7 @@ export { HomeBanner, HomeRow, HomeRowKind, HomeTitles }
 export { BannerKind } from "components/banner.slint";
 export { NoticeData }
 export { HoverCard, HoverDetails, HoverKind }
+export { ContextMenu, MenuAction, MenuEntry }
 export { LibraryTitles }
 export { SearchTitles }
 export { MovieData }
@@ -142,6 +144,7 @@ export component AppWindow inherits Window {
     in property <image> series-backdrop;
     in property <bool> series-busy;
     in property <[string]> series-seasons;
+    in property <[string]> series-season-ids;
     in property <int> series-season: -1;
     in property <[EpisodeData]> series-episodes;
     in property <bool> series-episodes-loading;
@@ -293,6 +296,7 @@ export component AppWindow inherits Window {
     // The screens that take no focus of their own leave it here, where F11 works.
     changed screen => {
         HoverCard.hide();
+        ContextMenu.close();
         if root.screen == Screen.starting || root.screen == Screen.sign-in || root.screen == Screen.quick-connect || root.screen == Screen.home || root.screen == Screen.library {
             keys.focus();
         }
@@ -513,6 +517,7 @@ export component AppWindow inherits Window {
             backdrop: root.series-backdrop;
             busy: root.series-busy;
             seasons: root.series-seasons;
+            season-ids: root.series-season-ids;
             season: root.series-season;
             episodes: root.series-episodes;
             episodes-loading: root.series-episodes-loading;
@@ -790,6 +795,8 @@ export component AppWindow inherits Window {
         }
 
         HoverCardOverlay { }
+
+        ContextMenuOverlay { }
 
         // Below the top bar of the screens that have one.
         if root.notice.visible: NoticeBanner {

@@ -55,6 +55,8 @@ export component SeriesScreen inherits Rectangle {
     in property <image> backdrop;
     in property <bool> busy;
     in property <[string]> seasons;
+    // Identifier of each season, in the order of `seasons`.
+    in property <[string]> season-ids;
     // Index of the chosen season, -1 when the series has none.
     in property <int> season: -1;
     in property <[EpisodeData]> episodes;
@@ -180,6 +182,7 @@ export component SeriesScreen inherits Rectangle {
 
                             for name[index] in root.seasons: Chip {
                                 label: name;
+                                menu-id: index < root.season-ids.length ? root.season-ids[index] : "";
                                 selected: index == root.season;
                                 clicked => {
                                     root.select-season(index);
@@ -191,6 +194,7 @@ export component SeriesScreen inherits Rectangle {
                             spacing: Theme.space-sm;
 
                             for episode in root.episodes: EpisodeRow {
+                                menu-id: episode.id;
                                 number: episode.number;
                                 title: episode.title;
                                 overview: episode.overview;

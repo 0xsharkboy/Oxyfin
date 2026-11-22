@@ -3,6 +3,7 @@ import { Icons } from "../icons.slint";
 import { ProgressBar } from "progress_bar.slint";
 import { BodyStrongText, CaptionText } from "text.slint";
 import { HoverCard } from "hover_card.slint";
+import { ContextMenu, MenuKeys } from "context_menu.slint";
 
 export enum CardStatus { default, in-progress, watched }
 
@@ -66,8 +67,10 @@ export component MediaCard {
     in property <length> artwork-height;
     in property <brush> placeholder;
     in property <color> subtitle-color: Theme.text-muted;
-    // Item the hover card tells about; empty for a card without one.
+    // Item the hover card and the context menu tell about; empty for a card without them.
     in property <string> hover-id;
+    // True for a card of Continue Watching, whose menu can take it out of that row.
+    in property <bool> from-resume;
     // Becoming true gives the card the keyboard focus.
     in property <bool> focus-wanted;
     callback clicked();
@@ -80,6 +83,15 @@ export component MediaCard {
     property <bool> hover-dismissed;
     property <bool> hovered: touch.has-hover;
     property <int> scrolls: HoverCard.scrolls;
+    // Opening of the context menu this card asked for, 0 for none.
+    property <int> menu-opening;
+    property <bool> menu-open: ContextMenu.open;
+
+    changed menu-open => {
+        if !root.menu-open && root.menu-opening == ContextMenu.serial && ContextMenu.by-keyboard {
+            focus.focus();
+        }
+    }
 
     changed hovered => {
         if root.hovered {
@@ -128,6 +140,11 @@ export component MediaCard {
     touch := TouchArea {
         enabled: root.enabled;
         mouse-cursor: root.enabled ? pointer : default;
+        pointer-event(event) => {
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down && root.enabled && root.hover-id != "" {
+                root.menu-opening = ContextMenu.show(root.hover-id, root.from-resume, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y, false);
+            }
+        }
         clicked => {
             focus.focus();
             root.hover-dismissed = true;
@@ -146,6 +163,10 @@ export component MediaCard {
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " {
                 root.activate();
+                return accept;
+            }
+            if MenuKeys.opens(event) && root.hover-id != "" {
+                root.menu-opening = ContextMenu.show(root.hover-id, root.from-resume, root.absolute-position.x + Theme.space-lg, root.absolute-position.y + Theme.space-lg, true);
                 return accept;
             }
             reject

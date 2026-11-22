@@ -156,7 +156,7 @@ mod tests {
     }
 
     #[test]
-    fn a_player_built_for_the_current_generation_plays_from_home_and_details_only() {
+    fn a_player_built_for_the_current_generation_plays_from_browsing_screens_only() {
         let play = |screen: Screen| built(G1, Some(G1), &screen, &screen);
         assert_eq!(play(Screen::Home), Built::Play);
         assert_eq!(play(Screen::Movie("m".into())), Built::Play);

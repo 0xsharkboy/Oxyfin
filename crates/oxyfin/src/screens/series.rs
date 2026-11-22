@@ -53,6 +53,8 @@ pub(crate) struct SeriesController {
     people: RefCell<Rc<VecModel<PersonCardData>>>,
     similar: SimilarRow,
     loads: PageLoads,
+    // Season to show once series `.0` loads, as (series id, season id).
+    wanted_season: RefCell<Option<(String, String)>>,
 }
 
 /// A series page kept for Back.
@@ -248,6 +250,20 @@ impl SeriesController {
         self.request_episodes(app);
     }
 
+    /// Shows season `season` of series `series`: at once when the page shows that series, or
+    /// once the series page about to open has loaded.
+    pub(crate) fn show_season(&self, app: &Rc<App>, series: &str, season: &str) {
+        let index = self.details.borrow().as_ref().and_then(|details| {
+            let shown = details.summary.id.as_str() == series;
+            let index = details.seasons.iter().position(|s| s.id.as_str() == season);
+            index.filter(|_| shown)
+        });
+        match index {
+            Some(index) => self.select_season(app, index),
+            None => *self.wanted_season.borrow_mut() = Some((series.to_owned(), season.to_owned())),
+        }
+    }
+
     /// Opens the item of the card `id` in the "More like this" row.
     pub(crate) fn open_similar(&self, app: &Rc<App>, id: &str) {
         self.similar.open(app, id);
@@ -290,6 +306,7 @@ impl SeriesController {
             window.set_series_poster(Default::default());
             window.set_series_backdrop(Default::default());
             window.set_series_seasons(ModelRc::default());
+            window.set_series_season_ids(ModelRc::default());
             window.set_series_season(-1);
             window.set_series_episodes_loading(false);
             window.set_series_episodes_stale(false);
@@ -333,8 +350,13 @@ impl SeriesController {
         match result {
             Ok(details) => {
                 // The chosen season is kept by id: the list may be reordered by a reload.
-                let chosen = self
-                    .chosen_season_id()
+                let wanted = self
+                    .wanted_season
+                    .take()
+                    .filter(|(series, _)| series == details.summary.id.as_str())
+                    .map(|(_, season)| season);
+                let chosen = wanted
+                    .or_else(|| self.chosen_season_id())
                     .and_then(|chosen| details.seasons.iter().position(|s| s.id.as_str() == chosen))
                     .or_else(|| initial_season(&details));
                 self.season.set(chosen);
@@ -514,6 +536,13 @@ impl SeriesController {
                 .seasons
                 .iter()
                 .map(|season| SharedString::from(season.name.as_str()))
+                .collect::<Vec<_>>(),
+        )));
+        window.set_series_season_ids(ModelRc::new(VecModel::from(
+            details
+                .seasons
+                .iter()
+                .map(|season| SharedString::from(season.id.as_str()))
                 .collect::<Vec<_>>(),
         )));
         window.set_series_season(self.season.get().map_or(-1, |index| index as i32));

@@ -252,6 +252,7 @@ impl HomeController {
         }
         let Some(window) = app.window() else { return };
         let titles = window.global::<HomeTitles>();
+        let resume = key == RowKey::ContinueWatching;
         let (title, kind) = match &key {
             RowKey::ContinueWatching => (titles.invoke_continue_watching(), HomeRowKind::Landscape),
             RowKey::NextUp => (titles.invoke_next_up(), HomeRowKind::Landscape),
@@ -274,6 +275,7 @@ impl HomeController {
                     kind,
                     items: ModelRc::default(),
                     error: text,
+                    resume,
                 };
                 return self.upsert(key, Some((row, Rc::new(VecModel::default()))));
             }
@@ -309,6 +311,7 @@ impl HomeController {
             kind,
             items: ModelRc::from(Rc::clone(&cards)),
             error: SharedString::default(),
+            resume,
         };
         self.upsert(key, Some((row, cards)));
 

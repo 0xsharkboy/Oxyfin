@@ -76,12 +76,10 @@ impl Screen {
         )
     }
 
-    /// Whether playback can start from the screen: the home screen and the detail pages.
+    /// Whether playback can start from the screen: the screens that browse the library, where
+    /// the play buttons and the context menus are.
     pub fn can_play(&self) -> bool {
-        matches!(
-            self,
-            Screen::Home | Screen::Movie(_) | Screen::Series(_) | Screen::Collection(_)
-        )
+        self.has_controller()
     }
 
     fn has_controller(&self) -> bool {
@@ -771,6 +769,30 @@ mod tests {
             s.update(Msg::Back),
             vec![Effect::Discard(person), Effect::Show(movie("m"))]
         );
+    }
+
+    #[test]
+    fn every_browsing_screen_can_play() {
+        for screen in [
+            Screen::Home,
+            Screen::Library(LibraryTab::Movies),
+            Screen::Search,
+            movie("m"),
+            Screen::Series("s".into()),
+            Screen::Person("p".into()),
+            Screen::Collection("c".into()),
+        ] {
+            assert!(screen.can_play(), "{screen:?}");
+        }
+        for screen in [
+            Screen::Starting,
+            Screen::SignIn,
+            Screen::QuickConnect,
+            Screen::Player,
+            Screen::Settings,
+        ] {
+            assert!(!screen.can_play(), "{screen:?}");
+        }
     }
 
     #[test]

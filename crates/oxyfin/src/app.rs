@@ -93,6 +93,7 @@ pub struct App {
     pub(crate) collection: CollectionController,
     pub(crate) series: SeriesController,
     pub(crate) hover: crate::hover::HoverController,
+    pub(crate) menu: crate::menu::MenuController,
 }
 
 impl App {
@@ -141,6 +142,7 @@ impl App {
             collection: CollectionController::default(),
             series: SeriesController::default(),
             hover: Default::default(),
+            menu: Default::default(),
         });
         app.bind(window);
         app.restore();
@@ -180,6 +182,19 @@ impl App {
 
     pub(crate) fn manager(&self) -> Arc<SessionManager> {
         Arc::clone(&self.manager)
+    }
+
+    /// The current screen.
+    pub(crate) fn screen(&self) -> Screen {
+        self.state.borrow().screen()
+    }
+
+    /// The user state of an item changed on the current screen: it reloads, and the screens
+    /// below reload when they show again.
+    pub(crate) fn item_changed(self: &Rc<Self>) {
+        let screen = self.screen();
+        self.refresh(&screen);
+        self.dispatch(Msg::ItemChanged(screen));
     }
 
     /// Depth of the current screen in the stack, 0 for the root.
@@ -1136,6 +1151,19 @@ impl App {
                     app.hover.request(&app, &id, progress);
                 }
             });
+        let this = self.this.clone();
+        let menu = window.global::<crate::ContextMenu>();
+        menu.on_requested(move |serial, id, from_resume| {
+            if let Some(app) = this.upgrade() {
+                app.menu.request(&app, serial, &id, from_resume);
+            }
+        });
+        let this = self.this.clone();
+        menu.on_chosen(move |serial, action| {
+            if let Some(app) = this.upgrade() {
+                app.menu.chosen(&app, serial, action);
+            }
+        });
         let this = self.this.clone();
         window.on_open_item(move |id| {
             if let Some(app) = this.upgrade() {
