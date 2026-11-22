@@ -31,11 +31,14 @@ pub fn right_click(window: &AppWindow, element: &ElementHandle) {
 /// Waits for the open menu titled `title` and returns the labels of its rows, in order.
 pub async fn wait_menu(window: &AppWindow, title: &str) -> Result<Vec<String>, String> {
     let start = std::time::Instant::now();
+    let menu = window.global::<ContextMenu>();
     loop {
+        // The panel shows at once with the header of the opener; its rows come with the answer.
+        let ready = menu.get_open() && menu.get_ready_serial() == menu.get_serial();
         let panel = ElementHandle::find_by_accessible_label(window, title).find(|element| {
             element.accessible_role() == Some(AccessibleRole::List) && element.size().width > 0.
         });
-        if let Some(panel) = panel {
+        if let Some(panel) = panel.filter(|_| ready) {
             let mut rows: Vec<ElementHandle> = panel
                 .query_descendants()
                 .match_accessible_role(AccessibleRole::Button)

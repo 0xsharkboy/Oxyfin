@@ -2,6 +2,7 @@ import { Theme } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { BodyText, CaptionText, LabelText } from "text.slint";
 import { HoverCard } from "hover_card.slint";
+import { Bone, LineBone, Skeleton } from "skeleton.slint";
 
 // What a row of the context menu does, mirroring the Rust `MenuAction`.
 export enum MenuAction {
@@ -53,9 +54,10 @@ export global ContextMenu {
     out property <bool> by-keyboard;
     // Opening whose entries are set, from Rust.
     in property <int> ready-serial;
-    in property <string> title;
-    in property <string> subtitle;
-    in property <[MenuEntry]> entries;
+    // Header of the menu: first what the opener shows, then what Rust tells with the entries.
+    in-out property <string> title;
+    in-out property <string> subtitle;
+    in-out property <[MenuEntry]> entries;
     // Row under the pointer or picked with the arrows, -1 for none.
     in-out property <int> highlighted: -1;
     // Item whose element takes the focus back after a row chosen from the keyboard, also when
@@ -71,8 +73,13 @@ export global ContextMenu {
     callback requested(serial: int, id: string, from-resume: bool);
     callback chosen(serial: int, action: MenuAction);
 
-    // Opens the menu of `id` at a point of the window; returns the number of this opening.
-    public function show(id: string, from-resume: bool, x: length, y: length, by-keyboard: bool) -> int {
+    // Opens the menu of `id` at a point of the window, headed with what the opener shows until
+    // the entries come; returns the number of this opening.
+    public function show(id: string, from-resume: bool, x: length, y: length, by-keyboard: bool, title: string, subtitle: string) -> int {
+        self.title = title;
+        self.subtitle = subtitle;
+        self.entries = [];
+        self.highlighted = -1;
         self.serial += 1;
         self.open = true;
         self.id = id;
@@ -296,7 +303,7 @@ export component ContextMenuOverlay inherits Rectangle {
             }
         }
 
-        if root.ready: panel := Rectangle {
+        panel := Rectangle {
             x: max(Theme.space-sm, ContextMenu.anchor-x + self.width <= root.width - Theme.space-sm ? ContextMenu.anchor-x : ContextMenu.anchor-x - self.width);
             y: max(Theme.space-sm, ContextMenu.anchor-y + self.height <= root.height - Theme.space-sm ? ContextMenu.anchor-y : ContextMenu.anchor-y - self.height);
             width: Theme.context-menu-width;
@@ -337,6 +344,34 @@ export component ContextMenuOverlay inherits Rectangle {
                     if ContextMenu.subtitle != "": CaptionText {
                         text: ContextMenu.subtitle;
                         overflow: elide;
+                    }
+                }
+
+                // Rows standing in for the entries until Rust tells them.
+                if !root.ready: Skeleton {
+                    accessible-role: none;
+
+                    for placeholder in 3: Rectangle {
+                        height: 2 * Theme.space-sm + Theme.body-line-height;
+
+                        HorizontalLayout {
+                            padding-left: Theme.space-md;
+                            padding-right: Theme.space-md;
+                            spacing: Theme.context-menu-icon-gap;
+                            alignment: start;
+
+                            VerticalLayout {
+                                alignment: center;
+
+                                Bone {
+                                    width: Theme.link-icon-size;
+                                    height: Theme.link-icon-size;
+                                }
+                            }
+                            LineBone {
+                                bone-width: Theme.context-menu-width / 2;
+                            }
+                        }
                     }
                 }
 

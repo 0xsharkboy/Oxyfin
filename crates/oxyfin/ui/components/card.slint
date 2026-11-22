@@ -148,7 +148,7 @@ export component MediaCard {
         mouse-cursor: root.enabled ? pointer : default;
         pointer-event(event) => {
             if event.button == PointerEventButton.right && event.kind == PointerEventKind.down && root.enabled && root.hover-id != "" {
-                ContextMenu.show(root.hover-id, root.from-resume, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y, false);
+                ContextMenu.show(root.hover-id, root.from-resume, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y, false, root.title, root.subtitle);
             }
         }
         clicked => {
@@ -180,7 +180,7 @@ export component MediaCard {
                 return accept;
             }
             if MenuKeys.opens(event) && root.hover-id != "" {
-                ContextMenu.show(root.hover-id, root.from-resume, root.absolute-position.x + Theme.space-lg, root.absolute-position.y + Theme.space-lg, true);
+                ContextMenu.show(root.hover-id, root.from-resume, root.absolute-position.x + Theme.space-lg, root.absolute-position.y + Theme.space-lg, true, root.title, root.subtitle);
                 return accept;
             }
             reject
