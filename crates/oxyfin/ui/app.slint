@@ -287,6 +287,11 @@ export component AppWindow inherits Window {
     in-out property <AuthorizeState> settings-authorize-state;
     pure callback settings-code-ready(code: string) -> bool;
     callback settings-authorize(code: string);
+    in property <int> settings-image-cache-kb: -1;
+    callback settings-clear-image-cache();
+    in property <bool> settings-logs-copied;
+    callback settings-copy-logs();
+    callback settings-open-logs();
     in property <string> app-version;
     callback close-settings();
     callback sign-out();
@@ -815,6 +820,17 @@ export component AppWindow inherits Window {
             authorize(code) => {
                 root.settings-authorize(code);
             }
+            image-cache-kb: root.settings-image-cache-kb;
+            clear-image-cache => {
+                root.settings-clear-image-cache();
+            }
+            logs-copied: root.settings-logs-copied;
+            copy-logs => {
+                root.settings-copy-logs();
+            }
+            open-logs => {
+                root.settings-open-logs();
+            }
             version: root.app-version;
             back => {
                 root.close-settings();
@@ -840,5 +856,23 @@ export component AppWindow inherits Window {
         }
 
         ShortcutsOverlay { }
+    }
+
+    // Hands text to the system clipboard, which Slint reaches only through a text input.
+    clipboard := TextInput {
+        visible: false;
+        enabled: false;
+        read-only: true;
+        single-line: false;
+        width: 0;
+        height: 0;
+    }
+
+    // Puts `text` on the clipboard.
+    public function copy-to-clipboard(text: string) {
+        clipboard.text = text;
+        clipboard.select-all();
+        clipboard.copy();
+        clipboard.text = "";
     }
 }

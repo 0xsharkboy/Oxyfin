@@ -52,6 +52,9 @@ const CHAPTER_THUMB_HEIGHT: f32 = 36.0;
 #[cfg(all(target_os = "linux", feature = "mpv"))]
 const MPRIS_ART_HEIGHT: u32 = 512;
 
+/// Opens a folder in the file manager.
+type FolderOpener = dyn Fn(&std::path::Path);
+
 /// How long a notice that needs no action stays on screen.
 pub const NOTICE_DURATION: Duration = Duration::from_secs(5);
 
@@ -84,6 +87,7 @@ pub struct App {
     #[cfg(all(target_os = "linux", feature = "mpv"))]
     inhibitor: RefCell<Option<crate::inhibit::Inhibitor>>,
     discord: RefCell<Option<crate::discord::Discord>>,
+    folder_opener: RefCell<Rc<FolderOpener>>,
     pub(crate) sign_in: SignInController,
     pub(crate) home: HomeController,
     pub(crate) library: LibraryController,
@@ -133,6 +137,7 @@ impl App {
             #[cfg(all(target_os = "linux", feature = "mpv"))]
             inhibitor: RefCell::new(None),
             discord: RefCell::new(None),
+            folder_opener: RefCell::new(Rc::new(crate::logs::open_folder)),
             sign_in: SignInController::default(),
             home: HomeController::default(),
             library: LibraryController::default(),
@@ -830,6 +835,54 @@ impl App {
         }
     }
 
+    /// Measures the image cache for the Diagnostics section of the settings.
+    fn measure_image_cache(&self) {
+        let Some((_, _, images)) = self.services() else {
+            return;
+        };
+        self.spawn(async move { images.disk_usage().await }, |app, bytes| {
+            if let Some(window) = app.window() {
+                window.set_settings_image_cache_kb(settings::cache_kb(bytes));
+            }
+        });
+    }
+
+    fn clear_image_cache(&self) {
+        let Some((_, _, images)) = self.services() else {
+            return;
+        };
+        if let Some(window) = self.window() {
+            window.set_settings_image_cache_kb(-1);
+        }
+        self.spawn(async move { images.clear().await }, |app, result| {
+            if let Err(error) = result {
+                log::warn!("{error}");
+            }
+            app.measure_image_cache();
+        });
+    }
+
+    fn copy_logs(&self) {
+        let Some(window) = self.window() else { return };
+        let text = crate::logs::recent(
+            &crate::logs::log_dir(&self.paths),
+            crate::logs::RECENT_LOG_BYTES,
+        );
+        window.invoke_copy_to_clipboard(text.into());
+        window.set_settings_logs_copied(true);
+    }
+
+    fn open_logs(&self) {
+        let opener = Rc::clone(&*self.folder_opener.borrow());
+        opener(&crate::logs::log_dir(&self.paths));
+    }
+
+    /// Replaces what opens the log folder, for tests that must not start a file manager.
+    #[doc(hidden)]
+    pub fn set_folder_opener(&self, opener: impl Fn(&std::path::Path) + 'static) {
+        *self.folder_opener.borrow_mut() = Rc::new(opener);
+    }
+
     /// Signs another device in with the Quick Connect `code` it shows, then
     /// tells the outcome in the settings.
     fn authorize_device(&self, code: &str) {
@@ -1063,6 +1116,9 @@ impl App {
                 app.set_playback_prefs(&choice);
             }
         });
+        window.on_settings_clear_image_cache(with(|app| app.clear_image_cache()));
+        window.on_settings_copy_logs(with(|app| app.copy_logs()));
+        window.on_settings_open_logs(with(|app| app.open_logs()));
         window.on_settings_code_ready(|code| settings::code_ready(&code));
         let this = self.this.clone();
         window.on_settings_authorize(move |code| {
@@ -1395,6 +1451,7 @@ impl App {
                     window.set_top_bar_page(top_bar_page(root.as_ref()));
                     if screen == Screen::Settings {
                         settings::show(&window, self.state.borrow().session());
+                        self.measure_image_cache();
                         window.set_settings_subtitles(settings::subtitle_choice(
                             self.manager.subtitle_style(),
                         ));

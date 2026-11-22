@@ -21,8 +21,9 @@ fn main() -> ExitCode {
         println!("{}", launch::version_line());
         return ExitCode::SUCCESS;
     }
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-    match run() {
+    let paths = Paths::from_system();
+    oxyfin::logs::init(paths.as_ref().ok().map(oxyfin::logs::log_dir).as_deref());
+    match paths.map_err(Into::into).and_then(run) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             log::error!("oxyfin failed to start: {error}");
@@ -31,7 +32,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
+fn run(paths: Paths) -> Result<(), Box<dyn std::error::Error>> {
     // An explicit SLINT_BACKEND (headless agent runs) picks its own backend and renderer.
     if std::env::var("SLINT_BACKEND").map_or(true, |value| value.trim().is_empty()) {
         BackendSelector::new()
@@ -45,7 +46,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .enable_all()
         .build()?;
 
-    let paths = Paths::from_system()?;
     let vault = if launch::enabled(std::env::var(launch::MEMORY_TOKENS_VAR).ok().as_deref()) {
         log::info!("tokens are kept in memory only");
         TokenVault::memory()

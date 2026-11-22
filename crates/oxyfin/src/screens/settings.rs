@@ -1,5 +1,5 @@
 //! Settings screen: the signed-in account, the playback choices, the subtitle
-//! style, the Quick Connect code entry and the application version.
+//! style, the Quick Connect code entry, the diagnostics and the application version.
 
 use oxyfin_core::{
     COUNTDOWNS, CoreError, PlaybackPrefs, SubtitleBackground, SubtitleColor, SubtitlePosition,
@@ -38,11 +38,18 @@ pub fn show(window: &AppWindow, session: Option<&SessionInfo>) {
         Some(TokenStorage::Memory) => TokenStore::Memory,
         Some(TokenStorage::Keyring) | None => TokenStore::Keyring,
     });
+    window.set_settings_image_cache_kb(-1);
+    window.set_settings_logs_copied(false);
     // A code still being sent keeps its state until the server answers.
     if window.get_settings_authorize_state() != AuthorizeState::Busy {
         window.set_settings_authorize_state(AuthorizeState::Idle);
         window.set_settings_authorize_code("".into());
     }
+}
+
+/// Size of the image cache as the Diagnostics section shows it: kibibytes, rounded up.
+pub fn cache_kb(bytes: u64) -> i32 {
+    i32::try_from(bytes.div_ceil(1024)).unwrap_or(i32::MAX)
 }
 
 /// Whether `code` holds a Quick Connect code to send: at least one digit.
@@ -190,6 +197,27 @@ mod tests {
         show(&window, Some(&info(None)));
         assert_eq!(window.get_settings_authorize_state(), AuthorizeState::Busy);
         assert_eq!(window.get_settings_authorize_code(), "482913");
+    }
+
+    #[test]
+    fn the_cache_size_is_counted_in_kibibytes() {
+        assert_eq!(cache_kb(0), 0);
+        assert_eq!(cache_kb(1), 1);
+        assert_eq!(cache_kb(1024), 1);
+        assert_eq!(cache_kb(3 * 1024 * 1024), 3072);
+        assert_eq!(cache_kb(u64::MAX), i32::MAX);
+    }
+
+    #[test]
+    fn showing_the_settings_forgets_the_diagnostics() {
+        i_slint_backend_testing::init_no_event_loop();
+        let window = AppWindow::new().unwrap();
+
+        window.set_settings_image_cache_kb(12);
+        window.set_settings_logs_copied(true);
+        show(&window, Some(&info(None)));
+        assert_eq!(window.get_settings_image_cache_kb(), -1);
+        assert!(!window.get_settings_logs_copied());
     }
 
     #[test]

@@ -4,7 +4,7 @@
 use std::sync::{Arc, Mutex};
 
 use i_slint_backend_testing::{AccessibleRole, ElementHandle};
-use oxyfin::{AppWindow, Screen};
+use oxyfin::{App, AppWindow, Screen};
 use oxyfin_core::{Config, Paths, PlaybackPrefs};
 use slint::{ComponentHandle, LogicalSize};
 use wiremock::{Mock, MockServer};
@@ -70,6 +70,17 @@ pub fn open_settings_with(
     mocks: Vec<Mock>,
     scenario: impl AsyncFnOnce(&AppWindow, &Shared) -> Result<(), String> + 'static,
 ) {
+    open_settings_prepared(mocks, |_| {}, |_| {}, scenario);
+}
+
+/// Like [`open_settings_with`], with `prepare` filling the directories before the app starts
+/// and `setup` adjusting the app before the scenario runs.
+pub fn open_settings_prepared(
+    mocks: Vec<Mock>,
+    prepare: impl FnOnce(&Paths),
+    setup: impl FnOnce(&App),
+    scenario: impl AsyncFnOnce(&AppWindow, &Shared) -> Result<(), String> + 'static,
+) {
     let shared: Shared = Arc::new(Mutex::new(None));
     let keep = Arc::clone(&shared);
     let flow = start_with(
@@ -82,11 +93,13 @@ pub fn open_settings_with(
         },
         move |paths, vault, url| {
             save_session(paths, vault, url);
+            prepare(paths);
             if let Ok(mut slot) = keep.lock() {
                 *slot = Some(paths.clone());
             }
         },
     );
+    setup(&flow.app);
     flow.window
         .window()
         .set_size(LogicalSize::new(WIDTH, 1800.));

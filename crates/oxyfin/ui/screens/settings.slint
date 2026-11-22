@@ -4,6 +4,7 @@ import { TopBar, TopBarPage } from "../components/top_bar.slint";
 import { BodyText, CaptionText, DisplayText, HeadingText, LabelText } from "../components/text.slint";
 import { Chip } from "../components/chip.slint";
 import { TextField } from "../components/text_field.slint";
+import { Shortcuts } from "../components/shortcuts_overlay.slint";
 
 // Where the sign-in token is kept; mirrors the core `TokenStorage`.
 export enum TokenStore { keyring, file, memory }
@@ -131,6 +132,37 @@ component SubtitlePreview inherits Rectangle {
     }
 }
 
+// A setting with a value and the buttons that act on it, aligned to the right.
+component ActionRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value;
+
+    spacing: Theme.space-lg;
+
+    LabelText {
+        width: 160px;
+        text: root.label;
+        vertical-alignment: center;
+        wrap: word-wrap;
+    }
+    BodyText {
+        horizontal-stretch: 1;
+        text: root.value;
+        vertical-alignment: center;
+        wrap: word-wrap;
+    }
+    VerticalLayout {
+        alignment: center;
+
+        HorizontalLayout {
+            alignment: end;
+            spacing: Theme.space-sm;
+
+            @children
+        }
+    }
+}
+
 component SettingSection inherits Rectangle {
     in property <string> title;
 
@@ -151,8 +183,8 @@ component SettingSection inherits Rectangle {
     }
 }
 
-// Settings: the signed-in account, playback, the subtitle style, the Quick Connect code entry, the
-// application version and the sign-out action.
+// Settings: the signed-in account, playback, the subtitle style, the Quick Connect code entry,
+// diagnostics, the application version and the sign-out action.
 export component SettingsScreen inherits Rectangle {
     in property <string> server-name;
     in property <string> server-address;
@@ -178,6 +210,13 @@ export component SettingsScreen inherits Rectangle {
     // Whether `code` holds at least one digit.
     pure callback code-ready(code: string) -> bool;
     callback authorize(code: string);
+    // Size of the image cache on disk, in kibibytes; negative while unknown.
+    in property <int> image-cache-kb: -1;
+    callback clear-image-cache();
+    // Whether the logs were copied since the settings opened.
+    in property <bool> logs-copied;
+    callback copy-logs();
+    callback open-logs();
 
     property <bool> can-authorize: root.authorize-state != AuthorizeState.busy && root.code-ready(root.authorize-code);
 
@@ -472,6 +511,55 @@ export component SettingsScreen inherits Rectangle {
                                 : @tr("The device could not be authorized.");
                             color: root.authorize-state == AuthorizeState.done ? Theme.watched : Theme.danger;
                             wrap: word-wrap;
+                        }
+                    }
+
+                    SettingSection {
+                        title: @tr("Diagnostics");
+
+                        ActionRow {
+                            label: @tr("Image cache");
+                            value: root.image-cache-kb < 0 ? "" : root.image-cache-kb < 1024 ? @tr("{} KB", root.image-cache-kb) : @tr("{} MB", round(root.image-cache-kb / 1024));
+
+                            Button {
+                                label: @tr("Clear cache");
+                                style: ButtonStyle.secondary;
+                                enabled: root.image-cache-kb > 0;
+                                clicked => {
+                                    root.clear-image-cache();
+                                }
+                            }
+                        }
+                        ActionRow {
+                            label: @tr("Logs");
+                            value: @tr("For bug reports");
+
+                            Button {
+                                label: root.logs-copied ? @tr("Copied") : @tr("Copy logs");
+                                style: ButtonStyle.secondary;
+                                clicked => {
+                                    root.copy-logs();
+                                }
+                            }
+                            Button {
+                                label: @tr("Open folder");
+                                style: ButtonStyle.secondary;
+                                clicked => {
+                                    root.open-logs();
+                                }
+                            }
+                        }
+                        ActionRow {
+                            label: @tr("Keyboard shortcuts");
+                            value: @tr("Also with the ? key");
+
+                            Button {
+                                label: @tr("Show");
+                                style: ButtonStyle.secondary;
+                                clicked => {
+                                    Shortcuts.show();
+                                }
+                            }
                         }
                     }
 
