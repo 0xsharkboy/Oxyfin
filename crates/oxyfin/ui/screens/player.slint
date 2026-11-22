@@ -13,6 +13,7 @@ import { NextEpisodeToast } from "../components/next_episode_toast.slint";
 import { SkipNotice } from "../components/skip_notice.slint";
 import { StatsPanel } from "../components/stats_panel.slint";
 import { SubtitleSearch, SubtitleSearchDialog } from "../components/subtitle_search.slint";
+import { Shortcuts } from "../components/shortcuts_overlay.slint";
 
 export enum PlayerMenu { none, tracks, speed, chapters, subtitles }
 
@@ -111,8 +112,24 @@ export component PlayerScreen inherits Rectangle {
     property <length> wheel-delta;
     // What one notch of a mouse wheel scrolls: one volume step.
     property <length> wheel-notch: 60px;
-    // A click on the video waits out the double-click interval of Slint before it toggles pause.
-    property <bool> click-pending;
+    // Whether the last click and the one before it landed on the video, and the pause state
+    // before each: a double click puts back the state from before its first click.
+    property <bool> last-click-video;
+    property <bool> previous-click-video;
+    property <bool> paused-before-last-click;
+    property <bool> paused-before-previous-click;
+    // A click that closes a dialog or a menu, or lands on a control that then goes away, is not
+    // the first click of a double click on the video.
+    property <bool> shortcuts-open: Shortcuts.open;
+    changed shortcuts-open => {
+        root.last-click-video = false;
+    }
+    changed menu => {
+        root.last-click-video = false;
+    }
+    changed stats-visible => {
+        root.last-click-video = false;
+    }
     // The pause indicator: whether it shows pause, whether it shows at all, and whether it fades.
     property <bool> indicator-paused;
     property <bool> indicator-active;
@@ -205,6 +222,7 @@ export component PlayerScreen inherits Rectangle {
 
     property <bool> toast-visible: root.next-up.visible;
     changed toast-visible => {
+        root.last-click-video = false;
         if !self.toast-visible {
             keys.focus();
         }
@@ -212,6 +230,7 @@ export component PlayerScreen inherits Rectangle {
     // Stays up while the controls hide, like the skip buttons of common players.
     property <bool> skip-visible: root.skip-kind != SkipKind.none && !root.toast-visible && !root.popup-open && !root.loading && !root.has-error;
     changed skip-visible => {
+        root.last-click-video = false;
         if !self.skip-visible {
             keys.focus();
         }
@@ -220,6 +239,9 @@ export component PlayerScreen inherits Rectangle {
     // Serial of the last skip whose notice timed out or was answered.
     property <int> skip-notice-done: 0;
     property <bool> skip-notice-visible: root.skipped.kind != SkipKind.none && root.skipped.serial != root.skip-notice-done && !root.toast-visible && !root.popup-open && !root.loading && !root.has-error;
+    changed skip-notice-visible => {
+        root.last-click-video = false;
+    }
     changed skipped => {
         if skip-notice-timer.running {
             skip-notice-timer.restart();
@@ -262,16 +284,6 @@ export component PlayerScreen inherits Rectangle {
         }
     }
 
-    click-timer := Timer {
-        interval: 500ms;
-        // Held while the button is down, so a slow second press of a double click still cancels it.
-        running: root.click-pending && !surface.pressed;
-        triggered => {
-            root.click-pending = false;
-            root.pause-from-click();
-        }
-    }
-
     indicator-hold := Timer {
         interval: Theme.pause-indicator-hold;
         running: root.indicator-active && !root.indicator-fading;
@@ -311,10 +323,17 @@ export component PlayerScreen inherits Rectangle {
             root.reveal();
         }
         clicked => {
+            root.previous-click-video = root.last-click-video;
+            root.last-click-video = false;
             if root.menu-open {
                 root.close-menus();
             } else if root.on-video(self.mouse-y) {
-                root.click-pending = true;
+                root.last-click-video = true;
+                root.paused-before-previous-click = root.paused-before-last-click;
+                root.paused-before-last-click = root.paused;
+                if !root.loading && !root.has-error {
+                    root.pause-from-click();
+                }
             }
             keys.focus();
         }
@@ -334,9 +353,16 @@ export component PlayerScreen inherits Rectangle {
             }
             accept
         }
-        // Slint calls `clicked` first, so the pause of that click is still pending.
+        // Slint calls `clicked` for both clicks first, so each toggled pause: undo them.
         double-clicked => {
-            root.click-pending = false;
+            if !root.previous-click-video || !root.last-click-video {
+                return;
+            }
+            root.last-click-video = false;
+            if !root.loading && !root.has-error {
+                root.indicator-active = false;
+                root.command-set-paused(root.paused-before-previous-click);
+            }
             root.toggle-fullscreen();
         }
 
