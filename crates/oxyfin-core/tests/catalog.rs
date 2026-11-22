@@ -6,10 +6,10 @@ use common::{TEST_USER_ID, fixture, session};
 use oxyfin_api::ItemId;
 use oxyfin_core::{
     BrowseQuery, BrowseSource, Catalog, CollectionLink, ContentKind, CoreError, ItemKind,
-    ItemSummary, LibraryKind, MovieDetails, PersonKind, SortField, WatchFilter,
+    ItemSummary, LibraryKind, MenuTarget, MovieDetails, PersonKind, SortField, WatchFilter,
 };
 use serde_json::{Value, json};
-use wiremock::matchers::{method, path, query_param};
+use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Match, Mock, MockServer, Request, ResponseTemplate};
 
 struct NoParam(&'static str);
@@ -1457,4 +1457,177 @@ async fn item_brief_of_a_bare_item_leaves_everything_out() {
     assert_eq!(brief.community_rating, None);
     assert_eq!(brief.summary.overview, None);
     assert_eq!(brief.summary.duration, None);
+}
+
+const SEASON_ID: &str = "0407e3d02b7d70abe4a2d37241b02fea";
+
+#[tokio::test]
+async fn menu_target_of_a_movie_keeps_its_user_state() {
+    let mock = MockServer::start().await;
+    mount(
+        &mock,
+        "GET",
+        &format!("/Items/{MOVIE_ID}"),
+        fixture("item_movie"),
+    )
+    .await;
+    let target = catalog(&mock)
+        .menu_target(&ItemId::from(MOVIE_ID))
+        .await
+        .unwrap();
+    let Some(MenuTarget::Movie(movie)) = target else {
+        panic!("not a movie: {target:?}");
+    };
+    assert!(movie.user.favorite);
+    assert!(movie.user.can_resume());
+}
+
+#[tokio::test]
+async fn menu_target_of_an_episode_knows_its_season() {
+    let mock = MockServer::start().await;
+    let id = "0366bed6b6c97d8af5be151ffc258992";
+    let mut episode = fixture("item_episode");
+    episode["SeasonId"] = json!(SEASON_ID);
+    mount(&mock, "GET", &format!("/Items/{id}"), episode).await;
+    let target = catalog(&mock).menu_target(&ItemId::from(id)).await.unwrap();
+    let Some(MenuTarget::Episode(episode)) = target else {
+        panic!("not an episode: {target:?}");
+    };
+    assert_eq!(episode.series_id.as_str(), SERIES_ID);
+    assert_eq!(
+        episode.season_id.as_ref().map(ItemId::as_str),
+        Some(SEASON_ID)
+    );
+    assert_eq!(episode.season_number, Some(1));
+}
+
+#[tokio::test]
+async fn menu_target_of_a_series_brings_its_next_episode() {
+    let mock = MockServer::start().await;
+    mount(
+        &mock,
+        "GET",
+        &format!("/Items/{SERIES_ID}"),
+        fixture("item_series"),
+    )
+    .await;
+    mount(&mock, "GET", "/Shows/NextUp", fixture("shows_next_up")).await;
+    let target = catalog(&mock)
+        .menu_target(&ItemId::from(SERIES_ID))
+        .await
+        .unwrap();
+    let Some(MenuTarget::Series {
+        summary,
+        next_episode,
+    }) = target
+    else {
+        panic!("not a series: {target:?}");
+    };
+    assert_eq!(summary.title, "Test Show");
+    assert_eq!(next_episode.unwrap().title, "Test Show S01E02");
+}
+
+#[tokio::test]
+async fn menu_target_of_a_season_names_its_series() {
+    let mock = MockServer::start().await;
+    mount(
+        &mock,
+        "GET",
+        &format!("/Items/{SEASON_ID}"),
+        json!({
+            "Id": SEASON_ID, "Name": "Season 1", "Type": "Season", "IndexNumber": 1,
+            "SeriesId": SERIES_ID, "SeriesName": "Test Show",
+            "UserData": {"Played": true, "IsFavorite": false, "PlaybackPositionTicks": 0, "PlayCount": 0}
+        }),
+    )
+    .await;
+    let target = catalog(&mock)
+        .menu_target(&ItemId::from(SEASON_ID))
+        .await
+        .unwrap();
+    let Some(MenuTarget::Season {
+        season,
+        series_id,
+        series_name,
+    }) = target
+    else {
+        panic!("not a season: {target:?}");
+    };
+    assert_eq!(season.number, Some(1));
+    assert!(season.user.played);
+    assert_eq!(series_id.as_str(), SERIES_ID);
+    assert_eq!(series_name.as_deref(), Some("Test Show"));
+}
+
+#[tokio::test]
+async fn menu_target_of_a_box_set_is_none() {
+    let mock = MockServer::start().await;
+    mount(
+        &mock,
+        "GET",
+        "/Items/set",
+        json!({"Id": "set", "Name": "Set", "Type": "BoxSet"}),
+    )
+    .await;
+    let target = catalog(&mock).menu_target(&ItemId::from("set")).await;
+    assert_eq!(target, Ok(None));
+}
+
+#[tokio::test]
+async fn hide_from_resume_clears_the_position() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!("/UserItems/{MOVIE_ID}/UserData")))
+        .and(body_json(json!({"PlaybackPositionTicks": 0})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Played": false, "IsFavorite": true, "PlaybackPositionTicks": 0, "PlayCount": 1
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let state = catalog(&mock)
+        .hide_from_resume(&ItemId::from(MOVIE_ID))
+        .await
+        .unwrap();
+    assert!(!state.can_resume());
+    assert!(state.favorite);
+}
+
+#[tokio::test]
+async fn season_plays_its_first_unplayed_episode() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/Shows/{SERIES_ID}/Episodes")))
+        .and(query_param("seasonId", SEASON_ID))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("shows_episodes")))
+        .mount(&mock)
+        .await;
+    let episode = catalog(&mock)
+        .season_episode_to_play(&ItemId::from(SERIES_ID), &ItemId::from(SEASON_ID))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(episode.title, "Test Show S01E02");
+}
+
+#[tokio::test]
+async fn a_watched_season_plays_from_its_first_episode() {
+    let mock = MockServer::start().await;
+    let mut episodes = fixture("shows_episodes");
+    for episode in episodes["Items"].as_array_mut().unwrap() {
+        episode["UserData"]["Played"] = json!(true);
+    }
+    mount(
+        &mock,
+        "GET",
+        &format!("/Shows/{SERIES_ID}/Episodes"),
+        episodes,
+    )
+    .await;
+    let episode = catalog(&mock)
+        .season_episode_to_play(&ItemId::from(SERIES_ID), &ItemId::from(SEASON_ID))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(episode.title, "Test Show S01E01");
 }

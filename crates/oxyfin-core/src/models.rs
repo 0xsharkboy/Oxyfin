@@ -585,6 +585,31 @@ impl SeriesDetails {
     }
 }
 
+/// An item a context menu acts on, with the state its actions depend on.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MenuTarget {
+    /// A movie or a standalone video.
+    Movie(ItemSummary),
+    /// An episode.
+    Episode(Episode),
+    /// A series.
+    Series {
+        /// The series.
+        summary: ItemSummary,
+        /// Episode its play action starts, if any is left.
+        next_episode: Option<Box<Episode>>,
+    },
+    /// A season of a series.
+    Season {
+        /// The season.
+        season: Season,
+        /// Series the season belongs to.
+        series_id: ItemId,
+        /// Name of that series, when the server reports it.
+        series_name: Option<String>,
+    },
+}
+
 /// A box set an item belongs to.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CollectionLink {

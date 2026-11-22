@@ -12,7 +12,8 @@ use oxyfin_api::{
 
 use crate::models::{
     CollectionDetails, CollectionLink, Episode, ItemBrief, ItemKind, ItemSummary, Library,
-    LibraryKind, MovieDetails, Page, PersonDetails, PersonTitle, Season, SeriesDetails, UserState,
+    LibraryKind, MenuTarget, MovieDetails, Page, PersonDetails, PersonTitle, Season, SeriesDetails,
+    UserState,
 };
 use crate::{CoreError, Result};
 
@@ -543,6 +544,52 @@ impl Catalog {
     pub async fn set_favorite(&self, id: &ItemId, favorite: bool) -> Result<UserState> {
         let data = self.session.set_favorite(id, favorite).await?;
         Ok(UserState::from_dto(Some(&data)))
+    }
+
+    /// Takes an item out of Continue Watching, keeping its played and favorite state.
+    pub async fn hide_from_resume(&self, id: &ItemId) -> Result<UserState> {
+        let data = self.session.hide_from_resume(id).await?;
+        Ok(UserState::from_dto(Some(&data)))
+    }
+
+    /// Fetches what the context menu of an item acts on; `None` for kinds it has no menu for.
+    pub async fn menu_target(&self, id: &ItemId) -> Result<Option<MenuTarget>> {
+        let dto = self.session.item(id).await?;
+        let target = match dto.r#type {
+            BaseItemKind::Movie | BaseItemKind::Video => {
+                ItemSummary::from_dto(&dto).map(MenuTarget::Movie)
+            }
+            BaseItemKind::Episode => Episode::from_dto(&dto).map(MenuTarget::Episode),
+            BaseItemKind::Series => match ItemSummary::from_dto(&dto) {
+                Some(summary) => Some(MenuTarget::Series {
+                    next_episode: self.next_episode_to_watch(id).await?.map(Box::new),
+                    summary,
+                }),
+                None => None,
+            },
+            BaseItemKind::Season => match (Season::from_dto(&dto), dto.series_id.clone()) {
+                (Some(season), Some(series_id)) => Some(MenuTarget::Season {
+                    season,
+                    series_id,
+                    series_name: dto.series_name.clone(),
+                }),
+                _ => None,
+            },
+            _ => None,
+        };
+        Ok(target)
+    }
+
+    /// Finds the episode that playing a season starts: its first unplayed one, resumed when it
+    /// was started, else its first.
+    pub async fn season_episode_to_play(
+        &self,
+        series: &ItemId,
+        season: &ItemId,
+    ) -> Result<Option<Episode>> {
+        let episodes = self.episodes(series, season).await?;
+        let unplayed = episodes.iter().position(|episode| !episode.user.played);
+        Ok(episodes.into_iter().nth(unplayed.unwrap_or(0)))
     }
 
     /// Signs another device in as this user with the Quick Connect code it shows, typed with
