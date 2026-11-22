@@ -51,10 +51,7 @@ impl LogFile {
     /// Opens or creates the log file in `dir`, rotating it past `limit` bytes.
     pub fn open(dir: &Path, limit: u64) -> io::Result<Self> {
         std::fs::create_dir_all(dir)?;
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(dir.join(LOG_FILE))?;
+        let file = open_log(&dir.join(LOG_FILE), false)?;
         let size = file.metadata()?.len();
         Ok(Self {
             dir: dir.to_path_buf(),
@@ -73,12 +70,7 @@ impl LogFile {
         }
         let file = match &mut self.file {
             Some(file) => file,
-            None => self.file.insert(
-                OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(self.dir.join(LOG_FILE))?,
-            ),
+            None => self.file.insert(open_log(&self.dir.join(LOG_FILE), false)?),
         };
         file.write_all(line.as_bytes())?;
         self.size += len;
@@ -88,10 +80,29 @@ impl LogFile {
     fn rotate(&mut self) -> io::Result<()> {
         // Closed first: Windows cannot rename an open file.
         self.file = None;
-        std::fs::rename(self.dir.join(LOG_FILE), self.dir.join(ROTATED_LOG_FILE))?;
         self.size = 0;
-        Ok(())
+        let current = self.dir.join(LOG_FILE);
+        match std::fs::rename(&current, self.dir.join(ROTATED_LOG_FILE)) {
+            Err(error) if error.kind() != io::ErrorKind::NotFound => {
+                // Without a rotated file, the current one starts over so its size stays bounded.
+                self.file = Some(open_log(&current, true)?);
+                Ok(())
+            }
+            _ => Ok(()),
+        }
     }
+}
+
+/// Opens the log file at `path` for appending, or emptied when `truncate`.
+fn open_log(path: &Path, truncate: bool) -> io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.create(true);
+    if truncate {
+        options.write(true).truncate(true);
+    } else {
+        options.append(true);
+    }
+    options.open(path)
 }
 
 impl Write for LogFile {
@@ -373,6 +384,39 @@ mod tests {
             .unwrap();
         assert_eq!(read(dir.path(), ROTATED_LOG_FILE).len(), 80);
         assert_eq!(read(dir.path(), LOG_FILE).len(), 40);
+    }
+
+    #[test]
+    fn logging_goes_on_when_the_rotation_cannot_rename() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let blocker = dir.path().join(ROTATED_LOG_FILE);
+        std::fs::create_dir(&blocker).unwrap();
+        std::fs::write(blocker.join("kept"), b"x").unwrap();
+        let mut file = LogFile::open(dir.path(), 100).unwrap();
+        for index in 0..6 {
+            file.write_all(format!("{index:039}\n").as_bytes()).unwrap();
+        }
+        file.flush().unwrap();
+        let current = read(dir.path(), LOG_FILE);
+        assert_eq!(current, format!("{:039}\n{:039}\n", 4, 5));
+    }
+
+    #[test]
+    fn logging_goes_on_when_the_file_was_removed() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut file = LogFile::open(dir.path(), 100).unwrap();
+        file.write_all(format!("{}\n", "a".repeat(79)).as_bytes())
+            .unwrap();
+        std::fs::remove_file(dir.path().join(LOG_FILE)).unwrap();
+        file.write_all(format!("{}\n", "b".repeat(39)).as_bytes())
+            .unwrap();
+        file.write_all(format!("{}\n", "c".repeat(39)).as_bytes())
+            .unwrap();
+        file.flush().unwrap();
+        assert_eq!(
+            read(dir.path(), LOG_FILE),
+            format!("{}\n{}\n", "b".repeat(39), "c".repeat(39))
+        );
     }
 
     #[test]
