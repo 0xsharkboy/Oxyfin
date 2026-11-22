@@ -14,7 +14,7 @@ mod types;
 
 pub use error::PlayerError;
 #[cfg(feature = "mpv")]
-pub use player::{Player, PlayerOptions, VideoOutput};
+pub use player::{Player, PlayerOptions, VideoOutput, mpv_version};
 #[cfg(feature = "mpv")]
 pub use render::VideoRenderer;
 pub use types::{

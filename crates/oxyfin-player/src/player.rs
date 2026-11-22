@@ -44,6 +44,22 @@ pub struct Player {
     event_thread: Option<JoinHandle<()>>,
 }
 
+/// The version of the libmpv in use, such as `mpv 0.40.0`, read from an instance that never
+/// plays anything.
+pub fn mpv_version() -> Result<String, PlayerError> {
+    let mpv = Mpv::with_initializer(|init| {
+        init.set_option("vo", "null")?;
+        init.set_option("ao", "null")?;
+        Ok(())
+    })
+    .map_err(|e| PlayerError::Create(describe(&e)))?;
+    mpv.get_property::<String>("mpv-version")
+        .map_err(|e| PlayerError::Property {
+            name: "mpv-version".to_owned(),
+            message: describe(&e),
+        })
+}
+
 impl Player {
     /// Creates a player with the given options, sending its events to
     /// `on_event`.
@@ -610,6 +626,13 @@ mod tests {
     #[test]
     fn frames_are_handed_to_the_renderer_at_their_display_time() {
         assert_eq!(number(&headless(), "video-timing-offset"), 0.0);
+    }
+
+    #[test]
+    fn the_mpv_version_names_the_library() {
+        let version = mpv_version().unwrap();
+        assert!(version.starts_with("mpv "), "{version}");
+        assert!(version.chars().any(|c| c.is_ascii_digit()), "{version}");
     }
 
     #[test]
