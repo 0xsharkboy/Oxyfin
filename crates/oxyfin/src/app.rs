@@ -427,12 +427,16 @@ impl App {
 
         self.creating_player.set(Some(id));
         let runtime = self.runtime.clone();
+        let options = PlayerOptions {
+            volume: Some(self.manager.volume()),
+            ..PlayerOptions::default()
+        };
         self.spawn(
             async move {
                 runtime
                     .spawn_blocking(move || {
                         let (sink, events) = player_events();
-                        Player::new(PlayerOptions::default(), move |event| sink.send(event))
+                        Player::new(options, move |event| sink.send(event))
                             .map(|player| (Arc::new(player), events))
                             .map_err(|error| error.to_string())
                     })
@@ -749,6 +753,11 @@ impl App {
             && let Err(error) = self.manager.set_quality(quality)
         {
             log::warn!("cannot save the streaming quality: {error}");
+        }
+        if let PlaybackCommand::SetVolume(volume) = command
+            && let Err(error) = self.manager.set_volume(volume)
+        {
+            log::warn!("cannot save the volume: {error}");
         }
         if let Some(playback) = self
             .generation

@@ -29,6 +29,8 @@ pub enum VideoOutput {
 pub struct PlayerOptions {
     /// Where mpv sends decoded video.
     pub video_output: VideoOutput,
+    /// Volume to start at, in percent; mpv starts at full volume without one.
+    pub volume: Option<f64>,
 }
 
 /// A libmpv player instance.
@@ -65,6 +67,9 @@ impl Player {
             init.set_option("hwdec", "auto-safe")?;
             // Otherwise rendering blocks the interface thread until each frame's display time.
             init.set_option("video-timing-offset", "0")?;
+            if let Some(volume) = options.volume {
+                init.set_option("volume", volume.clamp(0.0, 100.0))?;
+            }
             init.set_option("keep-open", "yes")?;
             init.set_option("keep-open-pause", "no")?;
             Ok(())
@@ -589,6 +594,7 @@ mod tests {
     fn headless() -> Player {
         let options = PlayerOptions {
             video_output: VideoOutput::None,
+            ..PlayerOptions::default()
         };
         Player::new(options, |_| {}).unwrap()
     }
@@ -604,6 +610,17 @@ mod tests {
     #[test]
     fn frames_are_handed_to_the_renderer_at_their_display_time() {
         assert_eq!(number(&headless(), "video-timing-offset"), 0.0);
+    }
+
+    #[test]
+    fn the_player_starts_at_the_given_volume() {
+        let options = PlayerOptions {
+            video_output: VideoOutput::None,
+            volume: Some(40.0),
+        };
+        let player = Player::new(options, |_| {}).unwrap();
+        assert_eq!(number(&player, "volume"), 40.0);
+        assert_eq!(number(&headless(), "volume"), 100.0);
     }
 
     #[test]

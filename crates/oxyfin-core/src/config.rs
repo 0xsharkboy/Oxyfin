@@ -62,6 +62,10 @@ pub struct Config {
     /// Whether the player shows the time left rather than the total duration.
     #[serde(default)]
     pub time_remaining: bool,
+    /// Player volume the user last set, in percent; `None` before any change. Unreadable
+    /// content counts as no change.
+    #[serde(default, deserialize_with = "lenient")]
+    pub volume: Option<u8>,
 }
 
 fn storage<E: std::fmt::Display>(error: E) -> CoreError {
@@ -81,6 +85,7 @@ impl Config {
             playback: PlaybackPrefs::default(),
             discord: false,
             time_remaining: false,
+            volume: None,
         }
     }
 
@@ -253,6 +258,25 @@ mod tests {
         )
         .unwrap();
         assert!(!Config::load_or_create(&paths).unwrap().time_remaining);
+    }
+
+    #[test]
+    fn volume_round_trips_and_falls_back_to_none() {
+        let (_dir, paths) = temp();
+        let mut config = Config::load_or_create(&paths).unwrap();
+        assert_eq!(config.volume, None);
+        config.volume = Some(40);
+        config.save(&paths).unwrap();
+        assert_eq!(Config::load_or_create(&paths).unwrap().volume, Some(40));
+
+        fs::write(
+            paths.config_dir.join("config.json"),
+            r#"{"device_id":"abc","volume":"loud"}"#,
+        )
+        .unwrap();
+        let config = Config::load_or_create(&paths).unwrap();
+        assert_eq!(config.device_id, "abc", "the rest of the file still loads");
+        assert_eq!(config.volume, None);
     }
 
     #[test]

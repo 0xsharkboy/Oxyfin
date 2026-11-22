@@ -190,6 +190,19 @@ impl SessionManager {
         self.update(|config| config.time_remaining = on)
     }
 
+    /// Returns the player volume in percent, as last saved: full volume before any change.
+    pub fn volume(&self) -> f64 {
+        f64::from(self.config().volume.unwrap_or(100).min(100))
+    }
+
+    /// Saves the player volume in percent, rounded and kept within 0 to 100. The saved volume is
+    /// unchanged on failure.
+    pub fn set_volume(&self, volume: f64) -> Result<()> {
+        // In range after the clamp, so the cast cannot truncate.
+        let percent = volume.clamp(0.0, 100.0).round() as u8;
+        self.update(|config| config.volume = Some(percent))
+    }
+
     /// Returns the playback choices, as last saved.
     pub fn playback_prefs(&self) -> PlaybackPrefs {
         self.config().playback
