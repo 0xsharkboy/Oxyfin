@@ -338,8 +338,9 @@ export component EpisodeRowBones {
     }
 }
 
-// Bones of the person page below its back arrow: photo, name, facts, biography, filters and
-// a first row of titles.
+// Bones of the person page below its back arrow: photo, name, facts, biography and a first
+// row of titles. The filters are left out: they show only for people with both movies and
+// shows.
 export component PersonBones {
     property <length> gap: Theme.space-xl;
     property <int> count: max(1, ceil((root.width + root.gap) / (Theme.poster-width + root.gap)));
@@ -385,12 +386,6 @@ export component PersonBones {
                     }
                 }
             }
-        }
-
-        HorizontalLayout {
-            padding-top: Theme.space-lg;
-
-            PillBones { }
         }
 
         Rectangle {

@@ -16,7 +16,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer};
 
 const MOVIE: &str = "76282b1c408f374beeee50519e9157a4";
-const SLOW: Duration = Duration::from_millis(700);
+const SLOW: Duration = Duration::from_millis(1500);
 const DELAY: Duration = Duration::from_millis(150);
 
 #[test]

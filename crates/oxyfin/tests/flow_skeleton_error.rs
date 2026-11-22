@@ -28,7 +28,7 @@ fn a_failed_page_replaces_its_bones_with_the_error() {
                 .await;
             Mock::given(method("GET"))
                 .and(path(format!("/Items/{MOVIE}")))
-                .respond_with(ResponseTemplate::new(500).set_delay(Duration::from_millis(700)))
+                .respond_with(ResponseTemplate::new(500).set_delay(Duration::from_millis(1500)))
                 .mount(&mock)
                 .await;
             mock

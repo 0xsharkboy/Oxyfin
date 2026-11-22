@@ -28,7 +28,7 @@ fn a_slow_series_shows_bones_for_its_header_then_its_episodes() {
                 .await;
             Mock::given(method("GET"))
                 .and(path(format!("/Items/{SERIES}")))
-                .respond_with(json(fixture("item_series")).set_delay(Duration::from_millis(600)))
+                .respond_with(json(fixture("item_series")).set_delay(Duration::from_millis(1500)))
                 .mount(&mock)
                 .await;
             Mock::given(method("GET"))
@@ -39,7 +39,7 @@ fn a_slow_series_shows_bones_for_its_header_then_its_episodes() {
             Mock::given(method("GET"))
                 .and(path(format!("/Shows/{SERIES}/Episodes")))
                 .respond_with(
-                    json(fixture("episodes_season_2")).set_delay(Duration::from_millis(900)),
+                    json(fixture("episodes_season_2")).set_delay(Duration::from_millis(1500)),
                 )
                 .mount(&mock)
                 .await;

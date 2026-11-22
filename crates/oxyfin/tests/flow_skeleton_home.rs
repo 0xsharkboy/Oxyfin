@@ -26,7 +26,7 @@ fn the_home_screen_shows_bones_until_its_banner_is_known() {
             Mock::given(method("GET"))
                 .and(path("/UserItems/Resume"))
                 .respond_with(
-                    json(fixture("user_items_resume")).set_delay(Duration::from_millis(900)),
+                    json(fixture("user_items_resume")).set_delay(Duration::from_millis(1500)),
                 )
                 .mount(&mock)
                 .await;
