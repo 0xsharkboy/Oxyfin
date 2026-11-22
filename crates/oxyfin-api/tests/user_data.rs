@@ -7,7 +7,7 @@ use common::{
 };
 use oxyfin_api::{Error, ItemId};
 use serde_json::Value;
-use wiremock::matchers::{header, method, path, query_param};
+use wiremock::matchers::{body_json, header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn version_of(label: &str) -> &str {
@@ -97,4 +97,41 @@ async fn set_played_reports_status_errors() {
         .await
         .unwrap_err();
     assert!(matches!(err, Error::Status { status: 404, .. }), "{err:?}");
+}
+
+#[tokio::test]
+async fn hide_from_resume_clears_the_position() {
+    for (label, body) in variants("user_played_items") {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/UserItems/abc/UserData"))
+            .and(header("accept", "application/json"))
+            .and(authorization_is(Some(TEST_TOKEN)))
+            .and(query_param("userId", TEST_USER_ID))
+            .and(body_json(serde_json::json!({ "PlaybackPositionTicks": 0 })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&body))
+            .expect(1)
+            .mount(&mock)
+            .await;
+        let data = session(&mock)
+            .hide_from_resume(&ItemId::from("abc"))
+            .await
+            .unwrap();
+        assert!(data.played, "{label}: the body is decoded as served");
+    }
+}
+
+#[tokio::test]
+async fn hide_from_resume_reports_status_errors() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/UserItems/abc/UserData"))
+        .respond_with(ResponseTemplate::new(403))
+        .mount(&mock)
+        .await;
+    let err = session(&mock)
+        .hide_from_resume(&ItemId::from("abc"))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::Status { status: 403, .. }), "{err:?}");
 }

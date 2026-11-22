@@ -183,3 +183,42 @@ async fn genres_filter_accepts_pipe_delimited_values() {
     assert!(page.items.iter().any(|item| item.id == movie.id));
     session.logout().await.expect("logout");
 }
+
+#[tokio::test]
+#[ignore = "writes to the server, see CONTRIBUTING.md"]
+async fn hide_from_resume_drops_the_resume_entry() {
+    require_disposable();
+    let session = login(&config()).await;
+    let movie = movie(&session).await;
+    session.set_played(&movie.id, false).await.expect("reset");
+
+    let info = session
+        .playback_info(&movie.id)
+        .await
+        .expect("playback info");
+    let source = info.media_sources.first().expect("no media source");
+    let report = PlaybackReport {
+        item_id: movie.id.clone(),
+        media_source_id: source.id.clone(),
+        play_session_id: info.play_session_id.clone(),
+        position: Ticks::from_duration(Duration::from_secs(4)),
+        is_paused: false,
+        audio_stream_index: source.default_audio_stream_index,
+        subtitle_stream_index: None,
+        play_method: PlayMethod::DirectPlay,
+    };
+    session.report_playback_start(&report).await.expect("start");
+    session
+        .report_playback_stopped(&report)
+        .await
+        .expect("stopped");
+    let listed = |items: &[oxyfin_api::BaseItemDto]| items.iter().any(|item| item.id == movie.id);
+    assert!(listed(&session.resume(50).await.expect("resume").items));
+
+    let data = session.hide_from_resume(&movie.id).await.expect("hide");
+    assert_eq!(data.playback_position_ticks, Ticks(0));
+    assert!(!listed(&session.resume(50).await.expect("resume").items));
+
+    session.set_played(&movie.id, false).await.expect("cleanup");
+    session.logout().await.expect("logout");
+}
