@@ -93,7 +93,8 @@ impl LogFile {
     }
 }
 
-/// Opens the log file at `path` for appending, or emptied when `truncate`.
+/// Opens the log file at `path` for appending, or emptied when `truncate`; only its owner
+/// may read a file it creates.
 fn open_log(path: &Path, truncate: bool) -> io::Result<File> {
     let mut options = OpenOptions::new();
     options.create(true);
@@ -102,7 +103,14 @@ fn open_log(path: &Path, truncate: bool) -> io::Result<File> {
     } else {
         options.append(true);
     }
-    options.open(path)
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let file = options.open(path)?;
+    // A file made by an earlier version may still be readable by others; logging goes on if it
+    // cannot be narrowed.
+    #[cfg(unix)]
+    let _ = file.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(0o600));
+    Ok(file)
 }
 
 impl Write for LogFile {
@@ -277,6 +285,16 @@ pub fn init(dir: Option<&Path>) {
     }
 }
 
+/// Whether a record may reach the log file: other crates stop at debug whatever `RUST_LOG`
+/// asks, since their trace output can hold whole requests.
+fn kept_in_file(metadata: &log::Metadata<'_>) -> bool {
+    let target = metadata.target();
+    metadata.level() <= log::Level::Debug
+        || target == "oxyfin"
+        || target.starts_with("oxyfin::")
+        || target.starts_with("oxyfin_")
+}
+
 struct Tee {
     console: env_logger::Logger,
     file: Option<env_logger::Logger>,
@@ -288,12 +306,14 @@ impl Log for Tee {
             || self
                 .file
                 .as_ref()
-                .is_some_and(|file| file.enabled(metadata))
+                .is_some_and(|file| kept_in_file(metadata) && file.enabled(metadata))
     }
 
     fn log(&self, record: &log::Record<'_>) {
         self.console.log(record);
-        if let Some(file) = &self.file {
+        if let Some(file) = &self.file
+            && kept_in_file(record.metadata())
+        {
             file.log(record);
         }
     }
@@ -444,6 +464,47 @@ mod tests {
             read(dir.path(), LOG_FILE),
             format!("{}\n{}\n", "b".repeat(39), "c".repeat(39))
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn only_the_owner_reads_the_log() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::TempDir::new().unwrap();
+        let mode = |name: &str| {
+            std::fs::metadata(dir.path().join(name))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777
+        };
+        std::fs::write(dir.path().join(LOG_FILE), b"old\n").unwrap();
+        std::fs::set_permissions(
+            dir.path().join(LOG_FILE),
+            std::fs::Permissions::from_mode(0o644),
+        )
+        .unwrap();
+        let mut file = LogFile::open(dir.path(), 100).unwrap();
+        assert_eq!(mode(LOG_FILE), 0o600, "an older file is narrowed");
+        for _ in 0..4 {
+            file.write_all(format!("{}\n", "x".repeat(39)).as_bytes())
+                .unwrap();
+        }
+        assert_eq!(mode(ROTATED_LOG_FILE), 0o600);
+        assert_eq!(mode(LOG_FILE), 0o600, "a new file is private");
+    }
+
+    #[test]
+    fn other_crates_stop_at_debug_in_the_file() {
+        let kept = |target: &str, level: log::Level| {
+            kept_in_file(&log::Metadata::builder().target(target).level(level).build())
+        };
+        assert!(!kept("hyper_util::client", log::Level::Trace));
+        assert!(!kept("reqwest::connect", log::Level::Trace));
+        assert!(kept("reqwest::connect", log::Level::Debug));
+        assert!(kept("oxyfin", log::Level::Trace));
+        assert!(kept("oxyfin_core::playback", log::Level::Trace));
+        assert!(kept("oxyfin::app", log::Level::Trace));
     }
 
     #[test]
