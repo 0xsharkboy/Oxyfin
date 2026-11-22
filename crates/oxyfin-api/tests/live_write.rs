@@ -191,6 +191,10 @@ async fn hide_from_resume_drops_the_resume_entry() {
     let session = login(&config()).await;
     let movie = movie(&session).await;
     session.set_played(&movie.id, false).await.expect("reset");
+    session
+        .set_favorite(&movie.id, true)
+        .await
+        .expect("favorite");
 
     let info = session
         .playback_info(&movie.id)
@@ -217,8 +221,13 @@ async fn hide_from_resume_drops_the_resume_entry() {
 
     let data = session.hide_from_resume(&movie.id).await.expect("hide");
     assert_eq!(data.playback_position_ticks, Ticks(0));
+    assert!(data.is_favorite, "the other user data is kept");
     assert!(!listed(&session.resume(50).await.expect("resume").items));
 
     session.set_played(&movie.id, false).await.expect("cleanup");
+    session
+        .set_favorite(&movie.id, false)
+        .await
+        .expect("cleanup");
     session.logout().await.expect("logout");
 }
