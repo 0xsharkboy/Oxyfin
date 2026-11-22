@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-22 12:50+0000\n"
+"POT-Creation-Date: 2026-11-22 14:45+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -313,82 +313,87 @@ msgctxt "CastRow"
 msgid "Cast and crew"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:172
+#: crates/oxyfin/ui/components/player_controls.slint:174
 msgctxt "PlayerControls"
 msgid "Seek"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:200
+#: crates/oxyfin/ui/components/player_controls.slint:202
 msgctxt "PlayerControls"
 msgid "Previous"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:210
+#: crates/oxyfin/ui/components/player_controls.slint:212
 msgctxt "PlayerControls"
 msgid "Back 10 seconds"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:220
+#: crates/oxyfin/ui/components/player_controls.slint:222
 msgctxt "PlayerControls"
 msgid "Play"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:220
+#: crates/oxyfin/ui/components/player_controls.slint:222
 msgctxt "PlayerControls"
 msgid "Pause"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:230
+#: crates/oxyfin/ui/components/player_controls.slint:232
 msgctxt "PlayerControls"
 msgid "Forward 10 seconds"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:240
+#: crates/oxyfin/ui/components/player_controls.slint:242
 msgctxt "PlayerControls"
 msgid "Next"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:248
+#: crates/oxyfin/ui/components/player_controls.slint:250
 msgctxt "PlayerControls"
 msgid "{} / {}"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:264
+#: crates/oxyfin/ui/components/player_controls.slint:266
 msgctxt "PlayerControls"
 msgid "Unmute"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:264
+#: crates/oxyfin/ui/components/player_controls.slint:266
 msgctxt "PlayerControls"
 msgid "Mute"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:277
+#: crates/oxyfin/ui/components/player_controls.slint:279
 msgctxt "PlayerControls"
 msgid "Volume"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:295
+#: crates/oxyfin/ui/components/player_controls.slint:297
 msgctxt "PlayerControls"
 msgid "Chapters"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:306
+#: crates/oxyfin/ui/components/player_controls.slint:308
 msgctxt "PlayerControls"
 msgid "Audio and subtitles"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:317
+#: crates/oxyfin/ui/components/player_controls.slint:318
+msgctxt "PlayerControls"
+msgid "Playback statistics"
+msgstr ""
+
+#: crates/oxyfin/ui/components/player_controls.slint:329
 msgctxt "PlayerControls"
 msgid "Playback settings"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:328
+#: crates/oxyfin/ui/components/player_controls.slint:340
 msgctxt "PlayerControls"
 msgid "Exit fullscreen"
 msgstr ""
 
-#: crates/oxyfin/ui/components/player_controls.slint:328
+#: crates/oxyfin/ui/components/player_controls.slint:340
 msgctxt "PlayerControls"
 msgid "Fullscreen"
 msgstr ""
@@ -433,54 +438,49 @@ msgctxt "SkipNotice"
 msgid "Undo"
 msgstr ""
 
-#: crates/oxyfin/ui/components/speed_menu.slint:17
+#: crates/oxyfin/ui/components/speed_menu.slint:15
 msgctxt "SpeedMenu"
 msgid "Playback settings"
 msgstr ""
 
-#: crates/oxyfin/ui/components/speed_menu.slint:20
+#: crates/oxyfin/ui/components/speed_menu.slint:18
 msgctxt "SpeedMenu"
 msgid "SPEED"
 msgstr ""
 
-#: crates/oxyfin/ui/components/speed_menu.slint:24
+#: crates/oxyfin/ui/components/speed_menu.slint:22
 msgctxt "SpeedMenu"
 msgid "Normal"
 msgstr ""
 
-#: crates/oxyfin/ui/components/speed_menu.slint:24
+#: crates/oxyfin/ui/components/speed_menu.slint:22
 msgctxt "SpeedMenu"
 msgid "{}×"
 msgstr ""
 
-#: crates/oxyfin/ui/components/speed_menu.slint:34
+#: crates/oxyfin/ui/components/speed_menu.slint:32
 msgctxt "SpeedMenu"
 msgid "QUALITY"
 msgstr ""
 
-#: crates/oxyfin/ui/components/speed_menu.slint:38
+#: crates/oxyfin/ui/components/speed_menu.slint:36
 msgctxt "SpeedMenu"
 msgid "Original"
 msgstr ""
 
-#: crates/oxyfin/ui/components/speed_menu.slint:38
+#: crates/oxyfin/ui/components/speed_menu.slint:36
 msgctxt "SpeedMenu"
 msgid "{}p"
 msgstr ""
 
-#: crates/oxyfin/ui/components/speed_menu.slint:39
+#: crates/oxyfin/ui/components/speed_menu.slint:37
 msgctxt "SpeedMenu"
 msgid "{} Mbps"
 msgstr ""
 
-#: crates/oxyfin/ui/components/speed_menu.slint:39
+#: crates/oxyfin/ui/components/speed_menu.slint:37
 msgctxt "SpeedMenu"
 msgid "{} kbps"
-msgstr ""
-
-#: crates/oxyfin/ui/components/speed_menu.slint:49
-msgctxt "SpeedMenu"
-msgid "Playback statistics"
 msgstr ""
 
 #: crates/oxyfin/ui/components/stats_panel.slint:7
@@ -1529,47 +1529,47 @@ msgctxt "PersonScreen"
 msgid "Retry"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:199
+#: crates/oxyfin/ui/screens/player.slint:206
 msgctxt "PlayerScreen"
 msgid "Player"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:379
+#: crates/oxyfin/ui/screens/player.slint:386
 msgctxt "PlayerScreen"
 msgid "Back"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:564
+#: crates/oxyfin/ui/screens/player.slint:570
 msgctxt "PlayerScreen"
 msgid "Skip intro"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:564
+#: crates/oxyfin/ui/screens/player.slint:570
 msgctxt "PlayerScreen"
 msgid "Skip recap"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:564
+#: crates/oxyfin/ui/screens/player.slint:570
 msgctxt "PlayerScreen"
 msgid "Skip preview"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:564
+#: crates/oxyfin/ui/screens/player.slint:570
 msgctxt "PlayerScreen"
 msgid "Skip credits"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:589
+#: crates/oxyfin/ui/screens/player.slint:595
 msgctxt "PlayerScreen"
 msgid "Audio delay"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:589
+#: crates/oxyfin/ui/screens/player.slint:595
 msgctxt "PlayerScreen"
 msgid "Subtitle delay"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/player.slint:592
+#: crates/oxyfin/ui/screens/player.slint:598
 msgctxt "PlayerScreen"
 msgid "{}: {}"
 msgstr ""

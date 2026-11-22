@@ -8,7 +8,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use common::{click, exists};
-use i_slint_backend_testing::{AccessibleRole, ElementHandle};
+use i_slint_backend_testing::{AccessibleRole, ElementHandle, ElementQuery};
 use oxyfin::screens::player;
 use oxyfin::{AppWindow, Screen, TrackRow};
 use oxyfin_core::{
@@ -318,26 +318,43 @@ fn skip_notice_stays_hidden_under_an_open_menu() {
     assert!(notice(&window, "Recap skipped").is_none());
     sent.borrow_mut().clear();
 
-    click(&window, &button(&window, "Audio and subtitles"));
+    click(&window, &button(&window, "Playback settings"));
     skip(&window, SegmentKind::Intro);
     assert!(
         notice(&window, "Intro skipped").is_none(),
         "the notice shows over the menu"
     );
-    // The menu control drawn where the notice was.
-    let step = button(&window, "Increase the subtitle delay");
-    let (at, size) = (step.absolute_position(), step.size());
-    let spot = LogicalPosition::new(at.x + size.width / 2., at.y + size.height / 2.);
-    assert!(
-        spot.x > pill_at.x
-            && spot.x < pill_at.x + pill_size.width
-            && spot.y > pill_at.y
-            && spot.y < pill_at.y + pill_size.height,
-        "{spot:?} lies outside the notice at {pill_at:?} {pill_size:?}"
+    // A menu option drawn where the notice was.
+    let option = ElementQuery::from_root(&window)
+        .match_descendants()
+        .match_accessible_role(AccessibleRole::ListItem)
+        .find_all()
+        .into_iter()
+        .find(|option| {
+            let (at, size) = (option.absolute_position(), option.size());
+            at.x < pill_at.x + pill_size.width
+                && at.x + size.width > pill_at.x
+                && at.y < pill_at.y + pill_size.height
+                && at.y + size.height > pill_at.y
+        })
+        .unwrap_or_else(|| panic!("no menu option where the notice was"));
+    let (at, size) = (option.absolute_position(), option.size());
+    // The middle of where the option and the notice overlap.
+    let (left, right) = (
+        at.x.max(pill_at.x),
+        (at.x + size.width).min(pill_at.x + pill_size.width),
     );
+    let (top, bottom) = (
+        at.y.max(pill_at.y),
+        (at.y + size.height).min(pill_at.y + pill_size.height),
+    );
+    let spot = LogicalPosition::new((left + right) / 2., (top + bottom) / 2.);
     press_at(&window, spot);
     assert!(
-        matches!(sent.borrow()[..], [PlaybackCommand::AdjustSubtitleDelay(step)] if step > 0),
+        matches!(
+            sent.borrow()[..],
+            [PlaybackCommand::SetSpeed(_) | PlaybackCommand::SetQuality(_)]
+        ),
         "{:?}",
         sent.borrow()
     );

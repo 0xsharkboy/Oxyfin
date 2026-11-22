@@ -138,6 +138,7 @@ export component PlayerControls inherits Rectangle {
     // Where the chapters start, as fractions of the seek bar.
     in property <[float]> chapter-marks;
     in property <bool> speed-open;
+    in property <bool> stats-open;
     in property <bool> fullscreen;
     in-out property <bool> scrubbing;
     // Where the pointer hovers or drags the seek bar, for the preview above it.
@@ -155,6 +156,7 @@ export component PlayerControls inherits Rectangle {
     callback toggle-tracks();
     callback toggle-chapters();
     callback toggle-speed();
+    callback toggle-stats();
     callback toggle-fullscreen();
     callback seek-hovered(seconds: float);
 
@@ -307,6 +309,16 @@ export component PlayerControls inherits Rectangle {
                 active: root.tracks-open;
                 clicked => {
                     root.toggle-tracks();
+                }
+            }
+
+            IconButton {
+                focus-on-click: false;
+                icon: Icons.activity;
+                label: @tr("Playback statistics");
+                active: root.stats-open;
+                clicked => {
+                    root.toggle-stats();
                 }
             }
 

@@ -343,21 +343,79 @@ fn values_follow_the_design() {
     );
 }
 
+fn find(window: &AppWindow, label: &str, role: AccessibleRole) -> Option<ElementHandle> {
+    ElementHandle::find_by_accessible_label(window, label)
+        .find(|element| element.accessible_role() == Some(role) && element.size().width > 0.)
+}
+
+fn button(window: &AppWindow, label: &str) -> ElementHandle {
+    find(window, label, AccessibleRole::Button).unwrap_or_else(|| panic!("no {label} button"))
+}
+
 #[test]
-fn the_settings_menu_toggles_stats() {
+fn the_stats_button_opens_the_menu_above_it() {
     let (window, sent) = player_window();
-    // Tall enough for the whole menu, which scrolls in a smaller window.
     window.window().set_size(LogicalSize::new(1280., 900.));
-    let gear = ElementHandle::find_by_accessible_label(&window, "Playback settings")
-        .find(|element| element.accessible_role() == Some(AccessibleRole::Button))
-        .unwrap_or_else(|| panic!("no settings button"));
-    click(&window, &gear);
-    let entry = ElementHandle::find_by_accessible_label(&window, TITLE)
-        .find(|element| element.accessible_role() == Some(AccessibleRole::ListItem))
-        .unwrap_or_else(|| panic!("no statistics entry"));
-    click(&window, &entry);
+    let stats = button(&window, TITLE);
+    let tracks = button(&window, "Audio and subtitles");
+    let settings = button(&window, "Playback settings");
+    let gap = |left: &ElementHandle, right: &ElementHandle| {
+        right.absolute_position().x - (left.absolute_position().x + left.size().width)
+    };
+    assert_eq!(
+        gap(&tracks, &stats),
+        8.0,
+        "space-sm after the tracks button"
+    );
+    assert_eq!(
+        gap(&stats, &settings),
+        8.0,
+        "space-sm before the settings button"
+    );
+
+    click(&window, &stats);
     assert!(shows_stats(&window), "{:?}", texts(&window));
     assert_eq!(requests(&sent), 1);
+    let panel = find(&window, TITLE, AccessibleRole::Groupbox)
+        .unwrap_or_else(|| panic!("no statistics panel"));
+    let right = panel.absolute_position().x + panel.size().width;
+    assert_eq!(
+        right,
+        1280. - 32.,
+        "aligned with the bar's right padding (space-2xl)"
+    );
+    let bottom = panel.absolute_position().y + panel.size().height;
+    assert!(
+        bottom <= stats.absolute_position().y,
+        "the panel ends at {bottom}, over the button at {}",
+        stats.absolute_position().y
+    );
+
+    click(&window, &button(&window, TITLE));
+    assert!(!shows_stats(&window), "the button closes it again");
+}
+
+#[test]
+fn an_outside_click_or_another_menu_closes_the_stats() {
+    let (window, _sent) = player_window();
+    press(&window, "i");
+    assert!(shows_stats(&window));
+    common::click_at(&window, slint::LogicalPosition::new(640., 300.));
+    assert!(!shows_stats(&window), "a click on the video closes it");
+
+    press(&window, "i");
+    click(&window, &button(&window, "Playback settings"));
+    assert!(!shows_stats(&window), "another menu replaces it");
+    assert!(
+        find(&window, TITLE, AccessibleRole::ListItem).is_none(),
+        "the settings menu has no statistics entry"
+    );
+    press(&window, "i");
+    assert!(shows_stats(&window));
+    assert!(
+        find(&window, "Playback settings", AccessibleRole::List).is_none(),
+        "the statistics replace the settings menu"
+    );
 }
 
 #[test]

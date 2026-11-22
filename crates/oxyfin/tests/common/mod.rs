@@ -276,7 +276,14 @@ pub fn click(window: &impl ComponentHandle, element: &ElementHandle) {
     window.window().dispatch_event(WindowEvent::PointerMoved {
         position: center(element),
     });
-    let position = center(element);
+    click_at(window, center(element));
+}
+
+/// Presses and releases the left button at `position`, with real pointer events.
+pub fn click_at(window: &impl ComponentHandle, position: LogicalPosition) {
+    window
+        .window()
+        .dispatch_event(WindowEvent::PointerMoved { position });
     for event in [
         WindowEvent::PointerPressed {
             position,

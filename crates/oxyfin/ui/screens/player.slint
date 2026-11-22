@@ -63,7 +63,7 @@ export component PlayerScreen inherits Rectangle {
     in property <[StatSection]> stats;
     // Whether the playback statistics show; they are asked for every second while they do.
     in-out property <bool> stats-visible;
-    out property <bool> controls-visible: root.awake || root.paused || root.menu != PlayerMenu.none || root.scrubbing || root.loading || root.has-error;
+    out property <bool> controls-visible: root.awake || root.paused || root.menu-open || root.scrubbing || root.loading || root.has-error;
 
     callback back();
     callback toggle-fullscreen();
@@ -97,6 +97,8 @@ export component PlayerScreen inherits Rectangle {
     callback preview-requested(seconds: float);
 
     property <PlayerMenu> menu: PlayerMenu.none;
+    // A menu or the statistics show above the bar; one at a time.
+    property <bool> menu-open: root.menu != PlayerMenu.none || root.stats-visible;
     // The delay a shortcut changed, shown for a moment over the video.
     property <DelayKind> osd: DelayKind.none;
     // False once the pointer rested for the hide delay while playing.
@@ -125,21 +127,26 @@ export component PlayerScreen inherits Rectangle {
     }
 
     function toggle-stats() {
+        root.menu = PlayerMenu.none;
         root.stats-visible = !root.stats-visible;
         if root.stats-visible {
             root.command-stats();
         }
     }
 
+    function close-menus() {
+        root.menu = PlayerMenu.none;
+        root.stats-visible = false;
+    }
+
     function toggle-menu(menu: PlayerMenu) {
+        root.stats-visible = false;
         root.menu = root.menu == menu ? PlayerMenu.none : menu;
     }
 
     function escape() {
-        if root.menu != PlayerMenu.none {
-            root.menu = PlayerMenu.none;
-        } else if root.stats-visible {
-            root.stats-visible = false;
+        if root.menu-open {
+            root.close-menus();
         } else if root.fullscreen && root.fullscreen-own {
             // The fullscreen of a fullscreen launch stays: Escape goes back instead.
             root.toggle-fullscreen();
@@ -173,7 +180,7 @@ export component PlayerScreen inherits Rectangle {
         }
     }
     // Stays up while the controls hide, like the skip buttons of common players.
-    property <bool> skip-visible: root.skip-kind != SkipKind.none && !root.toast-visible && root.menu == PlayerMenu.none && !root.loading && !root.has-error;
+    property <bool> skip-visible: root.skip-kind != SkipKind.none && !root.toast-visible && !root.menu-open && !root.loading && !root.has-error;
     changed skip-visible => {
         if !self.skip-visible {
             keys.focus();
@@ -182,7 +189,7 @@ export component PlayerScreen inherits Rectangle {
 
     // Serial of the last skip whose notice timed out or was answered.
     property <int> skip-notice-done: 0;
-    property <bool> skip-notice-visible: root.skipped.kind != SkipKind.none && root.skipped.serial != root.skip-notice-done && !root.toast-visible && root.menu == PlayerMenu.none && !root.loading && !root.has-error;
+    property <bool> skip-notice-visible: root.skipped.kind != SkipKind.none && root.skipped.serial != root.skip-notice-done && !root.toast-visible && !root.menu-open && !root.loading && !root.has-error;
     changed skipped => {
         if skip-notice-timer.running {
             skip-notice-timer.restart();
@@ -227,7 +234,7 @@ export component PlayerScreen inherits Rectangle {
 
     hide-timer := Timer {
         interval: 3s;
-        running: root.awake && !root.paused && root.menu == PlayerMenu.none && !root.scrubbing && !root.loading && !root.has-error && !root.pointer-on-controls;
+        running: root.awake && !root.paused && !root.menu-open && !root.scrubbing && !root.loading && !root.has-error && !root.pointer-on-controls;
         triggered => {
             root.awake = false;
             keys.focus();
@@ -247,7 +254,7 @@ export component PlayerScreen inherits Rectangle {
             root.reveal();
         }
         clicked => {
-            root.menu = PlayerMenu.none;
+            root.close-menus();
             keys.focus();
         }
         double-clicked => {
@@ -400,12 +407,6 @@ export component PlayerScreen inherits Rectangle {
                 }
             }
 
-            if root.stats-visible: StatsPanel {
-                x: Theme.space-2xl;
-                y: 2 * Theme.space-3xl;
-                sections: root.stats;
-            }
-
             controls := PlayerControls {
                 y: parent.height - self.height;
                 width: parent.width;
@@ -423,6 +424,7 @@ export component PlayerScreen inherits Rectangle {
                 chapters-open: root.menu == PlayerMenu.chapters;
                 chapter-marks: root.chapter-marks;
                 speed-open: root.menu == PlayerMenu.speed;
+                stats-open: root.stats-visible;
                 fullscreen: root.fullscreen;
                 scrubbing <=> root.scrubbing;
                 toggle-pause => {
@@ -458,6 +460,9 @@ export component PlayerScreen inherits Rectangle {
                 toggle-speed => {
                     root.toggle-menu(PlayerMenu.speed);
                 }
+                toggle-stats => {
+                    root.toggle-stats();
+                }
                 toggle-fullscreen => {
                     root.toggle-fullscreen();
                 }
@@ -467,7 +472,7 @@ export component PlayerScreen inherits Rectangle {
             }
 
             if root.menu == PlayerMenu.tracks: TrackMenu {
-                x: parent.width - self.width - Theme.space-2xl - 2 * (root.button-size + Theme.space-sm);
+                x: parent.width - self.width - Theme.space-2xl - 3 * (root.button-size + Theme.space-sm);
                 y: root.menu-bottom - self.height;
                 limit: root.menu-max-height;
                 audio: root.audio;
@@ -511,6 +516,12 @@ export component PlayerScreen inherits Rectangle {
                 }
             }
 
+            if root.stats-visible: StatsPanel {
+                x: parent.width - self.width - Theme.space-2xl;
+                y: root.menu-bottom - self.height;
+                sections: root.stats;
+            }
+
             if root.menu == PlayerMenu.speed: SpeedMenu {
                 x: parent.width - self.width - Theme.space-2xl - root.button-size - Theme.space-sm;
                 y: root.menu-bottom - self.height;
@@ -525,11 +536,6 @@ export component PlayerScreen inherits Rectangle {
                 quality: root.quality;
                 select-quality(index) => {
                     root.command-set-quality(index);
-                    root.menu = PlayerMenu.none;
-                }
-                stats-visible: root.stats-visible;
-                toggle-stats => {
-                    root.toggle-stats();
                     root.menu = PlayerMenu.none;
                 }
             }
