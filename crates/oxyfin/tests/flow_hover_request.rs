@@ -102,6 +102,7 @@ fn a_hovered_poster_is_fetched_once() {
         hover_poster(&window)?;
         pause(Duration::from_millis(500)).await;
         leave(&window);
+        pause(Duration::from_millis(50)).await;
         hover_poster(&window)?;
         wait_until("the hover card", || {
             find(&window, "Test Movie (2020)", AccessibleRole::Groupbox).is_some()

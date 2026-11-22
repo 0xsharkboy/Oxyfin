@@ -287,7 +287,25 @@ fn the_card_waits_for_the_row_to_stop_scrolling() {
     assert_eq!(asked.borrow().len(), 1, "nothing asked while scrolling");
 
     elapse(600);
-    assert!(any_card(&page), "a card shows once the scrolling stopped");
+    let pointer_x = at.x + 20.;
+    let under = (0..CARDS)
+        .find(|&i| {
+            find(&page, &format!("Poster {i}"), AccessibleRole::Button).is_some_and(|p| {
+                let x = p.absolute_position().x;
+                x <= pointer_x && pointer_x < x + p.size().width
+            })
+        })
+        .unwrap_or_else(|| panic!("no poster under the pointer"));
+    assert_ne!(under, 1, "the row moved another poster under the pointer");
+    let card = hover_card(&page, &format!("id{under}"))
+        .unwrap_or_else(|| panic!("no card for poster {under}, now under the pointer"));
+    let poster = poster(&page, under);
+    let expected_x = poster.absolute_position().x + poster.size().width + page.get_gap();
+    assert!(
+        (card.absolute_position().x - expected_x).abs() < 0.5,
+        "the card sits beside the poster now under the pointer, at {}",
+        card.absolute_position().x
+    );
 }
 
 #[test]

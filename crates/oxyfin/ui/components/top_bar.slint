@@ -29,6 +29,9 @@ export component TopBar inherits Rectangle {
         opacity: clamp(root.scrolled-by / root.height, 0, 1);
     }
 
+    // Keeps the pointer from the cards scrolled under the bar.
+    TouchArea { }
+
     HorizontalLayout {
         padding-top: Theme.space-sm;
         padding-left: Theme.space-2xl;
