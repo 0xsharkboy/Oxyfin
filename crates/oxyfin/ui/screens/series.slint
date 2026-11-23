@@ -99,6 +99,19 @@ export component SeriesScreen inherits Rectangle {
     // Scroll offset, kept by the window while another screen shows; Rust puts it back to the top.
     in-out property <length> viewport-y <=> flick.content-y;
 
+    // Whether the header bones of this load showed: the episode bones then take over at once.
+    property <bool> header-bones-shown;
+    changed loading => {
+        if self.loading {
+            self.header-bones-shown = false;
+        }
+    }
+    changed episodes-loading => {
+        if !self.episodes-loading {
+            self.header-bones-shown = false;
+        }
+    }
+
     // Another series may replace this one without a new page, and the clicked card took the focus.
     changed loaded => {
         if !self.loaded && self.active {
@@ -216,6 +229,8 @@ export component SeriesScreen inherits Rectangle {
                         }
 
                         if root.episodes-loading: Skeleton {
+                            delayed: !root.header-bones-shown;
+
                             VerticalLayout {
                                 spacing: Theme.space-sm;
 
@@ -285,6 +300,10 @@ export component SeriesScreen inherits Rectangle {
                         }
                     }
                     if root.loading: Skeleton {
+                        appeared => {
+                            root.header-bones-shown = true;
+                        }
+
                         VerticalLayout {
                             DetailHeaderBones { }
                             VerticalLayout {

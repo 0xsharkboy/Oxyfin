@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-23 09:52+0000\n"
+"POT-Creation-Date: 2026-11-23 09:55+0000\n"
 "PO-Revision-Date: 2026-11-15 12:00+0000\n"
 "Last-Translator: Oxyfin contributors\n"
 "Language-Team: French\n"
@@ -1839,32 +1839,32 @@ msgctxt "SeriesScreen"
 msgid "Series"
 msgstr "Série"
 
-#: crates/oxyfin/ui/screens/series.slint:168
+#: crates/oxyfin/ui/screens/series.slint:181
 msgctxt "SeriesScreen"
 msgid "Resume {}"
 msgstr "Reprendre {}"
 
-#: crates/oxyfin/ui/screens/series.slint:168
+#: crates/oxyfin/ui/screens/series.slint:181
 msgctxt "SeriesScreen"
 msgid "Play {}"
 msgstr "Lire {}"
 
-#: crates/oxyfin/ui/screens/series.slint:168
+#: crates/oxyfin/ui/screens/series.slint:181
 msgctxt "SeriesScreen"
 msgid "Play"
 msgstr "Lire"
 
-#: crates/oxyfin/ui/screens/series.slint:238
+#: crates/oxyfin/ui/screens/series.slint:253
 msgctxt "SeriesScreen"
 msgid "Retry"
 msgstr "Réessayer"
 
-#: crates/oxyfin/ui/screens/series.slint:262
+#: crates/oxyfin/ui/screens/series.slint:277
 msgctxt "SeriesScreen"
 msgid "More like this"
 msgstr "Titres similaires"
 
-#: crates/oxyfin/ui/screens/series.slint:281
+#: crates/oxyfin/ui/screens/series.slint:296
 msgctxt "SeriesScreen"
 msgid "Back"
 msgstr "Retour"

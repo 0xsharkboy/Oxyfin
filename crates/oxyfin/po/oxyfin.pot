@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-23 09:52+0000\n"
+"POT-Creation-Date: 2026-11-23 09:55+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1845,33 +1845,33 @@ msgctxt "SeriesScreen"
 msgid "Series"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:168
+#: crates/oxyfin/ui/screens/series.slint:181
 msgctxt "SeriesScreen"
 msgid "Resume {}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:168
+#: crates/oxyfin/ui/screens/series.slint:181
 msgctxt "SeriesScreen"
 msgid "Play {}"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:168
+#: crates/oxyfin/ui/screens/series.slint:181
 msgctxt "SeriesScreen"
 msgid "Play"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:238
-#: crates/oxyfin/ui/screens/series.slint:238
+#: crates/oxyfin/ui/screens/series.slint:253
+#: crates/oxyfin/ui/screens/series.slint:253
 msgctxt "SeriesScreen"
 msgid "Retry"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:262
+#: crates/oxyfin/ui/screens/series.slint:277
 msgctxt "SeriesScreen"
 msgid "More like this"
 msgstr ""
 
-#: crates/oxyfin/ui/screens/series.slint:281
+#: crates/oxyfin/ui/screens/series.slint:296
 msgctxt "SeriesScreen"
 msgid "Back"
 msgstr ""

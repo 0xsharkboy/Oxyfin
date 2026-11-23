@@ -27,7 +27,12 @@ export component LineBone {
 // Bones of a page that is loading. They stay hidden for a moment, so a fast answer never
 // flashes them, then a slow band of light sweeps across them.
 export component Skeleton inherits Rectangle {
-    property <bool> shown;
+    // False for bones that follow others already shown, so nothing blinks out in between.
+    in property <bool> delayed: true;
+    // The bones showed after the delay.
+    callback appeared();
+
+    property <bool> shown: !root.delayed;
 
     opacity: root.shown ? 1 : 0;
     clip: true;
@@ -37,6 +42,7 @@ export component Skeleton inherits Rectangle {
         running: !root.shown;
         triggered => {
             root.shown = true;
+            root.appeared();
         }
     }
 
