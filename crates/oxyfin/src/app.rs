@@ -113,6 +113,14 @@ pub struct App {
     pub(crate) menu: crate::menu::MenuController,
 }
 
+/// What a notice offers about undoing what it tells.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Undo {
+    None,
+    Offered,
+    Failed,
+}
+
 impl App {
     /// Creates the application for `window`, then restores the saved session in the background.
     pub fn new(
@@ -225,7 +233,7 @@ impl App {
         let screen = self.screen();
         match &screen {
             Screen::Library(_) => self.library.patch(self, id, user),
-            Screen::Search => self.search.patch(id, user),
+            Screen::Search => self.search.patch(self, id, user),
             _ => self.refresh(&screen),
         }
         self.dispatch(Msg::ItemChanged(screen));
@@ -1013,15 +1021,20 @@ impl App {
     /// that need no action leave after [`NOTICE_DURATION`]; the others stay
     /// until the user closes them.
     pub(crate) fn notify(&self, message: Message) {
-        self.show_notice(message, false);
+        self.show_notice(message, Undo::None);
     }
 
     /// Shows `message` with an Undo button, which calls [`crate::menu::MenuController::undo`].
     pub(crate) fn notify_undo(&self, message: Message) {
-        self.show_notice(message, true);
+        self.show_notice(message, Undo::Offered);
     }
 
-    fn show_notice(&self, message: Message, undo: bool) {
+    /// Shows `message`, the failure of an undo, with a Retry button that undoes again.
+    pub(crate) fn notify_undo_failed(&self, message: Message) {
+        self.show_notice(message, Undo::Failed);
+    }
+
+    fn show_notice(&self, message: Message, undo: Undo) {
         let Some(window) = self.window() else { return };
         let dismissible = is_persistent(message);
         window.set_notice(NoticeData {
@@ -1029,7 +1042,8 @@ impl App {
             message,
             detail: Default::default(),
             dismissible,
-            undo,
+            undo: undo != Undo::None,
+            undo_failed: undo == Undo::Failed,
         });
         if dismissible {
             self.notice_timer.stop();

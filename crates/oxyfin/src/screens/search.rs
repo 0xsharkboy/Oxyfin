@@ -39,6 +39,8 @@ pub(crate) struct SearchController {
     cards: Rc<VecModel<CardData>>,
     total: Cell<u32>,
     in_flight: Cell<bool>,
+    // First result and number of results of the last request.
+    asked: Cell<(u32, u32)>,
     ready: Cell<bool>,
     more_failed: Cell<bool>,
     loads: PageLoads,
@@ -68,9 +70,16 @@ impl SearchController {
     }
 
     /// Item `id` changed to `user`: its card shows it at once.
-    pub(crate) fn patch(&self, id: &ItemId, user: &UserState) {
-        if self.active.get() {
-            patch_card(&self.items, &self.cards, id, user);
+    pub(crate) fn patch(&self, app: &Rc<App>, id: &ItemId, user: &UserState) {
+        if !self.active.get() {
+            return;
+        }
+        patch_card(&self.items, &self.cards, id, user);
+        let query = self.query.borrow().clone();
+        if self.in_flight.get() && !query.is_empty() {
+            // The answer on its way may hold the item as it was: it is asked for again.
+            let (start, limit) = self.asked.get();
+            self.request(app, query, start, limit, false);
         }
     }
 
@@ -225,6 +234,7 @@ impl SearchController {
         self.load.set(self.load.get() + 1);
         let load = self.load.get();
         self.in_flight.set(true);
+        self.asked.set((start, limit));
         self.more_failed.set(false);
         if start == 0 && clear {
             *self.query.borrow_mut() = text.clone();

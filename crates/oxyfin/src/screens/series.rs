@@ -142,7 +142,7 @@ impl SeriesController {
 
     /// Shows a kept page again without asking the server, loading only what it still misses.
     fn restore(&self, app: &Rc<App>, page: ParkedSeries) {
-        self.wanted_season.borrow_mut().take();
+        let wanted = self.wanted_season.borrow_mut().take();
         let (Some((id, ..)), Some(window)) = (app.services(), app.window()) else {
             return;
         };
@@ -199,6 +199,10 @@ impl SeriesController {
             self.request_episodes(app);
         }
         window.set_series_viewport_y(page.viewport_y);
+        let wanted = wanted.and_then(|(series, season)| self.season_index(&series, &season));
+        if let Some(index) = wanted {
+            self.select_season(app, index);
+        }
     }
 
     /// The page came back from the player or holds stale data: the progress may have changed.
@@ -258,15 +262,22 @@ impl SeriesController {
     /// Shows season `season` of series `series`: at once when the page shows that series, or
     /// once the series page about to open has loaded.
     pub(crate) fn show_season(&self, app: &Rc<App>, series: &str, season: &str) {
-        let index = self.details.borrow().as_ref().and_then(|details| {
-            let shown = details.summary.id.as_str() == series;
-            let index = details.seasons.iter().position(|s| s.id.as_str() == season);
-            index.filter(|_| shown)
-        });
+        // A page of that series kept below another screen stays as it was left.
+        let current = matches!(app.screen(), Screen::Series(id) if id == series);
+        let index = self.season_index(series, season).filter(|_| current);
         match index {
             Some(index) => self.select_season(app, index),
             None => *self.wanted_season.borrow_mut() = Some((series.to_owned(), season.to_owned())),
         }
+    }
+
+    /// Place of season `season` when the page holds series `series`.
+    fn season_index(&self, series: &str, season: &str) -> Option<usize> {
+        let details = self.details.borrow();
+        let details = details.as_ref()?;
+        (details.summary.id.as_str() == series)
+            .then(|| details.seasons.iter().position(|s| s.id.as_str() == season))
+            .flatten()
     }
 
     /// Opens the item of the card `id` in the "More like this" row.

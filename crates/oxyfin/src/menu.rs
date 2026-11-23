@@ -23,6 +23,7 @@ struct Opened {
 }
 
 /// An item taken out of Continue Watching, with the position that puts it back.
+#[derive(Clone)]
 struct Removed {
     generation: GenerationId,
     id: ItemId,
@@ -393,7 +394,9 @@ impl MenuController {
                 }
                 match result {
                     Ok(user) => {
-                        if let Change::HideFromResume(position) = change {
+                        if let Change::HideFromResume(Duration::ZERO) = change {
+                            app.notify(Message::RemovedFromResume);
+                        } else if let Change::HideFromResume(position) = change {
                             *app.menu.removed.borrow_mut() = Some(Removed {
                                 generation,
                                 id: item.clone(),
@@ -424,8 +427,7 @@ impl MenuController {
         if generation != removed.generation {
             return;
         }
-        let Removed { id, position, .. } = removed;
-        let item = id.clone();
+        let Removed { id, position, .. } = removed.clone();
         app.spawn(
             async move { catalog.restore_resume(&id, position).await },
             move |app, result| {
@@ -436,11 +438,20 @@ impl MenuController {
                     return;
                 }
                 match result {
-                    Ok(user) => app.item_changed(&item, &user),
+                    Ok(user) => app.item_changed(&removed.id, &user),
                     Err(CoreError::SessionExpired) => app.dispatch(Msg::Expired(generation)),
                     Err(error) => {
                         log::warn!("cannot put the item back in Continue Watching: {error}");
-                        app.notify(core_error_message(&error).0);
+                        let message = core_error_message(&error).0;
+                        // An item taken out since has its own undo.
+                        let mut slot = app.menu.removed.borrow_mut();
+                        if slot.is_some() {
+                            drop(slot);
+                            return app.notify(message);
+                        }
+                        *slot = Some(removed);
+                        drop(slot);
+                        app.notify_undo_failed(message);
                     }
                 }
             },

@@ -12,6 +12,8 @@ export struct NoticeData {
     dismissible: bool,
     // Offers to undo what the message tells.
     undo: bool,
+    // Undoing it failed: it can be tried again.
+    undo-failed: bool,
 }
 
 // Discreet banner at the top of the content for errors that belong to no field or row.
@@ -50,7 +52,7 @@ export component NoticeBanner inherits Rectangle {
         if root.notice.undo: VerticalLayout {
             alignment: center;
             Button {
-                label: @tr("Undo");
+                label: root.notice.undo-failed ? @tr("Retry") : @tr("Undo");
                 style: ButtonStyle.ghost;
                 focus-on-click: false;
                 clicked => {

@@ -119,6 +119,8 @@ pub(crate) struct LibraryController {
     genre_names: Rc<VecModel<SharedString>>,
     total: Cell<u32>,
     in_flight: Cell<bool>,
+    // First item and number of items of the last request.
+    asked: Cell<(u32, u32)>,
     ready: Cell<bool>,
     more_failed: Cell<bool>,
     loads: PageLoads,
@@ -185,6 +187,10 @@ impl LibraryController {
         patch_card(&self.items, &self.cards, id, user);
         if self.settings(tab).watch != WatchFilter::All || tab == LibraryTab::Favorites {
             self.refresh(app);
+        } else if self.in_flight.get() {
+            // The answer on its way may hold the item as it was: it is asked for again.
+            let (start, limit) = self.asked.get();
+            self.request(app, start, limit, false);
         }
     }
 
@@ -389,6 +395,7 @@ impl LibraryController {
         self.load.set(self.load.get() + 1);
         let load = self.load.get();
         self.in_flight.set(true);
+        self.asked.set((start, limit));
         self.more_failed.set(false);
         if start == 0 && clear {
             self.ready.set(false);

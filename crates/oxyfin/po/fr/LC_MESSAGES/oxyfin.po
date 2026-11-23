@@ -266,7 +266,12 @@ msgctxt "NoticeBanner"
 msgid "Notice"
 msgstr "Notification"
 
-#: crates/oxyfin/ui/components/notice_banner.slint:53
+#: crates/oxyfin/ui/components/notice_banner.slint:55
+msgctxt "NoticeBanner"
+msgid "Retry"
+msgstr "Réessayer"
+
+#: crates/oxyfin/ui/components/notice_banner.slint:55
 msgctxt "NoticeBanner"
 msgid "Undo"
 msgstr "Annuler"
