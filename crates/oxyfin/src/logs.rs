@@ -3,6 +3,8 @@
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock};
+use std::thread::JoinHandle;
 
 use log::Log;
 use oxyfin_core::Paths;
@@ -223,33 +225,118 @@ pub fn recent(dir: &Path, max: usize) -> String {
 }
 
 /// What "Copy logs" puts on the clipboard: `header`, then the recent log in `dir` with every
-/// mention of `host`, the server signed in to, replaced.
-pub fn report(dir: &Path, header: &str, host: Option<&str>) -> String {
+/// mention of a server replaced: the `hosts` the app knows, and those of the URLs in the log.
+pub fn report(dir: &Path, header: &str, hosts: &[String]) -> String {
     let log = recent(dir, RECENT_LOG_BYTES);
-    let log = match host {
-        Some(host) => redact_host(&log, host),
-        None => log,
-    };
-    format!("{header}\n\n{log}")
+    format!("{header}\n\n{}", redact_hosts(&log, hosts))
 }
 
-/// `text` with every mention of `host`, compared without case, replaced by `<server>`.
-pub fn redact_host(text: &str, host: &str) -> String {
-    if host.is_empty() {
-        return text.to_owned();
-    }
+/// The host of a server address, which may lack its scheme.
+pub fn host_of(address: &str) -> Option<String> {
+    let rest = address.split_once("://").map_or(address, |(_, rest)| rest);
+    let host = &rest[host_span(rest)?];
+    Some(host.to_ascii_lowercase())
+}
+
+/// Where the host is in `rest`, the part of a URL after its scheme.
+fn host_span(rest: &str) -> Option<std::ops::Range<usize>> {
+    let end = rest
+        .find(|c: char| c.is_whitespace() || "/?#\"'`<>\\,;(){}|".contains(c))
+        .unwrap_or(rest.len());
+    let start = rest[..end].rfind('@').map_or(0, |at| at + 1);
+    let authority = &rest[start..end];
+    let length = if authority.starts_with('[') {
+        authority.find(']')? + 1
+    } else {
+        authority.find([':', ']']).unwrap_or(authority.len())
+    };
+    let host = authority[..length].trim_end_matches('.');
+    (!host.is_empty()).then(|| start..start + host.len())
+}
+
+/// The hosts of the URLs in `text`.
+fn hosts_in(text: &str) -> Vec<String> {
+    text.match_indices("://")
+        .filter_map(|(at, separator)| {
+            let scheme = text[..at].bytes().next_back();
+            scheme.filter(u8::is_ascii_alphanumeric)?;
+            let rest = text[at + separator.len()..].lines().next()?;
+            Some(rest[host_span(rest)?].to_owned())
+        })
+        .collect()
+}
+
+/// `text` with every mention of `hosts` and of the hosts of its URLs replaced by `<server>`,
+/// compared without case and only as whole words.
+pub fn redact_hosts(text: &str, hosts: &[String]) -> String {
     let lower = text.to_ascii_lowercase();
-    let host = host.to_ascii_lowercase();
+    let mut wanted = hosts_in(&lower);
+    wanted.extend(hosts.iter().map(|host| host.to_ascii_lowercase()));
+    wanted.retain(|host| !host.is_empty());
+    // The longest first: a host can end with another one.
+    wanted.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+    wanted.dedup();
+    let mut spans: Vec<(usize, usize)> = Vec::new();
+    for host in &wanted {
+        for (start, _) in lower.match_indices(host.as_str()) {
+            let end = start + host.len();
+            let covered = spans.iter().any(|(from, to)| start < *to && *from < end);
+            if !covered && names_host(lower.as_bytes(), start, end, host) {
+                spans.push((user_info_start(&lower, start), end));
+            }
+        }
+    }
+    spans.sort_unstable();
     let mut out = String::with_capacity(text.len());
     let mut copied = 0;
-    while let Some(found) = lower[copied..].find(&host) {
-        let start = copied + found;
-        out.push_str(&text[copied..start]);
-        out.push_str("<server>");
-        copied = start + host.len();
+    for (start, end) in spans {
+        if start >= copied {
+            out.push_str(&text[copied..start]);
+            out.push_str("<server>");
+        }
+        copied = copied.max(end);
     }
     out.push_str(&text[copied..]);
     out
+}
+
+/// Whether the text from `start` to `end`, which spells `host`, stands for that host rather than
+/// for a part of another word or of another host.
+fn names_host(text: &[u8], start: usize, end: usize, host: &str) -> bool {
+    let word =
+        |byte: u8| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_') || byte >= 0x80;
+    let (before, after) = (&text[..start], &text[end..]);
+    let whole = match before.last() {
+        // A longer name of the same domain is hidden up to the part known.
+        Some(b'.') => host.contains('.'),
+        Some(byte) => !word(*byte),
+        None => true,
+    } && match after {
+        [b'.', next, ..] => !word(*next),
+        [byte, ..] => !word(*byte),
+        [] => true,
+    };
+    if !whole {
+        return false;
+    }
+    // A server can be named like a word of the log, or like the module a line comes from.
+    let in_url = before.ends_with(b"//") || before.ends_with(b"@");
+    let with_port = matches!(after, [b':', digit, ..] if digit.is_ascii_digit());
+    if host == env!("CARGO_PKG_NAME") {
+        return in_url || with_port;
+    }
+    !before.ends_with(b"::") && !after.starts_with(b"::")
+}
+
+/// Where the user name and password before the host at `start` begin, else `start`.
+fn user_info_start(text: &str, start: usize) -> usize {
+    if !text[..start].ends_with('@') {
+        return start;
+    }
+    match text[..start].rfind("://") {
+        Some(at) if !text[at + 3..start].contains(char::is_whitespace) => at + 3,
+        _ => start,
+    }
 }
 
 /// The header of a copied log: the app version, the system and the libmpv version `mpv`.
@@ -259,6 +346,38 @@ pub fn header(mpv: &str) -> String {
         crate::launch::version_line(),
         system()
     )
+}
+
+/// The libmpv version, read once on a thread of its own: loading the library takes a while.
+#[derive(Clone, Default)]
+pub struct MpvVersion(Arc<OnceLock<String>>);
+
+impl MpvVersion {
+    /// Reads the version with `read` and logs it, without waiting for it.
+    pub fn read_in_background(
+        &self,
+        read: impl FnOnce() -> String + Send + 'static,
+    ) -> Option<JoinHandle<()>> {
+        let slot = Arc::clone(&self.0);
+        let spawned = std::thread::Builder::new()
+            .name("mpv-version".into())
+            .spawn(move || {
+                // Read first: a disabled log line evaluates nothing.
+                let version = slot.get_or_init(read);
+                log::info!("mpv: {version}");
+            });
+        spawned
+            .inspect_err(|error| log::warn!("cannot read the mpv version: {error}"))
+            .ok()
+    }
+
+    /// The version, when it was read.
+    pub fn get(&self) -> String {
+        self.0
+            .get()
+            .cloned()
+            .unwrap_or_else(|| "not read yet".to_owned())
+    }
 }
 
 /// The operating system, its architecture and, on Linux, the desktop and session type.
@@ -611,7 +730,11 @@ mod tests {
         let line = "INFO oxyfin: GET https://Media.Example.org:8096/Items done\n";
         let log = line.repeat(4 * RECENT_LOG_BYTES / line.len());
         std::fs::write(dir.path().join(LOG_FILE), &log).unwrap();
-        let report = report(dir.path(), "oxyfin 1.2.3", Some("media.example.org"));
+        let report = report(
+            dir.path(),
+            "oxyfin 1.2.3",
+            &["media.example.org".to_owned()],
+        );
         assert!(
             report.starts_with("oxyfin 1.2.3\n\nINFO"),
             "{}",
@@ -625,6 +748,89 @@ mod tests {
         assert!(report.matches("/Items done").count() >= RECENT_LOG_BYTES / line.len() - 1);
         assert!(!report.to_ascii_lowercase().contains("example.org"));
         assert!(report.contains("GET https://<server>:8096/Items done"));
+    }
+
+    fn redacted(text: &str, hosts: &[&str]) -> String {
+        let hosts: Vec<String> = hosts.iter().map(|host| (*host).to_owned()).collect();
+        redact_hosts(text, &hosts)
+    }
+
+    #[test]
+    fn every_server_known_or_logged_is_hidden() {
+        for (text, hosts, expected) in [
+            (
+                "old https://old.example.org/a then new.example.com:8096",
+                &["new.example.com"][..],
+                "old https://<server>/a then <server>:8096",
+            ),
+            (
+                "GET http://10.0.0.7:8096/Items\nretry of 10.0.0.7 failed",
+                &[],
+                "GET http://<server>:8096/Items\nretry of <server> failed",
+            ),
+            (
+                "wss://Jelly.Example.org/socket, dns error for jelly.example.org.",
+                &[],
+                "wss://<server>/socket, dns error for <server>.",
+            ),
+            (
+                "img.media.example.org and media.example.org.uk",
+                &["media.example.org"],
+                "img.<server> and media.example.org.uk",
+            ),
+            (
+                "http://me:hunter2@box.lan/ and http://[fe80::1]:8096/",
+                &[],
+                "http://<server>/ and http://<server>:8096/",
+            ),
+        ] {
+            assert_eq!(redacted(text, hosts), expected, "{text}");
+        }
+    }
+
+    #[test]
+    fn a_short_host_leaves_other_words_alone() {
+        let text = "nas: the nasal snas nas-like nas_1 nas.rs unas, cannot resolve nas";
+        assert_eq!(
+            redacted(text, &["nas"]),
+            "<server>: the nasal snas nas-like nas_1 nas.rs unas, cannot resolve <server>"
+        );
+        let text = "INFO  oxyfin::app] oxyfin 0.1.0, http://oxyfin:8096/ via oxyfin:8096";
+        assert_eq!(
+            redacted(text, &["oxyfin"]),
+            "INFO  oxyfin::app] oxyfin 0.1.0, http://<server>:8096/ via <server>:8096"
+        );
+        assert_eq!(
+            redacted("media::load of media", &["media"]),
+            "media::load of <server>"
+        );
+        assert_eq!(redacted("file:///home/a/x", &[]), "file:///home/a/x");
+    }
+
+    #[test]
+    fn the_host_of_an_address_is_found_with_or_without_a_scheme() {
+        assert_eq!(
+            host_of("https://Jelly.example/").as_deref(),
+            Some("jelly.example")
+        );
+        assert_eq!(host_of("nas:8096").as_deref(), Some("nas"));
+        assert_eq!(host_of("http://[::1]:8096/x").as_deref(), Some("[::1]"));
+        assert_eq!(host_of(""), None);
+    }
+
+    #[test]
+    fn the_mpv_version_never_keeps_the_reader_waiting() {
+        let (release, wait) = std::sync::mpsc::channel::<()>();
+        let version = MpvVersion::default();
+        assert_eq!(version.get(), "not read yet");
+        let reader = version.read_in_background(move || {
+            wait.recv().ok();
+            "mpv 9.9".to_owned()
+        });
+        assert_eq!(version.get(), "not read yet");
+        release.send(()).unwrap();
+        reader.unwrap().join().unwrap();
+        assert_eq!(version.get(), "mpv 9.9");
     }
 
     #[test]

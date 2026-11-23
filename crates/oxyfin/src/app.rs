@@ -98,6 +98,9 @@ pub struct App {
     discord: RefCell<Option<crate::discord::Discord>>,
     folder_opener: RefCell<Rc<FolderOpener>>,
     clipboard: RefCell<Rc<Clipboard>>,
+    /// Hosts of the servers met, hidden from copied logs.
+    known_hosts: RefCell<std::collections::BTreeSet<String>>,
+    mpv_version: crate::logs::MpvVersion,
     pub(crate) sign_in: SignInController,
     pub(crate) home: HomeController,
     pub(crate) library: LibraryController,
@@ -153,6 +156,8 @@ impl App {
             clipboard: RefCell::new(Rc::new(|window: &AppWindow, text: &str| {
                 window.invoke_copy_to_clipboard(text.into())
             })),
+            known_hosts: RefCell::default(),
+            mpv_version: Default::default(),
             sign_in: SignInController::default(),
             home: HomeController::default(),
             library: LibraryController::default(),
@@ -178,6 +183,11 @@ impl App {
         for effect in effects {
             self.apply(effect);
         }
+    }
+
+    /// Reads the libmpv version for bug reports and logs it, without waiting for it.
+    pub fn read_mpv_version(&self) {
+        self.mpv_version.read_in_background(mpv_version);
     }
 
     /// Whether the window opens fullscreen, as the settings saved it.
@@ -900,23 +910,42 @@ impl App {
         });
     }
 
+    /// Remembers the host of a server, which copied logs never show.
+    pub(crate) fn knows_server(&self, address: &str) {
+        if let Some(host) = crate::logs::host_of(address) {
+            self.known_hosts.borrow_mut().insert(host);
+        }
+    }
+
     fn copy_logs(&self) {
-        let Some(window) = self.window() else { return };
-        let host = self.generation.borrow().as_ref().and_then(|generation| {
-            generation
-                .session
-                .server()
-                .base_url()
-                .host_str()
-                .map(str::to_owned)
+        let last = self.manager.last_server_url();
+        for address in last.into_iter().chain(
+            self.state
+                .borrow()
+                .session()
+                .map(|info| info.server_url.clone()),
+        ) {
+            self.knows_server(&address);
+        }
+        let hosts: Vec<String> = self.known_hosts.borrow().iter().cloned().collect();
+        let dir = crate::logs::log_dir(&self.paths);
+        let mpv = self.mpv_version.get();
+        let report = async move {
+            tokio::task::spawn_blocking(move || {
+                crate::logs::report(&dir, &crate::logs::header(&mpv), &hosts)
+            })
+            .await
+        };
+        self.spawn(report, |app, report| match report {
+            Ok(text) => app.put_on_clipboard(&text),
+            Err(error) => log::error!("cannot gather the logs: {error}"),
         });
-        let text = crate::logs::report(
-            &crate::logs::log_dir(&self.paths),
-            &crate::logs::header(&mpv_version()),
-            host.as_deref(),
-        );
+    }
+
+    fn put_on_clipboard(&self, text: &str) {
+        let Some(window) = self.window() else { return };
         let clipboard = Rc::clone(&*self.clipboard.borrow());
-        let copied = clipboard(&window, &text);
+        let copied = clipboard(&window, text);
         if !copied {
             log::warn!("the logs could not be copied to the clipboard");
         }
@@ -1625,16 +1654,11 @@ fn show_chapter_tiles(
     }
 }
 
-/// The libmpv version for bug reports, asked once.
+/// The libmpv version for bug reports.
 fn mpv_version() -> String {
     #[cfg(feature = "mpv")]
     {
-        static VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-        VERSION
-            .get_or_init(|| {
-                oxyfin_player::mpv_version().unwrap_or_else(|error| format!("unknown ({error})"))
-            })
-            .clone()
+        oxyfin_player::mpv_version().unwrap_or_else(|error| format!("unknown ({error})"))
     }
     #[cfg(not(feature = "mpv"))]
     {

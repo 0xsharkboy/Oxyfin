@@ -86,6 +86,7 @@ fn run(paths: Paths) -> Result<(), Box<dyn std::error::Error>> {
     }
     select_language();
     let app = App::new(&window, runtime.handle().clone(), paths, vault)?;
+    app.read_mpv_version();
     #[cfg(feature = "mpv")]
     {
         let weak = std::rc::Rc::downgrade(&app);

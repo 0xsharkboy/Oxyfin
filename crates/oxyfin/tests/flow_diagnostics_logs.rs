@@ -57,7 +57,7 @@ fn logs_are_copied_scrubbed_and_their_folder_opens() {
             let old = "INFO oxyfin: an old line\n".repeat(4 * RECENT_LOG_BYTES / 24);
             std::fs::write(
                 dir.join(LOG_FILE),
-                old + "INFO oxyfin: hello from the log GET http://127.0.0.1/Items?api_key=s3cr3t&x=1",
+                old + "INFO oxyfin: hello from the log GET http://127.0.0.1/Items?api_key=s3cr3t&x=1 not http://other.example.net/x nor other.example.net",
             )
             .unwrap();
         },
@@ -92,6 +92,11 @@ fn logs_are_copied_scrubbed_and_their_folder_opens() {
             }
             if pasted.contains("127.0.0.1") || !pasted.contains("GET http://<server>/Items") {
                 return Err("the server host is in the copied log".into());
+            }
+            if pasted.contains("example.net")
+                || !pasted.contains("not http://<server>/x nor <server>")
+            {
+                return Err(format!("another server is in the copied log: {pasted:?}"));
             }
             if pasted.chars().count() >= 65_536 {
                 return Err(format!(

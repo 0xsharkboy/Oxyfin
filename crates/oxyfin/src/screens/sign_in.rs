@@ -95,6 +95,7 @@ impl SignInController {
                 let Some(window) = app.window() else { return };
                 match result {
                     Ok(server) => {
+                        app.knows_server(server.server.base_url().as_str());
                         let text = window.global::<Messages>().invoke_server_found(
                             server.name.as_deref().unwrap_or_default().into(),
                             server.version.as_str().into(),
@@ -197,6 +198,9 @@ impl SignInController {
                     return;
                 }
                 let Some(window) = app.window() else { return };
+                for server in &servers {
+                    app.knows_server(&server.address);
+                }
                 let rows: Vec<FoundServer> = servers
                     .iter()
                     .map(|server| FoundServer {
