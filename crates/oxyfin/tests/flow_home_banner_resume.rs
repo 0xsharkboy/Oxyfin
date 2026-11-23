@@ -22,10 +22,10 @@ fn the_banner_shows_the_episode_to_resume_and_opens_its_series() {
         wait_visible(&window, "CONTINUE WATCHING").await?;
         wait_visible(&window, "Northern Saga").await?;
         wait_visible(&window, "Series").await?;
-        wait_visible(&window, "S01E02 \u{b7} Sword \u{b7} 24m").await?;
-        wait_visible(&window, "12m left").await?;
+        wait_visible(&window, "S01E02 \u{b7} Sword \u{b7} 24 min").await?;
+        wait_visible(&window, "12 min left").await?;
         wait_visible(&window, "A raid on the coast.").await?;
-        let progress = wait_role(&window, "12m left", AccessibleRole::ProgressIndicator).await?;
+        let progress = wait_role(&window, "12 min left", AccessibleRole::ProgressIndicator).await?;
         if progress.size().width != 240. {
             return Err(format!(
                 "the progress bar is {} wide",

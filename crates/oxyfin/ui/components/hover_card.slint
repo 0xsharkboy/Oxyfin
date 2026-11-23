@@ -135,7 +135,7 @@ export component HoverCardOverlay inherits Rectangle {
         kind == HoverKind.collection ? @tr("Collection") : @tr("Movie")
     }
 
-    // "S01E02 · Title · 24m" for an episode, "2020 · 1h 40m" or "2021 · 3 seasons" otherwise.
+    // "S01E02 · Title · 24 min" for an episode, "2020 · 1 h 40 min" or "2021 · 3 seasons" otherwise.
     pure function lead(details: HoverDetails) -> string {
         let episode = Messages.joined(details.episode-label, details.episode-title);
         let year = details.year > 0 ? "\{details.year}" : "";

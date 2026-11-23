@@ -108,6 +108,7 @@ export global Theme {
     out property <length> button-height: 24px + 2 * space-md;
     // Featured banner of the home screen.
     out property <length> banner-height: 520px;
+    out property <int> banner-overview-lines: 2;
     out property <length> poster-width: 160px;
     out property <length> poster-height: 240px;
     out property <length> landscape-width: 288px;
@@ -340,15 +341,15 @@ export enum Message {
 }
 
 export global Messages {
-    // A length in minutes such as "1h 40m" or "24m"; empty when unknown.
+    // A length in minutes such as "1 h 40 min" or "24 min"; empty when unknown.
     public pure function duration(minutes: int) -> string {
         if minutes <= 0 {
             return "";
         }
-        minutes >= 60 ? @tr("{}h {}m", floor(minutes / 60), mod(minutes, 60)) : @tr("{}m", minutes)
+        minutes >= 60 ? @tr("{} h {} min", floor(minutes / 60), mod(minutes, 60)) : @tr("{} min", minutes)
     }
 
-    // The time left to watch, such as "12m left".
+    // The time left to watch, such as "12 min left".
     public pure function time-left(minutes: int) -> string {
         @tr("{} left", Messages.duration(minutes))
     }

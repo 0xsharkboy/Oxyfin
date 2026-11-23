@@ -22,8 +22,10 @@ export component PosterGrid inherits Rectangle {
     property <length> column-gap: columns < 2 ? gap : max(gap, (self.width - 2 * margin - columns * Theme.poster-width) / (columns - 1));
     property <int> rows: ceil(cards.length / columns);
     property <length> grid-height: rows == 0 ? 0px : rows * row-height + (rows - 1) * gap + margin;
+    // Bones that complete the last row of posters.
+    property <int> bones-beside: mod(columns - mod(cards.length, columns), columns);
     // Bones stand for a view full of posters, or for the rest of the last row and one more row.
-    property <int> bone-count: cards.length == 0 ? columns * max(1, ceil(self.height / (row-height + gap))) : mod(columns - mod(cards.length, columns), columns) + columns;
+    property <int> bone-count: cards.length == 0 ? columns * max(1, ceil(self.height / (row-height + gap))) : bones-beside + columns;
     property <int> all-rows: ceil((cards.length + (loading ? bone-count : 0)) / columns);
     property <length> content-height: all-rows == 0 ? 0px : all-rows * row-height + (all-rows - 1) * gap + margin;
 
@@ -100,19 +102,35 @@ export component PosterGrid inherits Rectangle {
             }
         }
 
-        // The rows the bones take, from the one of the first bone.
-        if root.loading: bones := Skeleton {
-            property <int> first-row: floor(root.cards.length / root.columns);
+        // The bones beside the last posters, then those below: apart, so that their light never
+        // sweeps over the posters.
+        if root.loading && root.bones-beside > 0: beside := Skeleton {
+            x: root.margin + (root.columns - root.bones-beside) * (Theme.poster-width + root.column-gap);
+            y: floor(root.cards.length / root.columns) * (root.row-height + root.gap);
+            width: flick.width - self.x;
+            height: root.row-height;
+            sweep-width: flick.width;
+            sweep-offset: self.x;
 
+            Rectangle {
+                for index in root.bones-beside: PosterCardBones {
+                    x: index * (Theme.poster-width + root.column-gap);
+                    y: 0;
+                    height: root.row-height;
+                }
+            }
+        }
+
+        if root.loading: below := Skeleton {
             x: 0;
-            y: self.first-row * (root.row-height + root.gap);
+            y: root.rows * (root.row-height + root.gap);
             width: flick.width;
             height: root.content-height - self.y;
 
             Rectangle {
-                for index in root.bone-count: PosterCardBones {
-                    x: root.margin + mod(root.cards.length + index, root.columns) * (Theme.poster-width + root.column-gap);
-                    y: (floor((root.cards.length + index) / root.columns) - bones.first-row) * (root.row-height + root.gap);
+                for index in root.bone-count - root.bones-beside: PosterCardBones {
+                    x: root.margin + mod(index, root.columns) * (Theme.poster-width + root.column-gap);
+                    y: floor(index / root.columns) * (root.row-height + root.gap);
                     height: root.row-height;
                 }
             }

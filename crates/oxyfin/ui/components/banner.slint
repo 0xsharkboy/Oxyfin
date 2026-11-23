@@ -38,7 +38,7 @@ export component Banner inherits Rectangle {
     // Label such as `S01E02` for an episode, named on the resume button.
     in property <string> episode-label;
     in property <string> meta;
-    // Time left, such as "12m left"; empty when unknown.
+    // Time left, such as "12 min left"; empty when unknown.
     in property <string> remaining;
     in property <float> progress;
     in property <string> overview;
@@ -114,7 +114,7 @@ export component Banner inherits Rectangle {
             max-width: 560px;
             // A wrapped text asks for all its lines as its minimum, which would win over the maximum.
             min-height: 0px;
-            max-height: 3 * Theme.body-line-height;
+            max-height: Theme.banner-overview-lines * Theme.body-line-height;
         }
         HorizontalLayout {
             padding-top: Theme.space-sm;

@@ -287,6 +287,44 @@ fn more_pages_load_after_the_last_poster() {
 }
 
 #[test]
+fn the_light_never_sweeps_over_real_posters() {
+    let page = grid_page(0);
+    start_loading(&page);
+    for count in [2, 5, 6] {
+        page.set_cards(ModelRc::new(VecModel::from(
+            (0..count).map(card).collect::<Vec<_>>(),
+        )));
+        let _ = common::bones(&page);
+        elapse(1000);
+        let rect = |element: &ElementHandle| {
+            let (at, size) = (element.absolute_position(), element.size());
+            (at.x, at.y, at.x + size.width, at.y + size.height)
+        };
+        let posters: Vec<_> = ElementHandle::find_by_element_type_name(&page, "PosterCard")
+            .filter(|card| {
+                card.accessible_label()
+                    .is_some_and(|label| label.starts_with("Poster"))
+            })
+            .collect();
+        assert!(!posters.is_empty());
+        let skeletons: Vec<_> = ElementHandle::find_by_element_type_name(&page, "Skeleton")
+            .filter(|skeleton| skeleton.size().width > 0. && skeleton.size().height > 0.)
+            .collect();
+        assert!(!skeletons.is_empty());
+        for skeleton in &skeletons {
+            let a = rect(skeleton);
+            for poster in &posters {
+                let b = rect(poster);
+                assert!(
+                    a.2 <= b.0 || b.2 <= a.0 || a.3 <= b.1 || b.3 <= a.1,
+                    "bones {a:?} cover the poster {b:?} of {count}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn no_screen_says_loading() {
     let ui = common::manifest_dir().join("ui");
     let mut files = vec![ui.join("app.slint")];

@@ -18,7 +18,7 @@ fn the_banner_shows_a_recent_movie_when_nothing_is_started() {
         wait_until("the home screen", || window.get_screen() == Screen::Home).await?;
         wait_visible(&window, "RECENTLY ADDED").await?;
         wait_visible(&window, "Movie").await?;
-        wait_visible(&window, "2020 \u{b7} 1h 40m").await?;
+        wait_visible(&window, "2020 \u{b7} 1 h 40 min").await?;
         wait_role(&window, "Play", AccessibleRole::Button).await?;
         let banner = window.get_home_banner();
         if banner.resuming || banner.kind != BannerKind::Movie {

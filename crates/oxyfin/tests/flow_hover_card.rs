@@ -222,12 +222,12 @@ fn the_card_shows_after_the_delay_beside_the_poster() {
     assert!(
         shown
             .iter()
-            .any(|t| t.contains("2002") && t.contains("1h 34m")),
+            .any(|t| t.contains("2002") && t.contains("1 h 34 min")),
         "year and duration show in {shown:?}"
     );
     assert!(shown.iter().any(|t| t.contains("8.4")), "the rating shows");
     assert!(shown.iter().any(|t| t == "Movie"), "the kind shows");
-    assert_eq!(progress(&card).as_deref(), Some("1h 2m left"));
+    assert_eq!(progress(&card).as_deref(), Some("1 h 2 min left"));
 
     leave(&page);
     assert!(

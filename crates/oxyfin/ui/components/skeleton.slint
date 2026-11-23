@@ -29,6 +29,9 @@ export component LineBone {
 export component Skeleton inherits Rectangle {
     // False for bones that follow others already shown, so nothing blinks out in between.
     in property <bool> delayed: true;
+    // Width the band of light sweeps, and where these bones start in it, for bones split in parts.
+    in property <length> sweep-width: self.width;
+    in property <length> sweep-offset;
     // The bones showed after the delay.
     callback appeared();
 
@@ -53,9 +56,9 @@ export component Skeleton inherits Rectangle {
 
     if root.shown: shimmer := Rectangle {
         y: 0;
-        width: root.width;
+        width: root.sweep-width;
         height: root.height;
-        x: (2 * mod(animation-tick() / 1ms, Theme.skeleton-sweep / 1ms) / (Theme.skeleton-sweep / 1ms) - 1) * root.width;
+        x: (2 * mod(animation-tick() / 1ms, Theme.skeleton-sweep / 1ms) / (Theme.skeleton-sweep / 1ms) - 1) * root.sweep-width - root.sweep-offset;
         background: Theme.skeleton-shimmer;
     }
 }
