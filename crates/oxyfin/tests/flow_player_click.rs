@@ -12,7 +12,7 @@ use common::click_at;
 use i_slint_backend_testing::{AccessibleRole, ElementHandle};
 use oxyfin::screens::player;
 use oxyfin::{AppWindow, Screen, Shortcuts};
-use oxyfin_core::{PlaybackCommand, PlaybackEvent};
+use oxyfin_core::{PlaybackCommand, PlaybackEvent, SegmentKind, SkippableSegment};
 use slint::platform::{PointerEventButton, WindowEvent};
 use slint::{ComponentHandle, LogicalPosition, LogicalSize};
 
@@ -285,4 +285,21 @@ fn the_pause_button_pauses_once() {
         indicator(&window, "Paused").is_none(),
         "no indicator for the button"
     );
+}
+
+#[test]
+fn a_skip_button_appearing_in_between_keeps_the_double_click() {
+    let (window, _sent) = player_window();
+    click_at(&window, VIDEO);
+    player::apply(
+        &window,
+        PlaybackEvent::Segment(Some(SkippableSegment {
+            kind: SegmentKind::Intro,
+            start: Duration::ZERO,
+            end: Duration::from_secs(60),
+        })),
+    );
+    elapse(Duration::from_millis(100));
+    click_at(&window, VIDEO);
+    assert!(window.window().is_fullscreen());
 }
