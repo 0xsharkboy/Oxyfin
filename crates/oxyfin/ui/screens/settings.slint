@@ -234,6 +234,8 @@ export component SettingsScreen inherits Rectangle {
     callback copy-logs();
     callback open-logs();
 
+    property <length> copy-width;
+
     property <bool> can-authorize: root.authorize-state != AuthorizeState.busy && root.code-ready(root.authorize-code);
 
     function submit-code() {
@@ -553,7 +555,10 @@ export component SettingsScreen inherits Rectangle {
                             Button {
                                 label: root.logs-copied ? @tr("Copied") : @tr("Copy logs");
                                 style: ButtonStyle.secondary;
+                                // The shorter "Copied" must not move the row.
+                                min-width: max(self.preferred-width, root.copy-width);
                                 clicked => {
+                                    root.copy-width = self.width;
                                     root.copy-logs();
                                 }
                             }

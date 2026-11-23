@@ -1,10 +1,10 @@
 //! Settings > Diagnostics in French: the action buttons keep their whole labels and the value
-//! beside them wraps instead.
+//! beside them moves instead, the same before and after a copy.
 
 mod common;
 
 use common::playback_settings::open_settings_prepared;
-use common::wait_role;
+use common::{click, wait_role};
 use i_slint_backend_testing::AccessibleRole;
 use reference::ButtonReference;
 use slint::{ComponentHandle, LogicalSize};
@@ -64,6 +64,18 @@ fn french_action_buttons_keep_their_labels() {
                     value.absolute_position(),
                     value.size()
                 ));
+            }
+
+            let (at, size) = (copy.absolute_position(), copy.size());
+            let value_at = value.absolute_position();
+            click(window, &copy);
+            let copied = wait_role(window, "Copiés", AccessibleRole::Button).await?;
+            let value = wait_role(window, "Pour signaler un bug", AccessibleRole::Text).await?;
+            if copied.absolute_position() != at
+                || copied.size() != size
+                || value.absolute_position() != value_at
+            {
+                return Err("the row moves once the logs are copied".into());
             }
             Ok(())
         },
