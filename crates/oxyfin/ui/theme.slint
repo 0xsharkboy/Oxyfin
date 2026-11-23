@@ -91,6 +91,9 @@ export global Theme {
     out property <duration> skeleton-delay: 150ms;
     out property <duration> skeleton-sweep: 1800ms;
     out property <brush> skeleton-shimmer: @linear-gradient(105deg, #ffffff00 35%, #ffffff0d 50%, #ffffff00 65%);
+    // Results of a previous search dim while the new ones load.
+    out property <float> stale-opacity: 0.5;
+    out property <duration> stale-fade: 200ms;
     // Narrowest room for the value of a settings row beside its buttons, else it goes under the
     // label.
     out property <length> action-value-min-width: 120px;

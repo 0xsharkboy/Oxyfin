@@ -40,6 +40,20 @@ export component SearchScreen inherits Rectangle {
 
     background: Theme.bg-base;
 
+    // The results of the previous text stay while the new ones load, dimmed after the skeleton
+    // delay, so a fast answer never flashes.
+    states [
+        stale when root.query != "" && root.loading && root.cards.length > 0: {
+            grid.opacity: Theme.stale-opacity;
+            in {
+                animate grid.opacity {
+                    delay: Theme.skeleton-delay;
+                    duration: Theme.stale-fade;
+                }
+            }
+        }
+    ]
+
     VerticalLayout {
         Rectangle {
             height: top-bar.height;
