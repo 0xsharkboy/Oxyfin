@@ -61,6 +61,9 @@ type Clipboard = dyn Fn(&AppWindow, &str) -> bool;
 /// How long a notice that needs no action stays on screen.
 pub const NOTICE_DURATION: Duration = Duration::from_secs(5);
 
+/// How long the volume stays unchanged before it is saved.
+pub const VOLUME_SAVE_DELAY: Duration = Duration::from_secs(1);
+
 /// The running application, living on the Slint thread.
 ///
 /// Work runs on the Tokio runtime; its results come back to the Slint event
@@ -79,6 +82,9 @@ pub struct App {
     quitting: Cell<bool>,
     pending_stops: Cell<u32>,
     notice_timer: Timer,
+    volume_timer: Timer,
+    /// A volume set but not saved yet.
+    pending_volume: Cell<Option<f64>>,
     sheets: RefCell<crate::images::SheetCache>,
     back_cache: RefCell<BackCache<Parked>>,
     #[cfg(feature = "mpv")]
@@ -130,6 +136,8 @@ impl App {
             quitting: Cell::new(false),
             pending_stops: Cell::new(0),
             notice_timer: Timer::default(),
+            volume_timer: Timer::default(),
+            pending_volume: Cell::new(None),
             sheets: RefCell::default(),
             back_cache: RefCell::default(),
             #[cfg(feature = "mpv")]
@@ -770,10 +778,19 @@ impl App {
         {
             log::warn!("cannot save the streaming quality: {error}");
         }
-        if let PlaybackCommand::SetVolume(volume) = command
-            && let Err(error) = self.manager.set_volume(volume)
-        {
-            log::warn!("cannot save the volume: {error}");
+        if let PlaybackCommand::SetVolume(volume) = command {
+            // Saved once the volume rests, not on each step of a drag or of the wheel.
+            self.pending_volume.set(Some(volume));
+            let this = self.this.clone();
+            self.volume_timer
+                .start(TimerMode::SingleShot, VOLUME_SAVE_DELAY, move || {
+                    if let Some(app) = this.upgrade() {
+                        app.save_volume();
+                    }
+                });
+        }
+        if command == PlaybackCommand::Stop {
+            self.save_volume();
         }
         if let Some(playback) = self
             .generation
@@ -785,6 +802,16 @@ impl App {
                 self.pending_stops.set(self.pending_stops.get() + 1);
             }
             playback.handle.send(command);
+        }
+    }
+
+    /// Saves the volume set last, if it is not saved yet.
+    fn save_volume(&self) {
+        self.volume_timer.stop();
+        if let Some(volume) = self.pending_volume.take()
+            && let Err(error) = self.manager.set_volume(volume)
+        {
+            log::warn!("cannot save the volume: {error}");
         }
     }
 
@@ -1548,6 +1575,7 @@ impl App {
             Effect::Refresh(screen) => self.refresh(&screen),
             Effect::Notify(notice) => self.notify(notice_message(notice)),
             Effect::Quit => {
+                self.save_volume();
                 self.quitting.set(true);
                 if let Err(error) = slint::quit_event_loop() {
                     log::warn!("cannot quit the event loop: {error}");

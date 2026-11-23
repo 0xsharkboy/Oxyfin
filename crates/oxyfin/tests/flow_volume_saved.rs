@@ -1,10 +1,11 @@
-//! The volume the user sets is saved for the next start.
+//! The volume the user sets is saved for the next start, once it rests or playback stops.
 
 mod common;
 
 use std::sync::{Arc, Mutex};
 
-use common::{run, start_with, wait_until};
+use common::{pause, run, start_with, wait_until};
+use oxyfin::app::VOLUME_SAVE_DELAY;
 use oxyfin_core::{Config, Paths};
 use slint::ComponentHandle;
 
@@ -16,7 +17,7 @@ fn saved(paths: &Arc<Mutex<Option<Paths>>>) -> Option<Option<u8>> {
 }
 
 #[test]
-fn a_volume_change_is_saved() {
+fn a_volume_change_is_saved_once_it_rests() {
     let shared = Arc::new(Mutex::new(None));
     let keep = Arc::clone(&shared);
     let flow = start_with(
@@ -32,13 +33,27 @@ fn a_volume_change_is_saved() {
         if saved(&shared) != Some(None) {
             return Err("a volume is saved before any change".into());
         }
-        window.invoke_player_command_set_volume(42.4);
+        for volume in [30.0, 35.0, 42.4] {
+            window.invoke_player_command_set_volume(volume);
+        }
+        if saved(&shared) != Some(None) {
+            return Err(format!("saved while it moved: {:?}", saved(&shared)));
+        }
         wait_until("the volume to be saved", || {
             saved(&shared) == Some(Some(42))
         })
         .await?;
+
         window.set_player_volume(42.0);
         window.invoke_player_command_step_volume(-1);
-        wait_until("the step to be saved", || saved(&shared) == Some(Some(37))).await
+        pause(VOLUME_SAVE_DELAY / 10).await;
+        if saved(&shared) != Some(Some(42)) {
+            return Err("the step is saved at once".into());
+        }
+        window.invoke_player_command_stop();
+        if saved(&shared) != Some(Some(37)) {
+            return Err(format!("stop did not save the step: {:?}", saved(&shared)));
+        }
+        Ok(())
     });
 }
