@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { ContextMenu } from "context_menu.slint";
 import { BodyStrongText, CaptionText, DisplayText, HeadingText } from "text.slint";
 import { RowScroller } from "row_scroller.slint";
 
@@ -107,6 +108,7 @@ export component PersonCard {
         // Clicks go to the TouchArea: a focusing FocusScope on top would swallow the first one.
         focus-on-click: false;
         focus-gained => {
+            ContextMenu.focus-taken();
             root.focused();
         }
         key-pressed(event) => {

@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { ContextMenu } from "context_menu.slint";
 import { Icons } from "../icons.slint";
 import { BodyStrongText } from "text.slint";
 
@@ -51,6 +52,9 @@ export component Button inherits Rectangle {
         enabled: root.enabled;
         // Clicks go to the TouchArea: a focusing FocusScope on top would swallow the first one.
         focus-on-click: false;
+        focus-gained => {
+            ContextMenu.focus-taken();
+        }
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " {
                 root.activate();

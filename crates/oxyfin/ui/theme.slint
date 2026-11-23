@@ -75,6 +75,8 @@ export global Theme {
     out property <length> context-menu-icon-gap: 10px;
     // How often the window checks that the element given the focus back after a menu row still shows.
     out property <duration> focus-check-interval: 250ms;
+    // How many times it does: a row is rebuilt by then, or it never is.
+    out property <int> focus-check-limit: 40;
     // Keyboard shortcuts dialog: its width, side padding, the gap under its title and between
     // its columns, and the keycaps (radius, padding inside the border, gap between keys).
     out property <length> shortcuts-width: 760px;
@@ -216,6 +218,8 @@ export struct CardData {
     watched: bool,
     image: image,
     has-image: bool,
+    // True for an item without a context menu, such as a collection.
+    no-menu: bool,
 }
 
 export struct TrackRow {

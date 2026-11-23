@@ -41,6 +41,8 @@ export component PosterRow inherits Rectangle {
 
             for card[index] in root.items: PosterCard {
                 hover-id: card.id;
+                row-name: root.title;
+                no-menu: card.no-menu;
                 title: card.title;
                 subtitle: card.subtitle;
                 image: card.image;

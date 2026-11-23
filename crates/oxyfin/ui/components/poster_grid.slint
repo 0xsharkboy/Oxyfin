@@ -86,6 +86,7 @@ export component PosterGrid inherits Rectangle {
 
         for card[index] in root.cards: PosterCard {
             hover-id: card.id;
+            no-menu: card.no-menu;
             x: root.margin + mod(index, root.columns) * (Theme.poster-width + root.column-gap);
             y: floor(index / root.columns) * (root.row-height + root.gap);
             height: root.row-height;

@@ -71,6 +71,10 @@ export component MediaCard {
     in property <string> hover-id;
     // True for a card of Continue Watching, whose menu can take it out of that row.
     in property <bool> from-resume;
+    // Row of cards this one is in, where the same item can show in several.
+    in property <string> row-name;
+    // True for an item without a context menu.
+    in property <bool> no-menu;
     // Becoming true gives the card the keyboard focus.
     in property <bool> focus-wanted;
     callback clicked();
@@ -84,7 +88,7 @@ export component MediaCard {
     property <bool> hovered: touch.has-hover;
     property <int> scrolls: root.hovered ? HoverCard.scrolls : 0;
     // Takes the focus back after a row of its menu chosen from the keyboard, also once rebuilt.
-    property <bool> focus-return: root.hover-id != "" && ContextMenu.focus-id == root.hover-id;
+    property <bool> focus-return: root.hover-id != "" && ContextMenu.focus-id == root.hover-id && ContextMenu.focus-row == root.row-name;
     // Answers the window while it holds that focus.
     property <int> focus-check: focus.has-focus && root.focus-return ? ContextMenu.focus-check : -1;
 
@@ -96,6 +100,7 @@ export component MediaCard {
     init => {
         if root.focus-return {
             focus.focus();
+            ContextMenu.focus-taken();
         }
     }
 
@@ -143,6 +148,11 @@ export component MediaCard {
         }
     }
 
+    function open-menu(x: length, y: length, by-keyboard: bool) {
+        ContextMenu.show(root.hover-id, root.from-resume, x, y, by-keyboard, root.title, root.subtitle);
+        ContextMenu.opener-row = root.row-name;
+    }
+
     touch := TouchArea {
         enabled: root.enabled;
         mouse-cursor: root.enabled ? pointer : default;
@@ -150,8 +160,8 @@ export component MediaCard {
             if event.kind == PointerEventKind.move && HoverCard.held {
                 HoverCard.pointer-moved(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
             }
-            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down && root.enabled && root.hover-id != "" {
-                ContextMenu.show(root.hover-id, root.from-resume, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y, false, root.title, root.subtitle);
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down && root.enabled && root.hover-id != "" && !root.no-menu {
+                root.open-menu(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y, false);
             }
         }
         clicked => {
@@ -182,8 +192,8 @@ export component MediaCard {
                 root.activate();
                 return accept;
             }
-            if MenuKeys.opens(event) && root.hover-id != "" {
-                ContextMenu.show(root.hover-id, root.from-resume, root.absolute-position.x + Theme.space-lg, root.absolute-position.y + Theme.space-lg, true, root.title, root.subtitle);
+            if MenuKeys.opens(event) && root.hover-id != "" && !root.no-menu {
+                root.open-menu(root.absolute-position.x + Theme.space-lg, root.absolute-position.y + Theme.space-lg, true);
                 return accept;
             }
             reject

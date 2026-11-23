@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { ContextMenu } from "context_menu.slint";
 import { BodyText } from "text.slint";
 
 // Top navigation entry; the active one is the current page and carries the accent indicator.
@@ -7,6 +8,8 @@ export component NavItem inherits Rectangle {
     in property <bool> active;
     in property <bool> enabled: true;
     callback clicked();
+    // The mouse back button was pressed over it.
+    callback back-pressed();
 
     accessible-role: tab;
     accessible-label: label;
@@ -27,6 +30,11 @@ export component NavItem inherits Rectangle {
     touch := TouchArea {
         enabled: root.enabled;
         mouse-cursor: root.enabled ? pointer : default;
+        pointer-event(event) => {
+            if event.button == PointerEventButton.back && event.kind == PointerEventKind.up {
+                root.back-pressed();
+            }
+        }
         clicked => {
             focus.focus();
             root.activate();
@@ -37,6 +45,9 @@ export component NavItem inherits Rectangle {
         enabled: root.enabled;
         // Clicks go to the TouchArea: a focusing FocusScope on top would swallow the first one.
         focus-on-click: false;
+        focus-gained => {
+            ContextMenu.focus-taken();
+        }
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " {
                 root.activate();

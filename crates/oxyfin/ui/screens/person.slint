@@ -291,6 +291,7 @@ export component PersonScreen inherits Rectangle {
 
                     for card[index] in root.titles: PosterCard {
                         hover-id: card.id;
+                        no-menu: card.no-menu;
                         x: mod(index, grid.columns) * (Theme.poster-width + root.grid-gap-x);
                         y: Theme.space-lg + floor(index / grid.columns) * (grid.row-height + root.grid-gap-y);
                         height: grid.row-height;

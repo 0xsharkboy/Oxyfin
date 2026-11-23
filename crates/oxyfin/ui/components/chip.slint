@@ -12,7 +12,7 @@ export component Chip inherits Rectangle {
     callback clicked();
 
     // Takes the focus back after a row of its menu chosen from the keyboard, also once rebuilt.
-    property <bool> focus-return: root.menu-id != "" && ContextMenu.focus-id == root.menu-id;
+    property <bool> focus-return: root.menu-id != "" && ContextMenu.focus-id == root.menu-id && ContextMenu.focus-row == "";
     // Answers the window while it holds that focus.
     property <int> focus-check: focus.has-focus && root.focus-return ? ContextMenu.focus-check : -1;
 
@@ -24,6 +24,7 @@ export component Chip inherits Rectangle {
     init => {
         if root.focus-return {
             focus.focus();
+            ContextMenu.focus-taken();
         }
     }
 

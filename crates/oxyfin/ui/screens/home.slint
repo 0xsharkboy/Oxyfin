@@ -113,6 +113,8 @@ component HomeRowView inherits Rectangle {
 
                     for card[index] in root.section.items: LandscapeCard {
                         hover-id: card.id;
+                        row-name: root.section.title;
+                        no-menu: card.no-menu;
                         from-resume: root.section.resume;
                         title: card.title;
                         subtitle: card.subtitle;

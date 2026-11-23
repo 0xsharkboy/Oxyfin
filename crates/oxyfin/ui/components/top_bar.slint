@@ -73,12 +73,18 @@ export component TopBar inherits Rectangle {
             clicked => {
                 root.home-clicked();
             }
+            back-pressed => {
+                root.back-pressed();
+            }
         }
         NavItem {
             label: @tr("Movies");
             active: root.current == TopBarPage.movies;
             clicked => {
                 root.movies-clicked();
+            }
+            back-pressed => {
+                root.back-pressed();
             }
         }
         NavItem {
@@ -87,12 +93,18 @@ export component TopBar inherits Rectangle {
             clicked => {
                 root.shows-clicked();
             }
+            back-pressed => {
+                root.back-pressed();
+            }
         }
         NavItem {
             label: @tr("Favorites");
             active: root.current == TopBarPage.favorites;
             clicked => {
                 root.favorites-clicked();
+            }
+            back-pressed => {
+                root.back-pressed();
             }
         }
 
@@ -109,6 +121,9 @@ export component TopBar inherits Rectangle {
                 clicked => {
                     root.search-clicked();
                 }
+                back-pressed => {
+                    root.back-pressed();
+                }
             }
         }
         VerticalLayout {
@@ -119,6 +134,9 @@ export component TopBar inherits Rectangle {
                 active: root.settings-active;
                 clicked => {
                     root.settings-clicked();
+                }
+                back-pressed => {
+                    root.back-pressed();
                 }
             }
         }

@@ -60,6 +60,7 @@ fn card(index: usize) -> PageCard {
         watched: false,
         image: Default::default(),
         has_image: false,
+        no_menu: false,
     }
 }
 

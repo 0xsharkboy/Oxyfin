@@ -83,6 +83,24 @@ fn the_mouse_back_button_over_the_top_bar_goes_back() {
             window.get_screen() == Screen::Library
         })
         .await?;
+
+        // Over a tab or an icon the bar goes back too, and neither is activated.
+        for (label, role) in [
+            ("Shows", AccessibleRole::Tab),
+            ("Settings", AccessibleRole::Button),
+        ] {
+            let card = wait_role(&window, "Test Movie (2020)", AccessibleRole::Button).await?;
+            click(&window, &card);
+            wait_until("the movie page", || window.get_screen() == Screen::Movie).await?;
+            let control = wait_role(&window, label, role).await?;
+            let (at, size) = (control.absolute_position(), control.size());
+            mouse_back(
+                &window,
+                LogicalPosition::new(at.x + size.width / 2., at.y + size.height / 2.),
+            );
+            wait_until(label, || window.get_screen() == Screen::Library).await?;
+            wait_role(&window, "Test Movie (2020)", AccessibleRole::Button).await?;
+        }
         Ok(())
     });
 }

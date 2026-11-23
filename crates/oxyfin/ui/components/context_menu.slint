@@ -66,6 +66,12 @@ export global ContextMenu {
     // Item whose element takes the focus back after a row chosen from the keyboard, also when
     // the action rebuilds its row; empty for none.
     in-out property <string> focus-id;
+    // The row of cards it is in: the same item can show in several. Empty outside such rows.
+    in-out property <string> focus-row;
+    // Row of cards of the element the menu was opened on.
+    in-out property <string> opener-row;
+    // Checks left before the window stops watching for an element that keeps the focus.
+    property <int> checks-left;
     // While `focus-id` is set, the window asks with `focus-check` and the element holding the
     // focus answers with `focus-answer`; no answer means the element is gone.
     in-out property <int> focus-check;
@@ -95,6 +101,7 @@ export global ContextMenu {
         self.pointer-x = by-keyboard ? -1px : x;
         self.pointer-y = by-keyboard ? -1px : y;
         self.focus-id = "";
+        self.opener-row = "";
         HoverCard.suppressed = true;
         self.requested(self.serial, id, from-resume);
         self.serial
@@ -139,6 +146,8 @@ export global ContextMenu {
         let serial = self.serial;
         if self.by-keyboard {
             self.focus-id = self.id;
+            self.focus-row = self.opener-row;
+            self.checks-left = Theme.focus-check-limit;
             self.focus-answer = self.focus-check;
         }
         self.close();
@@ -148,6 +157,22 @@ export global ContextMenu {
     public function pointer-moved(x: length, y: length) {
         self.pointer-x = x;
         self.pointer-y = y;
+    }
+
+    // The element holding the focus answered a check: after a while its row will not be rebuilt
+    // any more.
+    public function focus-held() {
+        self.checks-left -= 1;
+        if self.checks-left <= 0 {
+            self.focus-id = "";
+        } else {
+            self.focus-check += 1;
+        }
+    }
+
+    // Another control took the focus: it keeps it.
+    public function focus-taken() {
+        self.focus-id = "";
     }
 
     // The element to focus is gone: nothing waits for it any more.

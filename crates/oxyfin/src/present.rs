@@ -253,6 +253,7 @@ pub fn card(item: &ItemSummary) -> CardData {
         watched: item.user.played,
         image: Default::default(),
         has_image: false,
+        no_menu: item.kind == ItemKind::BoxSet,
     }
 }
 
