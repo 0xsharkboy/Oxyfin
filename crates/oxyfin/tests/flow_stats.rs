@@ -566,6 +566,23 @@ fn skipping_still_works_beside_the_stats() {
     assert!(shows_stats(&window));
 }
 
+fn next_episode() -> Episode {
+    Episode {
+        id: "50d3822a34079d70485f1bf36c274c35".into(),
+        series_id: "9ea196e7ccc3ae17d2c3f75c3ab34406".into(),
+        series_name: Some("Series".into()),
+        season_id: None,
+        title: "The Return".into(),
+        season_number: Some(1),
+        number: Some(2),
+        label: Some("S01E02".into()),
+        overview: None,
+        thumb: None,
+        duration: None,
+        user: UserState::default(),
+    }
+}
+
 #[test]
 fn the_next_episode_toast_stays_beside_the_stats() {
     let (window, _sent) = player_window();
@@ -575,20 +592,7 @@ fn the_next_episode_toast_stays_beside_the_stats() {
     player::apply(
         &window,
         PlaybackEvent::NextUpReady {
-            episode: Box::new(Episode {
-                id: "50d3822a34079d70485f1bf36c274c35".into(),
-                series_id: "9ea196e7ccc3ae17d2c3f75c3ab34406".into(),
-                series_name: Some("Series".into()),
-                season_id: None,
-                title: "The Return".into(),
-                season_number: Some(1),
-                number: Some(2),
-                label: Some("S01E02".into()),
-                overview: None,
-                thumb: None,
-                duration: None,
-                user: UserState::default(),
-            }),
+            episode: Box::new(next_episode()),
         },
     );
     i_slint_backend_testing::mock_elapsed_time(Duration::ZERO);
@@ -612,4 +616,57 @@ fn the_stats_stay_under_the_top_bar_of_a_short_window() {
         "the panel starts at {top}, under the top bar at {bar_bottom}"
     );
     assert!(bottom > top, "the panel still shows");
+}
+
+/// Asserts that `element` lies inside the window and leaves the statistics clear.
+fn assert_clear_of_panel(window: &AppWindow, element: &ElementHandle, width: f32) {
+    let (left, top, right, bottom) = edges(element);
+    assert!(
+        left >= 0. && right <= width,
+        "from {left} to {right} in a window {width} wide"
+    );
+    let (panel_left, panel_top, panel_right, panel_bottom) = edges(&panel(window));
+    assert!(panel_bottom > panel_top, "the panel still shows");
+    assert!(
+        right <= panel_left || left >= panel_right || bottom <= panel_top || top >= panel_bottom,
+        "{:?} over the panel {:?}",
+        edges(element),
+        edges(&panel(window))
+    );
+}
+
+#[test]
+fn a_narrow_window_keeps_the_stats_skip_button_and_toast_apart() {
+    let (window, _sent) = player_window();
+    press(&window, "i");
+    player::apply(&window, PlaybackEvent::Stats(Box::new(full_report())));
+    for (width, height) in [(1000., 700.), (900., 700.), (760., 600.), (560., 600.)] {
+        window.window().set_size(LogicalSize::new(width, height));
+        player::apply(&window, PlaybackEvent::NextUpCancelled);
+        player::apply(&window, PlaybackEvent::Position(Duration::from_secs(30)));
+        player::apply(
+            &window,
+            PlaybackEvent::Segment(Some(SkippableSegment {
+                kind: SegmentKind::Intro,
+                start: Duration::from_secs(20),
+                end: Duration::from_secs(60),
+            })),
+        );
+        i_slint_backend_testing::mock_elapsed_time(Duration::ZERO);
+        let skip = find(&window, "Skip intro", AccessibleRole::Button)
+            .unwrap_or_else(|| panic!("no skip button at {width}"));
+        assert_clear_of_panel(&window, &skip, width);
+
+        player::apply(&window, PlaybackEvent::Ended);
+        player::apply(
+            &window,
+            PlaybackEvent::NextUpReady {
+                episode: Box::new(next_episode()),
+            },
+        );
+        i_slint_backend_testing::mock_elapsed_time(Duration::ZERO);
+        let toast = find(&window, "Next episode", AccessibleRole::Groupbox)
+            .unwrap_or_else(|| panic!("no toast at {width}"));
+        assert_clear_of_panel(&window, &toast, width);
+    }
 }

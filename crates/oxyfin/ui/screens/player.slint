@@ -128,8 +128,13 @@ export component PlayerScreen inherits Rectangle {
     property <length> button-size: 24px + 2 * Theme.space-sm;
     property <length> menu-bottom: controls.y + Theme.space-3xl - Theme.space-xl;
     property <length> menu-max-height: root.menu-bottom - top-bar.height;
-    // Right edge of the skip column and the next episode toast, left of the statistics.
-    property <length> stack-right: root.width - Theme.space-2xl - (root.stats-visible ? Theme.stats-panel-width + Theme.space-sm : 0);
+    // The skip column and the next episode toast, one at a time, go left of the statistics, or
+    // above them, under the top bar, where the window is too narrow.
+    property <length> stack-width: max(skip-column.preferred-width, toast.preferred-width);
+    property <length> stack-height: max(skip-column.preferred-height, toast.preferred-height);
+    property <bool> stack-above: root.stats-visible && root.width - 2 * Theme.space-2xl - Theme.stats-panel-width - Theme.space-sm < root.stack-width;
+    property <length> stack-right: root.width - Theme.space-2xl - (root.stats-visible && !root.stack-above ? Theme.stats-panel-width + Theme.space-sm : 0);
+    property <length> stack-bottom: root.stack-above ? top-bar.height + root.stack-height : root.controls-visible ? root.menu-bottom : root.height - Theme.space-2xl;
 
     function reveal() {
         root.awake = true;
@@ -612,7 +617,7 @@ export component PlayerScreen inherits Rectangle {
             if root.stats-visible: StatsPanel {
                 x: parent.width - self.width - Theme.space-2xl;
                 y: root.menu-bottom - self.height;
-                limit: root.menu-max-height;
+                limit: root.menu-max-height - (root.stack-above ? root.stack-height + Theme.space-sm : 0px);
                 sections: root.stats;
             }
 
@@ -635,11 +640,11 @@ export component PlayerScreen inherits Rectangle {
             }
 
             // The notice of a skip stacks above the skip button of the next segment.
-            VerticalLayout {
+            skip-column := VerticalLayout {
                 width: self.preferred-width;
                 height: self.preferred-height;
                 x: root.stack-right - self.width;
-                y: (root.controls-visible ? root.menu-bottom : parent.height - Theme.space-2xl) - self.height;
+                y: root.stack-bottom - self.height;
                 spacing: Theme.space-sm;
 
                 if root.skip-notice-visible: HorizontalLayout {
@@ -672,15 +677,20 @@ export component PlayerScreen inherits Rectangle {
                 }
             }
 
-            if root.next-up.visible: NextEpisodeToast {
+            toast := VerticalLayout {
+                width: self.preferred-width;
+                height: self.preferred-height;
                 x: root.stack-right - self.width;
-                y: (root.controls-visible ? root.menu-bottom : parent.height - Theme.space-2xl) - self.height;
-                next-up: root.next-up;
-                play-now => {
-                    root.command-play-next-now();
-                }
-                cancel => {
-                    root.command-cancel-next-up();
+                y: root.stack-bottom - self.height;
+
+                if root.next-up.visible: NextEpisodeToast {
+                    next-up: root.next-up;
+                    play-now => {
+                        root.command-play-next-now();
+                    }
+                    cancel => {
+                        root.command-cancel-next-up();
+                    }
                 }
             }
 
