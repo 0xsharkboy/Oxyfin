@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { Icons } from "../icons.slint";
 
 // Round icon button of the top bar and the player; `label` is announced by screen readers.
 export component IconButton inherits Rectangle {
@@ -62,6 +63,6 @@ export component IconButton inherits Rectangle {
         source: root.icon;
         width: 24px;
         height: 24px;
-        colorize: root.icon-color;
+        colorize: Icons.tint(root.icon-color);
     }
 }

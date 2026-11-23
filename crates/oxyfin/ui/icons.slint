@@ -1,6 +1,15 @@
-// Icons exported from the reference design, 24 px with a 2 px stroke, recolored with `colorize`.
+// Icons exported from the reference design, 24 px with a 2 px stroke, in the text-primary color.
+// Other colors use `colorize`, which draws the icon to a texture of its own first: some graphics
+// drivers lose pixels there, so the text-primary color goes without.
+
+import { Theme } from "theme.slint";
 
 export global Icons {
+    // What to `colorize` an icon with to show it in `color`.
+    public pure function tint(color: color) -> color {
+        color == Theme.text-primary ? transparent : color
+    }
+
     out property <image> activity: @image-url("icons/activity.svg");
     out property <image> arrow-left: @image-url("icons/arrow-left.svg");
     out property <image> check: @image-url("icons/check.svg");
