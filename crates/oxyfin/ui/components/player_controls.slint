@@ -147,6 +147,8 @@ export component PlayerControls inherits Rectangle {
     out property <bool> seek-hovering: seek-bar.hovering;
     out property <length> seek-hover-x: layout.x + seek-bar.x + seek-bar.hover-x;
     out property <length> seek-top: layout.y + seek-bar.y;
+    // Speaker of the volume button, crossed out while muted.
+    out property <image> volume-icon: root.muted ? Icons.volume-muted : Icons.volume;
     callback toggle-pause();
     callback seek(seconds: float);
     callback skip(direction: int);
@@ -284,7 +286,7 @@ export component PlayerControls inherits Rectangle {
                 IconButton {
 
                     focus-on-click: false;
-                    icon: Icons.volume;
+                    icon: root.volume-icon;
                     label: root.muted ? @tr("Unmute") : @tr("Mute");
                     icon-color: root.muted ? Theme.text-muted : Theme.text-primary;
                     clicked => {

@@ -716,6 +716,17 @@ export component PlayerScreen inherits Rectangle {
                     padding-bottom: Theme.space-pill-y;
                     spacing: Theme.space-sm;
 
+                    if root.osd == OsdKind.volume: VerticalLayout {
+                        alignment: center;
+
+                        osd-icon := Image {
+                            accessible-role: none;
+                            source: controls.volume-icon;
+                            width: Theme.link-icon-size;
+                            height: Theme.link-icon-size;
+                            colorize: Theme.text-secondary;
+                        }
+                    }
                     BodyText {
                         accessible-role: none;
                         text: osd-pill.name;
