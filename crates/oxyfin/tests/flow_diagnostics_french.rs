@@ -4,7 +4,7 @@
 mod common;
 
 use common::playback_settings::open_settings_prepared;
-use common::{click, wait_role};
+use common::{click, wait_role, wait_until};
 use i_slint_backend_testing::AccessibleRole;
 use reference::ButtonReference;
 use slint::{ComponentHandle, LogicalSize};
@@ -77,6 +77,16 @@ fn french_action_buttons_keep_their_labels() {
             {
                 return Err("the row moves once the logs are copied".into());
             }
+
+            // The width kept for the longer French label does not outlive it.
+            slint::select_bundled_translation("en").map_err(|error| error.to_string())?;
+            let copied = wait_role(window, "Copied", AccessibleRole::Button).await?;
+            reference.set_label("Copied".into());
+            let needed = reference.get_needed();
+            wait_until("the width of the new language", || {
+                copied.size().width <= needed + 0.5
+            })
+            .await?;
             Ok(())
         },
     );

@@ -117,6 +117,10 @@ export component PlayerScreen inherits Rectangle {
     property <bool> previous-click-video;
     property <bool> paused-before-last-click;
     property <bool> paused-before-previous-click;
+    // When and where the pointer last pressed a control that went away with that click.
+    property <duration> vanished-tick: -3600s;
+    property <length> vanished-x;
+    property <length> vanished-y;
     // The pause indicator: whether it shows pause, whether it shows at all, and whether it fades.
     property <bool> indicator-paused;
     property <bool> indicator-active;
@@ -132,7 +136,7 @@ export component PlayerScreen inherits Rectangle {
     // above them, under the top bar, where the window is too narrow.
     property <length> stack-width: max(skip-column.preferred-width, toast.preferred-width);
     property <length> stack-height: max(skip-column.preferred-height, toast.preferred-height);
-    property <bool> stack-above: root.stats-visible && root.width - 2 * Theme.space-2xl - Theme.stats-panel-width - Theme.space-sm < root.stack-width;
+    property <bool> stack-above: root.stats-visible && root.width - 2 * Theme.space-2xl - Theme.stats-panel-width - Theme.space-sm < max(root.stack-width, Theme.skip-room-width);
     property <length> stack-right: root.width - Theme.space-2xl - (root.stats-visible && !root.stack-above ? Theme.stats-panel-width + Theme.space-sm : 0);
     property <length> stack-bottom: root.stack-above ? top-bar.height + root.stack-height : root.controls-visible ? root.menu-bottom : root.height - Theme.space-2xl;
 
@@ -155,6 +159,18 @@ export component PlayerScreen inherits Rectangle {
 
     function on-video(y: length) -> bool {
         !root.controls-visible || (y >= top-bar.height && y < controls.y)
+    }
+
+    // The control under the pointer goes away: the second click of a double click on it is not
+    // one on the video.
+    function control-vanished() {
+        root.vanished-tick = animation-tick();
+        root.vanished-x = surface.mouse-x;
+        root.vanished-y = surface.mouse-y;
+    }
+
+    function on-vanished-control() -> bool {
+        animation-tick() - root.vanished-tick < Theme.double-click-interval && abs(surface.mouse-x - root.vanished-x) < Theme.double-click-distance && abs(surface.mouse-y - root.vanished-y) < Theme.double-click-distance
     }
 
     function pause-from-click() {
@@ -314,7 +330,7 @@ export component PlayerScreen inherits Rectangle {
             root.last-click-video = false;
             if root.menu-open {
                 root.close-menus();
-            } else if root.on-video(self.mouse-y) {
+            } else if root.on-video(self.mouse-y) && !root.on-vanished-control() {
                 root.last-click-video = true;
                 root.paused-before-previous-click = root.paused-before-last-click;
                 root.paused-before-last-click = root.paused;
@@ -609,6 +625,7 @@ export component PlayerScreen inherits Rectangle {
                 chapters: root.chapters;
                 current: root.current-chapter;
                 chosen(start) => {
+                    root.control-vanished();
                     root.command-seek(start);
                     root.menu = PlayerMenu.none;
                 }
@@ -617,7 +634,8 @@ export component PlayerScreen inherits Rectangle {
             if root.stats-visible: StatsPanel {
                 x: parent.width - self.width - Theme.space-2xl;
                 y: root.menu-bottom - self.height;
-                limit: root.menu-max-height - (root.stack-above ? root.stack-height + Theme.space-sm : 0px);
+                // Where the skip button goes above, its room is kept so the panel never jumps.
+                limit: root.menu-max-height - (root.stack-above ? max(root.stack-height, Theme.button-height) + Theme.space-sm : 0px);
                 sections: root.stats;
             }
 
@@ -628,12 +646,14 @@ export component PlayerScreen inherits Rectangle {
                 speeds: root.speeds;
                 speed: root.speed;
                 select(speed) => {
+                    root.control-vanished();
                     root.command-set-speed(speed);
                     root.menu = PlayerMenu.none;
                 }
                 qualities: root.qualities;
                 quality: root.quality;
                 select-quality(index) => {
+                    root.control-vanished();
                     root.command-set-quality(index);
                     root.menu = PlayerMenu.none;
                 }
@@ -653,6 +673,7 @@ export component PlayerScreen inherits Rectangle {
                     SkipNotice {
                         kind: root.skipped.kind;
                         undo => {
+                            root.control-vanished();
                             root.skip-notice-done = root.skipped.serial;
                             root.command-undo-skip();
                         }
@@ -671,6 +692,7 @@ export component PlayerScreen inherits Rectangle {
                         drop-shadow-blur: 12px;
                         drop-shadow-color: Theme.menu-shadow;
                         clicked => {
+                            root.control-vanished();
                             root.skip-segment();
                         }
                     }
@@ -686,9 +708,11 @@ export component PlayerScreen inherits Rectangle {
                 if root.next-up.visible: NextEpisodeToast {
                     next-up: root.next-up;
                     play-now => {
+                        root.control-vanished();
                         root.command-play-next-now();
                     }
                     cancel => {
+                        root.control-vanished();
                         root.command-cancel-next-up();
                     }
                 }
@@ -775,6 +799,7 @@ export component PlayerScreen inherits Rectangle {
                 // Clicks on the scrim close the dialog and never reach the player.
                 TouchArea {
                     clicked => {
+                        root.control-vanished();
                         root.menu = PlayerMenu.none;
                         keys.focus();
                     }

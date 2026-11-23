@@ -235,6 +235,11 @@ export component SettingsScreen inherits Rectangle {
     callback open-logs();
 
     property <length> copy-width;
+    // Another language starts from its own width.
+    property <string> copy-label: @tr("Copy logs");
+    changed copy-label => {
+        root.copy-width = 0;
+    }
 
     property <bool> can-authorize: root.authorize-state != AuthorizeState.busy && root.code-ready(root.authorize-code);
 
@@ -554,7 +559,7 @@ export component SettingsScreen inherits Rectangle {
                             value: @tr("For bug reports");
 
                             Button {
-                                label: root.logs-copied ? @tr("Copied") : @tr("Copy logs");
+                                label: root.logs-copied ? @tr("Copied") : root.copy-label;
                                 style: ButtonStyle.secondary;
                                 // The shorter "Copied" must not move the row.
                                 min-width: max(self.preferred-width, root.copy-width);

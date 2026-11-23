@@ -149,6 +149,8 @@ export global Theme {
     // Playback statistics panel, its label column and the top and bottom padding of a row.
     out property <length> stats-panel-width: 380px;
     out property <length> stats-label-width: 120px;
+    // Room a skip button needs beside the panel, whatever its language.
+    out property <length> skip-room-width: 280px;
     out property <length> stats-row-padding-y: 3px;
     out property <length> chapter-thumb-width: 64px;
     out property <length> chapter-thumb-height: 36px;
@@ -161,6 +163,9 @@ export global Theme {
     out property <length> pause-indicator-icon: 40px;
     out property <duration> pause-indicator-hold: 200ms;
     out property <duration> pause-indicator-fade: 500ms;
+    // Two clicks closer than this in time and place make a double click.
+    out property <duration> double-click-interval: 500ms;
+    out property <length> double-click-distance: 10px;
     out property <length> seek-marker-width: 2px;
     out property <length> seek-marker-height: 12px;
     // Side padding of the seek preview label.

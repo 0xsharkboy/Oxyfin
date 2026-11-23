@@ -670,3 +670,25 @@ fn a_narrow_window_keeps_the_stats_skip_button_and_toast_apart() {
         assert_clear_of_panel(&window, &toast, width);
     }
 }
+
+#[test]
+fn the_panel_keeps_its_height_when_a_skip_button_shows_in_a_narrow_window() {
+    let (window, _sent) = player_window();
+    window.window().set_size(LogicalSize::new(560., 600.));
+    press(&window, "i");
+    player::apply(&window, PlaybackEvent::Stats(Box::new(full_report())));
+    i_slint_backend_testing::mock_elapsed_time(Duration::ZERO);
+    let before = edges(&panel(&window));
+    player::apply(&window, PlaybackEvent::Position(Duration::from_secs(30)));
+    player::apply(
+        &window,
+        PlaybackEvent::Segment(Some(SkippableSegment {
+            kind: SegmentKind::Intro,
+            start: Duration::from_secs(20),
+            end: Duration::from_secs(60),
+        })),
+    );
+    i_slint_backend_testing::mock_elapsed_time(Duration::ZERO);
+    find(&window, "Skip intro", AccessibleRole::Button).unwrap_or_else(|| panic!("no skip button"));
+    assert_eq!(edges(&panel(&window)), before, "the panel jumps");
+}

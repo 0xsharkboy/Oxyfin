@@ -303,3 +303,53 @@ fn a_skip_button_appearing_in_between_keeps_the_double_click() {
     click_at(&window, VIDEO);
     assert!(window.window().is_fullscreen());
 }
+
+/// Opens the playback settings and returns the center of an option over the video.
+fn open_option(window: &AppWindow) -> LogicalPosition {
+    let gear = ElementHandle::find_by_accessible_label(window, "Playback settings")
+        .find(|element| element.accessible_role() == Some(AccessibleRole::Button))
+        .unwrap_or_else(|| panic!("no settings button"));
+    common::click(window, &gear);
+    elapse(AFTER_DOUBLE_CLICK);
+    let option = i_slint_backend_testing::ElementQuery::from_root(window)
+        .match_descendants()
+        .match_accessible_role(AccessibleRole::ListItem)
+        .find_all()
+        .into_iter()
+        .find(|option| option.size().width > 0.)
+        .unwrap_or_else(|| panic!("no menu option"));
+    let (at, size) = (option.absolute_position(), option.size());
+    LogicalPosition::new(at.x + size.width / 2., at.y + size.height / 2.)
+}
+
+#[test]
+fn the_second_click_on_an_option_that_vanished_keeps_playing() {
+    let (window, sent) = player_window();
+    let point = open_option(&window);
+    click_at(&window, point);
+    assert!(
+        sent.borrow()
+            .iter()
+            .any(|command| matches!(command, PlaybackCommand::SetSpeed(_))),
+        "the option was not chosen"
+    );
+    elapse(Duration::from_millis(150));
+    click_at(&window, point);
+    assert!(
+        pauses(&sent).is_empty(),
+        "the second click reached the video"
+    );
+    elapse(AFTER_DOUBLE_CLICK);
+    click_at(&window, point);
+    assert_eq!(pauses(&sent), [true], "a later click there pauses");
+}
+
+#[test]
+fn a_quick_click_away_from_a_chosen_option_pauses() {
+    let (window, sent) = player_window();
+    let point = open_option(&window);
+    click_at(&window, point);
+    elapse(Duration::from_millis(150));
+    click_at(&window, VIDEO);
+    assert_eq!(pauses(&sent), [true]);
+}
