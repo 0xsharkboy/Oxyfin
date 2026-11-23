@@ -43,8 +43,12 @@ export component RowScroller inherits Rectangle {
     out property <int> wanted: -1;
     in property <length> spacing;
     in property <length> padding-x: Theme.space-3xl;
+    // Height from the top of the row that the arrows are centred on.
+    in property <length> arrows-over: root.height;
 
     property <int> current: -1;
+    // Which way the keyboard last moved the focus.
+    property <int> direction: 1;
     property <length> min-x: min(0px, flick.width - flick.content-width);
     property <bool> can-back: flick.content-x < -0.5px;
     property <bool> can-forward: flick.content-x > root.min-x + 0.5px;
@@ -61,6 +65,13 @@ export component RowScroller inherits Rectangle {
         root.current = index;
         root.wanted = -1;
         root.reveals += 1;
+    }
+
+    // Called by the card at `index` when it was asked to take the focus but cannot: the next one
+    // the same way is asked instead.
+    public function passed-over(index: int) {
+        let next = index + root.direction;
+        root.wanted = next >= 0 && next < root.count ? next : -1;
     }
 
     // Grows at every focused card; handled once the focus has scrolled the card into view.
@@ -100,10 +111,12 @@ export component RowScroller inherits Rectangle {
                     return reject;
                 }
                 if event.text == Key.RightArrow && root.current >= 0 && root.current < root.count - 1 {
+                    root.direction = 1;
                     root.wanted = root.current + 1;
                     return accept;
                 }
                 if event.text == Key.LeftArrow && root.current > 0 && root.current < root.count {
+                    root.direction = -1;
                     root.wanted = root.current - 1;
                     return accept;
                 }
@@ -138,6 +151,7 @@ export component RowScroller inherits Rectangle {
 
                 RowArrow {
                     x: Theme.space-lg;
+                    y: (root.arrows-over - self.height) / 2;
                     forward: false;
                     clicked => {
                         root.page(-1);
@@ -152,6 +166,7 @@ export component RowScroller inherits Rectangle {
 
                 RowArrow {
                     x: parent.width - self.width - Theme.space-lg;
+                    y: (root.arrows-over - self.height) / 2;
                     forward: true;
                     clicked => {
                         root.page(1);

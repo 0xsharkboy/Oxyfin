@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
 import { BodyStrongText, CaptionText, DisplayText, HeadingText } from "text.slint";
+import { RowScroller } from "row_scroller.slint";
 
 // Credit shown under a person when no role is known.
 export enum PersonJob { actor, director, writer, composer, producer, other }
@@ -60,7 +61,21 @@ export component PersonCard {
     in property <image> image;
     in property <bool> has-image;
     in property <bool> enabled: true;
+    // Becoming true gives the card the keyboard focus, or calls `passed-over` when it takes none.
+    in property <bool> focus-wanted;
     callback clicked();
+    callback focused();
+    callback passed-over();
+
+    changed focus-wanted => {
+        if root.focus-wanted {
+            if root.enabled {
+                focus.focus();
+            } else {
+                root.passed-over();
+            }
+        }
+    }
 
     accessible-role: button;
     accessible-label: name;
@@ -70,7 +85,7 @@ export component PersonCard {
         activate();
     }
     forward-focus: focus;
-    width: 128px;
+    width: Theme.person-card-width;
 
     function activate() {
         if enabled {
@@ -91,6 +106,9 @@ export component PersonCard {
         enabled: root.enabled;
         // Clicks go to the TouchArea: a focusing FocusScope on top would swallow the first one.
         focus-on-click: false;
+        focus-gained => {
+            root.focused();
+        }
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " {
                 root.activate();
@@ -107,7 +125,7 @@ export component PersonCard {
             alignment: center;
 
             photo := PersonPhoto {
-                height: 112px;
+                height: Theme.person-photo-size;
                 image: root.image;
                 has-image: root.has-image;
                 initials: root.initials;
@@ -170,34 +188,39 @@ export component CastRow inherits Rectangle {
     accessible-label: @tr("Cast and crew");
 
     VerticalLayout {
-        padding-left: Theme.space-3xl;
         spacing: Theme.space-lg;
 
-        HeadingText {
-            text: @tr("Cast and crew");
-            overflow: elide;
+        HorizontalLayout {
+            padding-left: Theme.space-3xl;
+            padding-right: Theme.space-3xl;
+
+            HeadingText {
+                text: @tr("Cast and crew");
+                overflow: elide;
+            }
         }
 
-        Flickable {
-            height: cards.preferred-height;
-            content-width: cards.preferred-width;
-            content-height: self.height;
+        scroller := RowScroller {
+            count: root.people.length;
+            spacing: Theme.space-xl;
+            arrows-over: Theme.person-photo-size;
 
-            cards := HorizontalLayout {
-                padding-right: Theme.space-3xl;
-                spacing: Theme.space-xl;
-                alignment: start;
-
-                for person in root.people: PersonCard {
-                    name: person.name;
-                    role: root.caption(person);
-                    initials: person.initials;
-                    image: person.image;
-                    has-image: person.has-image;
-                    enabled: person.id != "";
-                    clicked => {
-                        root.clicked(person.id);
-                    }
+            for person[index] in root.people: PersonCard {
+                name: person.name;
+                role: root.caption(person);
+                initials: person.initials;
+                image: person.image;
+                has-image: person.has-image;
+                enabled: person.id != "";
+                focus-wanted: scroller.wanted == index;
+                focused => {
+                    scroller.card-focused(index);
+                }
+                passed-over => {
+                    scroller.passed-over(index);
+                }
+                clicked => {
+                    root.clicked(person.id);
                 }
             }
         }
