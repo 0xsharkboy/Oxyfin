@@ -261,6 +261,7 @@ export component SettingsScreen inherits Rectangle {
         }
 
         flick := Flickable {
+            mouse-drag-pan-enabled: false;
             y: top-bar.height;
             height: parent.height - self.y;
             content-width: self.width;

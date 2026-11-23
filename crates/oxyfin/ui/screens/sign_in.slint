@@ -133,6 +133,7 @@ component FoundServers inherits VerticalLayout {
     }
 
     Flickable {
+        mouse-drag-pan-enabled: false;
         height: root.list-height;
         content-height: root.servers.length * (root.row-height + Theme.space-xs) - Theme.space-xs;
         interactive: root.servers.length > Theme.found-servers-visible;

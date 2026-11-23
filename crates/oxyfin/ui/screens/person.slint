@@ -141,6 +141,7 @@ export component PersonScreen inherits Rectangle {
         }
 
         flick := Flickable {
+            mouse-drag-pan-enabled: false;
             height: parent.height;
             content-width: self.width;
             content-height: max(content.preferred-height, self.height);

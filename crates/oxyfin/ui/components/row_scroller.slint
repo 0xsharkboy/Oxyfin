@@ -124,6 +124,7 @@ export component RowScroller inherits Rectangle {
             }
 
             flick := Flickable {
+                mouse-drag-pan-enabled: false;
                 content-width: cards.preferred-width;
                 content-height: self.height;
                 changed viewport-x => {

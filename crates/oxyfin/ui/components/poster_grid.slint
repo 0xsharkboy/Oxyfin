@@ -72,6 +72,7 @@ export component PosterGrid inherits Rectangle {
     }
 
     flick := Flickable {
+        mouse-drag-pan-enabled: false;
         width: parent.width;
         height: parent.height;
         content-width: self.width;

@@ -363,6 +363,7 @@ export component SubtitleSearchDialog inherits Rectangle {
         }
 
         if SubtitleSearch.results.length > 0: Flickable {
+            mouse-drag-pan-enabled: false;
             accessible-role: list;
             accessible-label: @tr("Subtitles found");
             vertical-stretch: 1;
