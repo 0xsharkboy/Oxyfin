@@ -250,7 +250,7 @@ impl Person {
     fn from_dto(dto: &BaseItemPerson) -> Self {
         Self {
             id: dto.id.clone(),
-            name: dto.name.clone(),
+            name: dto.name.trim().to_owned(),
             role: non_empty(dto.role.as_deref()),
             kind: PersonKind::from_type(dto.r#type.as_deref()),
             also: None,

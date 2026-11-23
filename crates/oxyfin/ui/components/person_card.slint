@@ -78,7 +78,7 @@ export component PersonCard {
     }
 
     accessible-role: button;
-    accessible-label: name;
+    accessible-label: root.name != "" ? root.name : root.role;
     accessible-description: role;
     accessible-enabled: enabled;
     accessible-action-default => {
@@ -137,7 +137,7 @@ export component PersonCard {
         VerticalLayout {
             spacing: Theme.space-2xs;
 
-            BodyStrongText {
+            if root.name != "": BodyStrongText {
                 accessible-role: none;
                 text: root.name;
                 horizontal-alignment: center;

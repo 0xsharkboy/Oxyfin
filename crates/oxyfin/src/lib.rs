@@ -8,6 +8,7 @@ mod generated {
 pub mod app;
 mod back_cache;
 pub mod discord;
+pub mod fonts;
 pub mod generation;
 mod hover;
 pub mod images;

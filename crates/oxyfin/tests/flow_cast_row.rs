@@ -197,3 +197,23 @@ fn left_and_right_move_along_the_people_who_open_a_page() {
         "the focused card is at {x}"
     );
 }
+
+#[test]
+fn a_person_without_a_name_shows_no_blank_line() {
+    let page = cast_page();
+    page.set_people(ModelRc::new(VecModel::from(vec![
+        person(0, ""),
+        person(1, "Person 1"),
+    ])));
+    let cards: Vec<ElementHandle> =
+        ElementHandle::find_by_element_type_name(&page, "PersonCard").collect();
+    let name_lines = |card: &ElementHandle| {
+        card.query_descendants()
+            .match_inherits("BodyStrongText")
+            .find_all()
+            .len()
+    };
+    assert_eq!(name_lines(&cards[0]), 0, "the empty name keeps its line");
+    assert_eq!(name_lines(&cards[1]), 1);
+    assert_eq!(cards[0].accessible_label().as_deref(), Some("Role"));
+}

@@ -54,6 +54,7 @@ fn run(paths: Paths) -> Result<(), Box<dyn std::error::Error>> {
         TokenVault::system(&paths)
     };
     let window = AppWindow::new()?;
+    let fonts = oxyfin::fonts::prefer_drawn_in_background();
     // Needs the platform set up by AppWindow::new(); it applies when the window is first shown.
     slint::set_xdg_app_id(oxyfin::APP_ID)?;
     let scale = std::env::var(launch::SCALE_FACTOR_VAR)
@@ -112,6 +113,11 @@ fn run(paths: Paths) -> Result<(), Box<dyn std::error::Error>> {
     let fullscreen =
         launch::fullscreen_requested(std::env::args_os().skip(1)) || app.start_fullscreen();
     window.window().set_fullscreen(fullscreen);
+    if let Some(fonts) = fonts
+        && fonts.join().is_err()
+    {
+        log::warn!("the fallback fonts could not be looked at");
+    }
     window.show()?;
     if fullscreen {
         // Asked again once the event loop runs: the first configure of a Wayland window can undo it.
