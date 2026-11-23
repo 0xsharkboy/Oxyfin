@@ -91,6 +91,9 @@ export global Theme {
     out property <duration> skeleton-delay: 150ms;
     out property <duration> skeleton-sweep: 1800ms;
     out property <brush> skeleton-shimmer: @linear-gradient(105deg, #ffffff00 35%, #ffffff0d 50%, #ffffff00 65%);
+    // Narrowest room for the value of a settings row beside its buttons, else it goes under the
+    // label.
+    out property <length> action-value-min-width: 120px;
     // Thickness of a bone standing for one line of text, by text style.
     out property <length> bone-display: 40px;
     out property <length> bone-heading: 20px;

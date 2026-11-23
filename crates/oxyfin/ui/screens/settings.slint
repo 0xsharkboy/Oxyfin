@@ -137,24 +137,38 @@ component ActionRow inherits HorizontalLayout {
     in property <string> label;
     in property <string> value;
 
+    property <length> label-width: 160px;
+    // The buttons keep their whole labels; with too little room left beside them, the value
+    // goes under the label as a caption, like the caption of a choice row.
+    property <bool> stacked: root.width - root.label-width - 2 * root.spacing - buttons.preferred-width < Theme.action-value-min-width;
+
     spacing: Theme.space-lg;
 
-    LabelText {
-        width: 160px;
-        text: root.label;
-        vertical-alignment: center;
-        wrap: word-wrap;
+    VerticalLayout {
+        width: root.label-width;
+        alignment: center;
+        spacing: Theme.space-2xs;
+
+        LabelText {
+            text: root.label;
+            wrap: word-wrap;
+        }
+        if root.stacked: CaptionText {
+            text: root.value;
+            wrap: word-wrap;
+        }
     }
     BodyText {
         horizontal-stretch: 1;
-        text: root.value;
+        text: root.stacked ? "" : root.value;
         vertical-alignment: center;
         wrap: word-wrap;
     }
     VerticalLayout {
         alignment: center;
+        min-width: buttons.preferred-width;
 
-        HorizontalLayout {
+        buttons := HorizontalLayout {
             alignment: end;
             spacing: Theme.space-sm;
 

@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: oxyfin VERSION\n"
-"POT-Creation-Date: 2026-11-22 21:12+0000\n"
+"POT-Creation-Date: 2026-11-23 09:47+0000\n"
 "PO-Revision-Date: 2026-11-15 12:00+0000\n"
 "Last-Translator: Oxyfin contributors\n"
 "Language-Team: French\n"
@@ -1874,232 +1874,232 @@ msgctxt "SubtitlePreview"
 msgid "The quick brown fox jumps over the lazy dog"
 msgstr "Portez ce vieux whisky au juge blond qui fume"
 
-#: crates/oxyfin/ui/screens/settings.slint:232
+#: crates/oxyfin/ui/screens/settings.slint:246
 msgctxt "SettingsScreen"
 msgid "Settings"
 msgstr "Paramètres"
 
-#: crates/oxyfin/ui/screens/settings.slint:280
+#: crates/oxyfin/ui/screens/settings.slint:294
 msgctxt "SettingsScreen"
 msgid "Account"
 msgstr "Compte"
 
-#: crates/oxyfin/ui/screens/settings.slint:283
+#: crates/oxyfin/ui/screens/settings.slint:297
 msgctxt "SettingsScreen"
 msgid "Server"
 msgstr "Serveur"
 
-#: crates/oxyfin/ui/screens/settings.slint:284
+#: crates/oxyfin/ui/screens/settings.slint:298
 msgctxt "SettingsScreen"
 msgid "{} ({})"
 msgstr "{} ({})"
 
-#: crates/oxyfin/ui/screens/settings.slint:287
+#: crates/oxyfin/ui/screens/settings.slint:301
 msgctxt "SettingsScreen"
 msgid "Signed in as"
 msgstr "Connecté en tant que"
 
-#: crates/oxyfin/ui/screens/settings.slint:291
+#: crates/oxyfin/ui/screens/settings.slint:305
 msgctxt "SettingsScreen"
 msgid "Sign-in token"
 msgstr "Jeton de connexion"
 
-#: crates/oxyfin/ui/screens/settings.slint:292
+#: crates/oxyfin/ui/screens/settings.slint:306
 msgctxt "SettingsScreen"
 msgid "Stored in a private file"
 msgstr "Stocké dans un fichier privé"
 
-#: crates/oxyfin/ui/screens/settings.slint:293
+#: crates/oxyfin/ui/screens/settings.slint:307
 msgctxt "SettingsScreen"
 msgid "Kept in memory for this session"
 msgstr "Conservé en mémoire pour cette session"
 
-#: crates/oxyfin/ui/screens/settings.slint:294
+#: crates/oxyfin/ui/screens/settings.slint:308
 msgctxt "SettingsScreen"
 msgid "Stored in the system keyring"
 msgstr "Stocké dans le trousseau du système"
 
-#: crates/oxyfin/ui/screens/settings.slint:301
+#: crates/oxyfin/ui/screens/settings.slint:315
 msgctxt "SettingsScreen"
 msgid "Sign out"
 msgstr "Se déconnecter"
 
-#: crates/oxyfin/ui/screens/settings.slint:311
+#: crates/oxyfin/ui/screens/settings.slint:325
 msgctxt "SettingsScreen"
 msgid "Playback"
 msgstr "Lecture"
 
-#: crates/oxyfin/ui/screens/settings.slint:314
+#: crates/oxyfin/ui/screens/settings.slint:328
 msgctxt "SettingsScreen"
 msgid "Start in fullscreen"
 msgstr "Démarrer en plein écran"
 
-#: crates/oxyfin/ui/screens/settings.slint:315
+#: crates/oxyfin/ui/screens/settings.slint:329
 msgctxt "SettingsScreen"
 msgid "Also with --fullscreen"
 msgstr "Aussi avec --fullscreen"
 
-#: crates/oxyfin/ui/screens/settings.slint:316
+#: crates/oxyfin/ui/screens/settings.slint:330
 msgctxt "SettingsScreen"
 msgid "Off"
 msgstr "Désactivé"
 
-#: crates/oxyfin/ui/screens/settings.slint:316
+#: crates/oxyfin/ui/screens/settings.slint:330
 msgctxt "SettingsScreen"
 msgid "On"
 msgstr "Activé"
 
-#: crates/oxyfin/ui/screens/settings.slint:323
+#: crates/oxyfin/ui/screens/settings.slint:337
 msgctxt "SettingsScreen"
 msgid "Play the next episode"
 msgstr "Lire l'épisode suivant"
 
-#: crates/oxyfin/ui/screens/settings.slint:324
+#: crates/oxyfin/ui/screens/settings.slint:338
 msgctxt "SettingsScreen"
 msgid "Ask"
 msgstr "Demander"
 
-#: crates/oxyfin/ui/screens/settings.slint:324
+#: crates/oxyfin/ui/screens/settings.slint:338
 msgctxt "SettingsScreen"
 msgid "Automatically"
 msgstr "Automatiquement"
 
-#: crates/oxyfin/ui/screens/settings.slint:337
+#: crates/oxyfin/ui/screens/settings.slint:351
 msgctxt "SettingsScreen"
 msgid "Countdown"
 msgstr "Compte à rebours"
 
-#: crates/oxyfin/ui/screens/settings.slint:338
+#: crates/oxyfin/ui/screens/settings.slint:352
 msgctxt "SettingsScreen"
 msgid "Before the next episode starts"
 msgstr "Avant le début de l'épisode suivant"
 
-#: crates/oxyfin/ui/screens/settings.slint:339
+#: crates/oxyfin/ui/screens/settings.slint:353
 msgctxt "SettingsScreen"
 msgid "{} s"
 msgstr "{} s"
 
-#: crates/oxyfin/ui/screens/settings.slint:353
+#: crates/oxyfin/ui/screens/settings.slint:367
 msgctxt "SettingsScreen"
 msgid "Intros"
 msgstr "Intros"
 
-#: crates/oxyfin/ui/screens/settings.slint:354
+#: crates/oxyfin/ui/screens/settings.slint:368
 msgctxt "SettingsScreen"
 msgid "Show a skip button"
 msgstr "Bouton pour passer"
 
-#: crates/oxyfin/ui/screens/settings.slint:354
+#: crates/oxyfin/ui/screens/settings.slint:368
 msgctxt "SettingsScreen"
 msgid "Skip automatically"
 msgstr "Passer automatiquement"
 
-#: crates/oxyfin/ui/screens/settings.slint:367
+#: crates/oxyfin/ui/screens/settings.slint:381
 msgctxt "SettingsScreen"
 msgid "Recaps and previews"
 msgstr "Récaps et aperçus"
 
-#: crates/oxyfin/ui/screens/settings.slint:381
+#: crates/oxyfin/ui/screens/settings.slint:395
 msgctxt "SettingsScreen"
 msgid "Audio and subtitles"
 msgstr "Audio et sous-titres"
 
-#: crates/oxyfin/ui/screens/settings.slint:382
+#: crates/oxyfin/ui/screens/settings.slint:396
 msgctxt "SettingsScreen"
 msgid "Keeps the language you pick for the rest of the series"
 msgstr "Garde la langue choisie pour le reste de la série"
 
-#: crates/oxyfin/ui/screens/settings.slint:383
+#: crates/oxyfin/ui/screens/settings.slint:397
 msgctxt "SettingsScreen"
 msgid "Server defaults"
 msgstr "Choix du serveur"
 
-#: crates/oxyfin/ui/screens/settings.slint:383
+#: crates/oxyfin/ui/screens/settings.slint:397
 msgctxt "SettingsScreen"
 msgid "Remember per series"
 msgstr "Retenir par série"
 
-#: crates/oxyfin/ui/screens/settings.slint:398
+#: crates/oxyfin/ui/screens/settings.slint:412
 msgctxt "SettingsScreen"
 msgid "Subtitles"
 msgstr "Sous-titres"
 
-#: crates/oxyfin/ui/screens/settings.slint:404
+#: crates/oxyfin/ui/screens/settings.slint:418
 msgctxt "SettingsScreen"
 msgid "Size"
 msgstr "Taille"
 
-#: crates/oxyfin/ui/screens/settings.slint:405
+#: crates/oxyfin/ui/screens/settings.slint:419
 msgctxt "SettingsScreen"
 msgid "Small"
 msgstr "Petite"
 
-#: crates/oxyfin/ui/screens/settings.slint:405
+#: crates/oxyfin/ui/screens/settings.slint:419
 msgctxt "SettingsScreen"
 msgid "Normal"
 msgstr "Normale"
 
-#: crates/oxyfin/ui/screens/settings.slint:405
+#: crates/oxyfin/ui/screens/settings.slint:419
 msgctxt "SettingsScreen"
 msgid "Large"
 msgstr "Grande"
 
-#: crates/oxyfin/ui/screens/settings.slint:405
+#: crates/oxyfin/ui/screens/settings.slint:419
 msgctxt "SettingsScreen"
 msgid "Extra large"
 msgstr "Très grande"
 
-#: crates/oxyfin/ui/screens/settings.slint:417
+#: crates/oxyfin/ui/screens/settings.slint:431
 msgctxt "SettingsScreen"
 msgid "Color"
 msgstr "Couleur"
 
-#: crates/oxyfin/ui/screens/settings.slint:418
+#: crates/oxyfin/ui/screens/settings.slint:432
 msgctxt "SettingsScreen"
 msgid "White"
 msgstr "Blanc"
 
-#: crates/oxyfin/ui/screens/settings.slint:418
+#: crates/oxyfin/ui/screens/settings.slint:432
 msgctxt "SettingsScreen"
 msgid "Yellow"
 msgstr "Jaune"
 
-#: crates/oxyfin/ui/screens/settings.slint:430
+#: crates/oxyfin/ui/screens/settings.slint:444
 msgctxt "SettingsScreen"
 msgid "Background"
 msgstr "Fond"
 
-#: crates/oxyfin/ui/screens/settings.slint:431
+#: crates/oxyfin/ui/screens/settings.slint:445
 msgctxt "SettingsScreen"
 msgid "Outline"
 msgstr "Contour"
 
-#: crates/oxyfin/ui/screens/settings.slint:431
+#: crates/oxyfin/ui/screens/settings.slint:445
 msgctxt "SettingsScreen"
 msgid "Box"
 msgstr "Encadré"
 
-#: crates/oxyfin/ui/screens/settings.slint:443
+#: crates/oxyfin/ui/screens/settings.slint:457
 msgctxt "SettingsScreen"
 msgid "Position"
 msgstr "Position"
 
-#: crates/oxyfin/ui/screens/settings.slint:444
+#: crates/oxyfin/ui/screens/settings.slint:458
 msgctxt "SettingsScreen"
 msgid "Bottom"
 msgstr "En bas"
 
-#: crates/oxyfin/ui/screens/settings.slint:444
+#: crates/oxyfin/ui/screens/settings.slint:458
 msgctxt "SettingsScreen"
 msgid "Raised"
 msgstr "Surélevée"
 
-#: crates/oxyfin/ui/screens/settings.slint:458
+#: crates/oxyfin/ui/screens/settings.slint:472
 msgctxt "SettingsScreen"
 msgid "Integrations"
 msgstr "Intégrations"
 
-#: crates/oxyfin/ui/screens/settings.slint:463
+#: crates/oxyfin/ui/screens/settings.slint:477
 msgctxt "SettingsScreen"
 msgid ""
 "Shows what you watch on your Discord profile. Your server address is never "
@@ -2108,12 +2108,12 @@ msgstr ""
 "Affiche ce que vous regardez sur votre profil Discord. L'adresse de votre "
 "serveur n'est jamais partagée."
 
-#: crates/oxyfin/ui/screens/settings.slint:473
+#: crates/oxyfin/ui/screens/settings.slint:487
 msgctxt "SettingsScreen"
 msgid "Devices"
 msgstr "Appareils"
 
-#: crates/oxyfin/ui/screens/settings.slint:476
+#: crates/oxyfin/ui/screens/settings.slint:490
 msgctxt "SettingsScreen"
 msgid ""
 "Sign in another device: open Quick Connect on it, then type the code it "
@@ -2122,87 +2122,87 @@ msgstr ""
 "Connectez un autre appareil : ouvrez Quick Connect dessus, puis saisissez le "
 "code qu'il affiche."
 
-#: crates/oxyfin/ui/screens/settings.slint:484
+#: crates/oxyfin/ui/screens/settings.slint:498
 msgctxt "SettingsScreen"
 msgid "Quick Connect code"
 msgstr "Code Quick Connect"
 
-#: crates/oxyfin/ui/screens/settings.slint:500
+#: crates/oxyfin/ui/screens/settings.slint:514
 msgctxt "SettingsScreen"
 msgid "Authorize"
 msgstr "Autoriser"
 
-#: crates/oxyfin/ui/screens/settings.slint:510
+#: crates/oxyfin/ui/screens/settings.slint:524
 msgctxt "SettingsScreen"
 msgid "Device authorized"
 msgstr "Appareil autorisé"
 
-#: crates/oxyfin/ui/screens/settings.slint:511
+#: crates/oxyfin/ui/screens/settings.slint:525
 msgctxt "SettingsScreen"
 msgid "This code is wrong or expired"
 msgstr "Ce code est erroné ou a expiré"
 
-#: crates/oxyfin/ui/screens/settings.slint:512
+#: crates/oxyfin/ui/screens/settings.slint:526
 msgctxt "SettingsScreen"
 msgid "Quick Connect is turned off on this server"
 msgstr "Quick Connect est désactivé sur ce serveur"
 
-#: crates/oxyfin/ui/screens/settings.slint:513
+#: crates/oxyfin/ui/screens/settings.slint:527
 msgctxt "SettingsScreen"
 msgid "The device could not be authorized."
 msgstr "L'appareil n'a pas pu être autorisé."
 
-#: crates/oxyfin/ui/screens/settings.slint:520
+#: crates/oxyfin/ui/screens/settings.slint:534
 msgctxt "SettingsScreen"
 msgid "Diagnostics"
 msgstr "Diagnostic"
 
-#: crates/oxyfin/ui/screens/settings.slint:523
+#: crates/oxyfin/ui/screens/settings.slint:537
 msgctxt "SettingsScreen"
 msgid "Image cache"
 msgstr "Cache des images"
 
-#: crates/oxyfin/ui/screens/settings.slint:524
+#: crates/oxyfin/ui/screens/settings.slint:538
 msgctxt "SettingsScreen"
 msgid "{} KB"
 msgstr "{} Ko"
 
-#: crates/oxyfin/ui/screens/settings.slint:524
+#: crates/oxyfin/ui/screens/settings.slint:538
 msgctxt "SettingsScreen"
 msgid "{} MB"
 msgstr "{} Mo"
 
-#: crates/oxyfin/ui/screens/settings.slint:527
+#: crates/oxyfin/ui/screens/settings.slint:541
 msgctxt "SettingsScreen"
 msgid "Clear cache"
 msgstr "Vider le cache"
 
-#: crates/oxyfin/ui/screens/settings.slint:536
+#: crates/oxyfin/ui/screens/settings.slint:550
 msgctxt "SettingsScreen"
 msgid "Logs"
 msgstr "Journaux"
 
-#: crates/oxyfin/ui/screens/settings.slint:537
+#: crates/oxyfin/ui/screens/settings.slint:551
 msgctxt "SettingsScreen"
 msgid "For bug reports"
 msgstr "Pour signaler un bug"
 
-#: crates/oxyfin/ui/screens/settings.slint:540
+#: crates/oxyfin/ui/screens/settings.slint:554
 msgctxt "SettingsScreen"
 msgid "Copied"
 msgstr "Copiés"
 
-#: crates/oxyfin/ui/screens/settings.slint:540
+#: crates/oxyfin/ui/screens/settings.slint:554
 msgctxt "SettingsScreen"
 msgid "Copy logs"
 msgstr "Copier les journaux"
 
-#: crates/oxyfin/ui/screens/settings.slint:547
+#: crates/oxyfin/ui/screens/settings.slint:561
 msgctxt "SettingsScreen"
 msgid "Open folder"
 msgstr "Ouvrir le dossier"
 
-#: crates/oxyfin/ui/screens/settings.slint:556
+#: crates/oxyfin/ui/screens/settings.slint:570
 msgctxt "SettingsScreen"
 msgid ""
 "The clipboard cannot be reached. Open the folder and attach oxyfin.log to "
@@ -2211,27 +2211,27 @@ msgstr ""
 "Le presse-papiers est inaccessible. Ouvrez le dossier et joignez oxyfin.log "
 "au signalement."
 
-#: crates/oxyfin/ui/screens/settings.slint:561
+#: crates/oxyfin/ui/screens/settings.slint:575
 msgctxt "SettingsScreen"
 msgid "Keyboard shortcuts"
 msgstr "Raccourcis clavier"
 
-#: crates/oxyfin/ui/screens/settings.slint:562
+#: crates/oxyfin/ui/screens/settings.slint:576
 msgctxt "SettingsScreen"
 msgid "Also with the ? key"
 msgstr "Aussi avec la touche ?"
 
-#: crates/oxyfin/ui/screens/settings.slint:565
+#: crates/oxyfin/ui/screens/settings.slint:579
 msgctxt "SettingsScreen"
 msgid "Show"
 msgstr "Afficher"
 
-#: crates/oxyfin/ui/screens/settings.slint:575
+#: crates/oxyfin/ui/screens/settings.slint:589
 msgctxt "SettingsScreen"
 msgid "About"
 msgstr "À propos"
 
-#: crates/oxyfin/ui/screens/settings.slint:578
+#: crates/oxyfin/ui/screens/settings.slint:592
 msgctxt "SettingsScreen"
 msgid "Version"
 msgstr "Version"
@@ -2286,100 +2286,100 @@ msgctxt "StartingScreen"
 msgid "Starting"
 msgstr "Démarrage"
 
-#: crates/oxyfin/ui/theme.slint:330
+#: crates/oxyfin/ui/theme.slint:333
 msgctxt "Messages"
 msgid "{}h {}m"
 msgstr "{} h {} min"
 
-#: crates/oxyfin/ui/theme.slint:330
+#: crates/oxyfin/ui/theme.slint:333
 msgctxt "Messages"
 msgid "{}m"
 msgstr "{} min"
 
-#: crates/oxyfin/ui/theme.slint:335
+#: crates/oxyfin/ui/theme.slint:338
 msgctxt "Messages"
 msgid "{} left"
 msgstr "il reste {}"
 
-#: crates/oxyfin/ui/theme.slint:348
+#: crates/oxyfin/ui/theme.slint:351
 msgctxt "Messages"
 msgid "Series"
 msgstr "Série"
 
-#: crates/oxyfin/ui/theme.slint:353
+#: crates/oxyfin/ui/theme.slint:356
 msgctxt "Messages"
 msgid "Server found (Jellyfin {})"
 msgstr "Serveur trouvé (Jellyfin {})"
 
-#: crates/oxyfin/ui/theme.slint:355
+#: crates/oxyfin/ui/theme.slint:358
 msgctxt "Messages"
 msgid "Server found: {} (Jellyfin {})"
 msgstr "Serveur trouvé : {} (Jellyfin {})"
 
-#: crates/oxyfin/ui/theme.slint:361
+#: crates/oxyfin/ui/theme.slint:364
 msgctxt "Messages"
 msgid "Chapter {}"
 msgstr "Chapitre {}"
 
-#: crates/oxyfin/ui/theme.slint:368
+#: crates/oxyfin/ui/theme.slint:371
 msgctxt "Messages"
 msgid "{}{}.{} s"
 msgstr "{}{},{} s"
 
-#: crates/oxyfin/ui/theme.slint:374
+#: crates/oxyfin/ui/theme.slint:377
 msgctxt "Messages"
 msgid "Cannot reach the server. Check the address and your connection."
 msgstr ""
 "Impossible de joindre le serveur. Vérifiez l'adresse et votre connexion."
 
-#: crates/oxyfin/ui/theme.slint:377
+#: crates/oxyfin/ui/theme.slint:380
 msgctxt "Messages"
 msgid "This server address is not valid."
 msgstr "Cette adresse de serveur n'est pas valide."
 
-#: crates/oxyfin/ui/theme.slint:380
+#: crates/oxyfin/ui/theme.slint:383
 msgctxt "Messages"
 msgid "This Jellyfin version is not supported (installed / required: {})."
 msgstr ""
 "Cette version de Jellyfin n'est pas prise en charge (installée / requise : "
 "{})."
 
-#: crates/oxyfin/ui/theme.slint:383
+#: crates/oxyfin/ui/theme.slint:386
 msgctxt "Messages"
 msgid "Incorrect username or password."
 msgstr "Nom d'utilisateur ou mot de passe incorrect."
 
-#: crates/oxyfin/ui/theme.slint:386
+#: crates/oxyfin/ui/theme.slint:389
 msgctxt "Messages"
 msgid "Quick Connect is disabled on this server."
 msgstr "Quick Connect est désactivé sur ce serveur."
 
-#: crates/oxyfin/ui/theme.slint:389
+#: crates/oxyfin/ui/theme.slint:392
 msgctxt "Messages"
 msgid "The Quick Connect code has expired."
 msgstr "Le code Quick Connect a expiré."
 
-#: crates/oxyfin/ui/theme.slint:392
+#: crates/oxyfin/ui/theme.slint:395
 msgctxt "Messages"
 msgid "The server ran into an error. Please try again later."
 msgstr "Le serveur a rencontré une erreur. Réessayez plus tard."
 
-#: crates/oxyfin/ui/theme.slint:395
+#: crates/oxyfin/ui/theme.slint:398
 msgctxt "Messages"
 msgid "The server sent a response Oxyfin does not understand."
 msgstr "Le serveur a envoyé une réponse qu'Oxyfin ne comprend pas."
 
-#: crates/oxyfin/ui/theme.slint:398
+#: crates/oxyfin/ui/theme.slint:401
 msgctxt "Messages"
 msgid "Oxyfin could not read or save its settings."
 msgstr "Oxyfin n'a pas pu lire ou enregistrer ses paramètres."
 
-#: crates/oxyfin/ui/theme.slint:401
+#: crates/oxyfin/ui/theme.slint:404
 msgctxt "Messages"
 msgid "Your session has expired. Please sign in again."
 msgstr "Votre session a expiré. Veuillez vous reconnecter."
 
-#: crates/oxyfin/ui/theme.slint:404
+#: crates/oxyfin/ui/theme.slint:407
 msgctxt "Messages"
 msgid ""
 "The system keyring is unavailable, so your sign-in token is stored in a file "
@@ -2388,38 +2388,38 @@ msgstr ""
 "Le trousseau du système est indisponible : votre jeton de connexion est donc "
 "stocké dans un fichier que vous seul pouvez lire."
 
-#: crates/oxyfin/ui/theme.slint:407
+#: crates/oxyfin/ui/theme.slint:410
 msgctxt "Messages"
 msgid "The server offers no version of this item that Oxyfin can play."
 msgstr ""
 "Le serveur ne propose aucune version de cet élément qu'Oxyfin puisse lire."
 
-#: crates/oxyfin/ui/theme.slint:410
+#: crates/oxyfin/ui/theme.slint:413
 msgctxt "Messages"
 msgid "There is nothing left to play in this series."
 msgstr "Il ne reste rien à lire dans cette série."
 
-#: crates/oxyfin/ui/theme.slint:413
+#: crates/oxyfin/ui/theme.slint:416
 msgctxt "Messages"
 msgid "This item could not be loaded."
 msgstr "Cet élément n'a pas pu être chargé."
 
-#: crates/oxyfin/ui/theme.slint:416
+#: crates/oxyfin/ui/theme.slint:419
 msgctxt "Messages"
 msgid "The player could not complete that action."
 msgstr "Le lecteur n'a pas pu effectuer cette action."
 
-#: crates/oxyfin/ui/theme.slint:419
+#: crates/oxyfin/ui/theme.slint:422
 msgctxt "Messages"
 msgid "Playback is not available in this build of Oxyfin."
 msgstr "La lecture n'est pas disponible dans cette version d'Oxyfin."
 
-#: crates/oxyfin/ui/theme.slint:422
+#: crates/oxyfin/ui/theme.slint:425
 msgctxt "Messages"
 msgid "The server did not add this subtitle. Try another one."
 msgstr "Le serveur n'a pas ajouté ce sous-titre. Essayez-en un autre."
 
-#: crates/oxyfin/ui/theme.slint:425
+#: crates/oxyfin/ui/theme.slint:428
 msgctxt "Messages"
 msgid "Removed from Continue Watching"
 msgstr "Retiré de Reprendre la lecture"
