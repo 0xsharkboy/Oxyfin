@@ -186,6 +186,8 @@ where
         .unwrap_or_else(|err| panic!("cannot create the app: {err}"));
     // Flows never broadcast on the network of the machine running them.
     app.set_discovery_targets(Vec::new());
+    // Flows count the requests of the pages they show; prefetching has its own.
+    app.set_prefetch(false);
     window
         .show()
         .unwrap_or_else(|err| panic!("cannot show the window: {err}"));

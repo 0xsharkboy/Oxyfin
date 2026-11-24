@@ -20,6 +20,7 @@ pub mod logs;
 mod menu;
 #[cfg(target_os = "linux")]
 pub mod mpris;
+pub mod prefetch;
 pub mod present;
 mod rows;
 pub mod screens;

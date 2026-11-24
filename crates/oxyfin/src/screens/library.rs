@@ -80,6 +80,23 @@ fn source_of(tab: LibraryTab) -> BrowseSource {
     }
 }
 
+/// The first page of `tab` with the settings it opens with.
+pub(crate) fn first_page(tab: LibraryTab) -> BrowseQuery {
+    query(tab, LibrarySettings::default(), 0, PAGE_SIZE)
+}
+
+fn query(tab: LibraryTab, settings: LibrarySettings, start: u32, limit: u32) -> BrowseQuery {
+    BrowseQuery {
+        source: source_of(tab),
+        sort: settings.sort,
+        descending: settings.descending,
+        genre: settings.genre,
+        watch: settings.watch,
+        start,
+        limit,
+    }
+}
+
 /// Whether the next page must be requested now.
 pub(crate) fn should_load_more(loaded: usize, total: u32, in_flight: bool, ready: bool) -> bool {
     ready && !in_flight && loaded < total as usize
@@ -141,6 +158,9 @@ impl LibraryController {
         };
         if self.tab.get() == Some(*tab) {
             self.load_missing_posters(app);
+            if self.ready.get() {
+                app.prefetch.idle(app);
+            }
             return;
         }
         self.clear(app);
@@ -416,16 +436,7 @@ impl LibraryController {
     }
 
     fn query(&self, tab: LibraryTab, start: u32, limit: u32) -> BrowseQuery {
-        let settings = self.settings(tab);
-        BrowseQuery {
-            source: source_of(tab),
-            sort: settings.sort,
-            descending: settings.descending,
-            genre: settings.genre,
-            watch: settings.watch,
-            start,
-            limit,
-        }
+        query(tab, self.settings(tab), start, limit)
     }
 
     /// Requests `limit` items starting at `start`. A first page replaces the content.
@@ -546,6 +557,7 @@ impl LibraryController {
 
     /// Asks for the next page when the end of the grid came near during a request.
     fn resume_more(&self, app: &Rc<App>) {
+        app.prefetch.idle(app);
         if self.more_wanted.take() {
             self.near_end(app);
         }

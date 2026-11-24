@@ -518,6 +518,7 @@ impl SeriesController {
             }
         };
         self.show_episodes(app, id, &window, &episodes);
+        app.prefetch.idle(app);
     }
 
     fn show_episodes(

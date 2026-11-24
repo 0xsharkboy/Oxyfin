@@ -231,6 +231,12 @@ impl Catalog {
             .is_fresh(&PageKey::Browse(Listing::of(query)), age)
     }
 
+    /// Whether the server answered [`Catalog::libraries`], which the home screen lists, within
+    /// `age`.
+    pub fn listed_libraries_within(&self, age: Duration) -> bool {
+        self.pages.is_fresh(&PageKey::Libraries, age)
+    }
+
     fn last<T: Kept>(&self, key: PageKey) -> Option<T> {
         self.pages.last(&key)
     }

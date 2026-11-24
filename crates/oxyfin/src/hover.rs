@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use oxyfin_api::ItemId;
-use oxyfin_core::{CoreError, ItemBrief};
+use oxyfin_core::{CoreError, ItemBrief, ItemKind};
 use slint::ComponentHandle;
 
 use crate::app::App;
@@ -72,6 +72,9 @@ impl HoverController {
         let id = item.as_str();
         match result {
             Ok(brief) => {
+                if brief.summary.kind == ItemKind::Series {
+                    app.prefetch.series_hovered(app, item);
+                }
                 if let Some(window) = app.window() {
                     let card = window.global::<HoverCard>();
                     if card.get_id() == id {

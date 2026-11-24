@@ -122,6 +122,7 @@ pub struct App {
     pub(crate) series: SeriesController,
     pub(crate) hover: crate::hover::HoverController,
     pub(crate) menu: crate::menu::MenuController,
+    pub(crate) prefetch: crate::prefetch::Prefetcher,
 }
 
 /// What a notice offers about undoing what it tells.
@@ -190,6 +191,7 @@ impl App {
             series: SeriesController::default(),
             hover: Default::default(),
             menu: Default::default(),
+            prefetch: Default::default(),
         });
         app.bind(window);
         app.restore();
@@ -221,6 +223,12 @@ impl App {
     /// broadcast, for tests.
     pub fn set_discovery_targets(&self, targets: Vec<std::net::SocketAddr>) {
         self.manager.set_discovery_targets(targets);
+    }
+
+    /// Turns the background loading of what is likely to be opened next on or off, for tests.
+    #[doc(hidden)]
+    pub fn set_prefetch(&self, on: bool) {
+        self.prefetch.enable(on);
     }
 
     /// Takes the generation shutdowns still running, for `main` to wait on before exiting.
@@ -1603,6 +1611,7 @@ impl App {
             Effect::EndGeneration { id, end } => {
                 self.back_cache.borrow_mut().clear();
                 self.waiting.borrow_mut().clear();
+                self.prefetch.stop();
                 self.library.end_generation();
                 let generation = {
                     let mut current = self.generation.borrow_mut();
@@ -1637,6 +1646,7 @@ impl App {
             }
             Effect::Show(screen) => {
                 self.run_waiting();
+                self.prefetch.stop();
                 let previous = self.shown.replace(screen.clone());
                 self.page.set(self.page.get() + 1);
                 self.back_cache

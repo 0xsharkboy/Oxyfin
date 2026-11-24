@@ -11,7 +11,7 @@ export component PosterGrid inherits Rectangle {
     in property <bool> loading;
     in-out property <length> viewport-y <=> flick.content-y;
     callback open(card: CardData);
-    // Emitted when less than one view height is left to scroll.
+    // Emitted when less than two view heights are left to scroll.
     callback near-end();
 
     property <length> gap: Theme.space-xl;
@@ -37,7 +37,7 @@ export component PosterGrid inherits Rectangle {
     }
 
     function check-end() {
-        if root.height > 0 && root.grid-height + flick.content-y - root.height < root.height {
+        if root.height > 0 && root.grid-height + flick.content-y - root.height < 2 * root.height {
             root.near-end();
         }
     }

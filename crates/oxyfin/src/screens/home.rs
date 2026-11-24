@@ -88,8 +88,13 @@ pub(crate) struct HomeController {
 impl HomeController {
     /// A screen was shown: the home screen loads the first time it is.
     pub(crate) fn shown(&self, app: &Rc<App>, screen: &Screen) {
-        if *screen == Screen::Home && !self.loaded.get() {
+        if *screen != Screen::Home {
+            return;
+        }
+        if !self.loaded.get() {
             self.reload(app);
+        } else if app.window().is_some_and(|window| window.get_home_settled()) {
+            app.prefetch.idle(app);
         }
     }
 
@@ -595,6 +600,7 @@ impl HomeController {
                 window.set_home_settled(true);
                 window.set_home_loading(false);
             }
+            app.prefetch.idle(app);
         }
     }
 

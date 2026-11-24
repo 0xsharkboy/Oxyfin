@@ -261,7 +261,10 @@ impl MovieController {
         let Some(window) = app.window() else { return };
         window.set_movie_loading(false);
         match result {
-            Ok(details) => self.show(app, id, &window, details),
+            Ok(details) => {
+                self.show(app, id, &window, details);
+                app.prefetch.idle(app);
+            }
             Err(CoreError::SessionExpired) => app.dispatch(Msg::Expired(id)),
             Err(error) => {
                 log::warn!("cannot load the movie: {error}");
