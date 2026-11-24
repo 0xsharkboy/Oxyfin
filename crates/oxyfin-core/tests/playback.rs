@@ -2774,6 +2774,29 @@ async fn stopping_a_transcode_ends_it_on_the_server() {
 }
 
 #[tokio::test]
+async fn a_stop_report_is_told_once_the_server_answered_it() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(STOPPED))
+        .respond_with(ResponseTemplate::new(204).set_delay(Duration::from_millis(200)))
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::Stop);
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::StopReported)).await;
+    let stopped = seen
+        .iter()
+        .position(|e| matches!(e, PlaybackEvent::Stopped));
+    assert!(
+        stopped.is_some_and(|stopped| stopped + 1 < seen.len()),
+        "{seen:?}"
+    );
+    assert_eq!(bodies(&h.mock, STOPPED).await.len(), 1);
+}
+
+#[tokio::test]
 async fn direct_play_ends_no_transcode() {
     let mock = MockServer::start().await;
     mount_status(&mock, "DELETE", ENCODINGS, 204).await;

@@ -362,6 +362,8 @@ pub enum PlaybackEvent {
     },
     /// Playback stopped.
     Stopped,
+    /// The server answered the report of a stop: what it lists from now on takes it into account.
+    StopReported,
     /// Playback or a command failed.
     Error(PlaybackError),
     /// The answer to [`PlaybackCommand::ReloadSubtitles`]: whether a new

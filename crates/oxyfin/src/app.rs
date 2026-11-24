@@ -686,6 +686,9 @@ impl App {
         use oxyfin_core::PlaybackEvent;
 
         let Some(window) = self.window() else { return };
+        if event == PlaybackEvent::StopReported {
+            return self.stop_reported();
+        }
         let stopped = event == PlaybackEvent::Stopped;
         let ended = event == PlaybackEvent::Ended;
         if stopped {
@@ -735,6 +738,19 @@ impl App {
         } else if ended && on_player && !window.get_player_has_next() {
             self.send_playback(PlaybackCommand::Stop);
             self.dispatch(Msg::ClosePlayer);
+        }
+    }
+
+    /// The server knows where playback stopped: what was asked for before may hold the old
+    /// position, so nothing of it is kept and the screens are asked for again.
+    #[cfg(feature = "mpv")]
+    fn stop_reported(self: &Rc<Self>) {
+        self.forget_answers();
+        let stacked = self.state.borrow().stack().to_vec();
+        if stacked.last() != Some(&Screen::Player) {
+            for screen in &stacked {
+                self.refresh(screen);
+            }
         }
     }
 

@@ -329,6 +329,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
                 serial,
             });
         }
+        PlaybackEvent::StopReported => {}
         PlaybackEvent::NextUpCancelled => window.set_player_next_up(NextUp::default()),
         PlaybackEvent::Stopped => {
             window.set_player_next_up(NextUp::default());

@@ -23,7 +23,7 @@ use super::loader::{LoadFailure, LoadMessage, LoadRequest, LoadStage, Loader, Pr
 use super::media_player::{MediaPlayer, PlayerEvents};
 use super::quality::Quality;
 use super::refresh::{RefreshRequest, Refreshed, Wanted, added, in_language, remapped};
-use super::reporter::{ReportKind, Reporter};
+use super::reporter::{ReportKind, Reported, Reporter};
 use super::segments::SkipMemory;
 use super::track_memory::{
     AudioPick, SubtitlePick, TrackChoice, TrackMemory, best_audio, best_subtitle,
@@ -173,12 +173,12 @@ impl PlaybackController {
     ) -> (PlaybackHandle, UnboundedReceiver<PlaybackEvent>) {
         let (messages, message_receiver) = unbounded_channel();
         let (event_sender, event_receiver) = unbounded_channel();
-        let (expired_sender, expired) = unbounded_channel();
+        let (reported_sender, reported) = unbounded_channel();
         let closing = Arc::new(AtomicBool::new(false));
         let (loader, loads) = Loader::new();
         let (refreshes, refreshed) = unbounded_channel();
         let controller = Self {
-            reporter: Reporter::spawn(session.clone(), expired_sender),
+            reporter: Reporter::spawn(session.clone(), reported_sender),
             session,
             player,
             player_events: events.0,
@@ -210,7 +210,7 @@ impl PlaybackController {
             wanted: None,
             reloaded: None,
         };
-        tokio::spawn(controller.run(message_receiver, expired, loads, refreshed));
+        tokio::spawn(controller.run(message_receiver, reported, loads, refreshed));
         (
             PlaybackHandle {
                 messages,
@@ -224,7 +224,7 @@ impl PlaybackController {
     async fn run(
         mut self,
         mut messages: UnboundedReceiver<Message>,
-        mut expired: UnboundedReceiver<()>,
+        mut reported: UnboundedReceiver<Reported>,
         mut loads: UnboundedReceiver<LoadMessage>,
         mut refreshed: UnboundedReceiver<Refreshed>,
     ) {
@@ -254,7 +254,10 @@ impl PlaybackController {
                 },
                 Some(message) = loads.recv() => self.on_load(message),
                 Some(refreshed) = refreshed.recv() => self.on_refreshed(refreshed),
-                Some(()) = expired.recv() => self.expire(),
+                Some(reported) = reported.recv() => match reported {
+                    Reported::Expired => self.expire(),
+                    Reported::Stop => self.emit(PlaybackEvent::StopReported),
+                },
                 () = sleep_until(deadline.unwrap_or_else(Instant::now)), if deadline.is_some() => {
                     self.report(ReportKind::Progress);
                     self.schedule_progress();
