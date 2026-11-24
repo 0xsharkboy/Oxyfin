@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::app::App;
-use crate::images::load_into;
+use crate::images::{PageLoads, load_artwork, load_into};
 use crate::present::{card, core_error_message, detail_target, home_banner, image_size};
 use crate::screens::library::open_detail;
 use crate::state::{GenerationId, Msg, Screen};
@@ -60,6 +60,7 @@ pub(crate) struct HomeController {
     layout: RefCell<Vec<RowKey>>,
     featured: RefCell<Featured>,
     targets: RefCell<HashMap<String, Screen>>,
+    loads: PageLoads,
 }
 
 impl HomeController {
@@ -91,6 +92,7 @@ impl HomeController {
     }
 
     fn clear(&self, app: &App) {
+        self.loads.abort();
         self.load.set(self.load.get() + 1);
         self.loaded.set(false);
         self.shown_generation.set(None);
@@ -338,11 +340,18 @@ impl HomeController {
             let target = window.as_weak();
             let row_title = title.clone();
             let item_id: SharedString = item.id.as_str().into();
-            load_into(app, generation, &images, artwork, size, move |image| {
-                if let Some(window) = target.upgrade() {
-                    set_card_image(&window, &row_title, &item_id, image);
-                }
-            });
+            self.loads.track(load_into(
+                app,
+                generation,
+                &images,
+                artwork,
+                size,
+                move |image| {
+                    if let Some(window) = target.upgrade() {
+                        set_card_image(&window, &row_title, &item_id, image);
+                    }
+                },
+            ));
         }
     }
 
@@ -474,17 +483,24 @@ impl HomeController {
         let (width, height) = banner_box(width);
         let size = image_size(width, height, scale);
         let target = window.as_weak();
-        load_into(app, generation, &images, artwork, size, move |image| {
-            let Some(window) = target.upgrade() else {
-                return;
-            };
-            let mut banner = window.get_home_banner();
-            if banner.has && banner.card.id == item_id {
-                banner.card.image = image;
-                banner.card.has_image = true;
-                window.set_home_banner(banner);
-            }
-        });
+        self.loads.track(load_artwork(
+            app,
+            generation,
+            &images,
+            artwork,
+            size,
+            move |image| {
+                let Some(window) = target.upgrade() else {
+                    return;
+                };
+                let mut banner = window.get_home_banner();
+                if banner.has && banner.card.id == item_id {
+                    banner.card.image = image;
+                    banner.card.has_image = true;
+                    window.set_home_banner(banner);
+                }
+            },
+        ));
     }
 }
 

@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use crate::app::App;
 use crate::state::{GenerationId, Msg};
-use oxyfin_core::{CoreError, ImageCache, ImageRef, ImageSize, TrickplaySheet};
+use oxyfin_core::{CoreError, ImageCache, ImagePriority, ImageRef, ImageSize, TrickplaySheet};
 use slint::{Rgba8Pixel, SharedPixelBuffer};
 use tokio::task::AbortHandle;
 
@@ -33,10 +33,36 @@ pub fn load_into(
     size: ImageSize,
     apply: impl FnOnce(slint::Image) + 'static,
 ) -> AbortHandle {
+    load(app, id, images, image, size, app.image_priority(), apply)
+}
+
+/// Like [`load_into`], for the main artwork of the page shown: it is downloaded before the other
+/// images of the page.
+pub fn load_artwork(
+    app: &App,
+    id: GenerationId,
+    images: &Arc<ImageCache>,
+    image: ImageRef,
+    size: ImageSize,
+    apply: impl FnOnce(slint::Image) + 'static,
+) -> AbortHandle {
+    let priority = app.image_priority().artwork();
+    load(app, id, images, image, size, priority, apply)
+}
+
+fn load(
+    app: &App,
+    id: GenerationId,
+    images: &Arc<ImageCache>,
+    image: ImageRef,
+    size: ImageSize,
+    priority: ImagePriority,
+    apply: impl FnOnce(slint::Image) + 'static,
+) -> AbortHandle {
     let images = Arc::clone(images);
     app.spawn(
         async move {
-            let bytes = match images.get(&image, size).await {
+            let bytes = match images.get(&image, size, priority).await {
                 Ok(bytes) => bytes,
                 Err(CoreError::SessionExpired) => return Loaded::Expired,
                 Err(error) => {

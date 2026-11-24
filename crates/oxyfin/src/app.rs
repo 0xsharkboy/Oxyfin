@@ -8,7 +8,8 @@ use std::time::Duration;
 
 use oxyfin_api::{ItemId, Session};
 use oxyfin_core::{
-    Catalog, Config, CoreError, ImageCache, Paths, SessionManager, SignedIn, TokenVault,
+    Catalog, Config, CoreError, ImageCache, ImagePriority, Paths, SessionManager, SignedIn,
+    TokenVault,
 };
 use oxyfin_core::{PlayMode, PlaybackCommand, UserState};
 use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode};
@@ -76,6 +77,8 @@ pub struct App {
     manager: Arc<SessionManager>,
     state: RefCell<AppState>,
     shown: RefCell<Screen>,
+    /// Number of the page shown, growing with every page.
+    page: Cell<u64>,
     generation: RefCell<Option<Generation>>,
     incoming: RefCell<Option<Session>>,
     ending: RefCell<Vec<JoinHandle<()>>>,
@@ -141,6 +144,7 @@ impl App {
             manager,
             state: RefCell::new(AppState::new()),
             shown: RefCell::new(Screen::Starting),
+            page: Cell::new(0),
             generation: RefCell::new(None),
             incoming: RefCell::new(None),
             ending: RefCell::new(Vec::new()),
@@ -237,6 +241,11 @@ impl App {
             _ => self.refresh(&screen),
         }
         self.dispatch(Msg::ItemChanged(screen));
+    }
+
+    /// Priority of the images of the page shown: they go before those of the pages left.
+    pub(crate) fn image_priority(&self) -> ImagePriority {
+        ImagePriority::of_page(self.page.get())
     }
 
     /// Depth of the current screen in the stack, 0 for the root.
@@ -1566,6 +1575,7 @@ impl App {
             }
             Effect::Show(screen) => {
                 let previous = self.shown.replace(screen.clone());
+                self.page.set(self.page.get() + 1);
                 self.back_cache
                     .borrow_mut()
                     .prune(self.state.borrow().stack());

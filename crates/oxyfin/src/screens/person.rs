@@ -11,7 +11,7 @@ use slint::{ComponentHandle, FilterModel, Image, Model, ModelRc, SharedString, V
 
 use crate::app::App;
 use crate::back_cache::Parked;
-use crate::images::{PageLoads, load_into};
+use crate::images::{PageLoads, load_artwork};
 use crate::present::{core_error_message, date_parts, image_size, initials, person_title_card};
 use crate::screens::library::{load_posters, open_detail, target_of};
 use crate::state::{GenerationId, Msg, Screen};
@@ -336,7 +336,7 @@ impl PersonController {
                 self.instance.get(),
             );
             self.loads
-                .track(load_into(app, id, &images, photo, size, move |image| {
+                .track(load_artwork(app, id, &images, photo, size, move |image| {
                     if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
                         window.set_person_photo(image);
                         window.set_person_has_photo(true);

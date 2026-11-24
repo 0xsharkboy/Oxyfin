@@ -57,6 +57,7 @@
 mod catalog;
 mod config;
 mod error;
+mod fetch_queue;
 mod images;
 mod languages;
 mod models;
@@ -72,8 +73,10 @@ mod trickplay;
 pub use catalog::{BrowseQuery, BrowseSource, Catalog, ContentKind, SortField, WatchFilter};
 pub use config::{Config, SavedSession};
 pub use error::{CoreError, Result};
+pub use fetch_queue::ImagePriority;
 pub use images::{
-    CacheBudgets, DEFAULT_DISK_BUDGET, DEFAULT_MEMORY_BUDGET, IMAGE_FETCHES, ImageCache, ImageSize,
+    ARTWORK_FETCHES, BACKGROUND_FETCHES, CacheBudgets, DEFAULT_DISK_BUDGET, DEFAULT_MEMORY_BUDGET,
+    IMAGE_FETCHES, ImageCache, ImageSize,
 };
 pub use languages::{same_language, subtitle_language, subtitle_languages};
 pub use models::{

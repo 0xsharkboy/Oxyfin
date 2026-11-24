@@ -8,7 +8,8 @@ use std::time::{Duration, SystemTime};
 
 use oxyfin_api::{ImageRequest, Session};
 
-use crate::{CoreError, ImageRef, Paths, Result, TrickplaySheet};
+use crate::fetch_queue::{FetchQueue, Slots};
+use crate::{CoreError, ImagePriority, ImageRef, Paths, Result, TrickplaySheet};
 
 /// Bounding box requested for an image, in pixels.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -23,7 +24,13 @@ pub struct ImageSize {
 pub const DEFAULT_MEMORY_BUDGET: u64 = 64 * 1024 * 1024;
 
 /// Image downloads an [`ImageCache`] runs at the same time; the others wait for a slot.
-pub const IMAGE_FETCHES: usize = 6;
+pub const IMAGE_FETCHES: usize = 16;
+
+/// Among them, the downloads kept for the main artwork of a page.
+pub const ARTWORK_FETCHES: usize = 2;
+
+/// Among them, the downloads of images nothing shows yet.
+pub const BACKGROUND_FETCHES: usize = 4;
 
 /// Default disk budget of the image cache: 500 MB.
 pub const DEFAULT_DISK_BUDGET: u64 = 500 * 1024 * 1024;
@@ -249,7 +256,7 @@ pub struct ImageCache {
     budget: usize,
     memory: Mutex<Memory>,
     trimmer: Arc<Trimmer>,
-    fetches: tokio::sync::Semaphore,
+    fetches: Arc<FetchQueue>,
 }
 
 impl ImageCache {
@@ -276,7 +283,11 @@ impl ImageCache {
             budget: usize::try_from(budgets.memory_bytes).unwrap_or(usize::MAX),
             memory: Mutex::new(Memory::default()),
             trimmer,
-            fetches: tokio::sync::Semaphore::new(IMAGE_FETCHES),
+            fetches: FetchQueue::new(Slots {
+                all: IMAGE_FETCHES,
+                artwork: ARTWORK_FETCHES,
+                background: BACKGROUND_FETCHES,
+            }),
         }
     }
 
@@ -336,16 +347,21 @@ impl ImageCache {
 
     /// Returns the bytes of `image` scaled to fit `size`, from memory, disk or the server.
     ///
-    /// At most [`IMAGE_FETCHES`] images are downloaded at a time; memory and disk hits never wait.
-    pub async fn get(&self, image: &ImageRef, size: ImageSize) -> Result<Arc<[u8]>> {
+    /// At most [`IMAGE_FETCHES`] images are downloaded at a time, the greatest `priority` first;
+    /// memory and disk hits never wait.
+    pub async fn get(
+        &self,
+        image: &ImageRef,
+        size: ImageSize,
+        priority: ImagePriority,
+    ) -> Result<Arc<[u8]>> {
         self.cached(file_name(image, size), async {
             let mut request = ImageRequest::new(image.item_id.clone(), image.image_type.clone());
             request.tag = Some(image.tag.clone());
             request.index = image.index;
             request.max_width = Some(size.max_width);
             request.max_height = Some(size.max_height);
-            // The semaphore is never closed, so a failed acquire cannot happen.
-            let _slot = self.fetches.acquire().await.ok();
+            let _slot = self.fetches.slot(priority).await;
             self.session.fetch_image(&request).await
         })
         .await

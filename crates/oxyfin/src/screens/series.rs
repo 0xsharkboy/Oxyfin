@@ -10,7 +10,7 @@ use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 
 use crate::app::App;
 use crate::back_cache::Parked;
-use crate::images::{PageLoads, load_into};
+use crate::images::{PageLoads, load_artwork, load_into};
 use crate::present::{
     SeriesPlay, core_error_message, episode_row, image_size, initial_season, kept_thumbnails,
     series_play, thumbnail_tags,
@@ -592,7 +592,7 @@ impl SeriesController {
             let size = image_size(POSTER_ARTWORK.0, POSTER_ARTWORK.1, scale);
             let (target, current) = (window.as_weak(), Rc::clone(&self.instance));
             self.loads
-                .track(load_into(app, id, &images, poster, size, move |image| {
+                .track(load_artwork(app, id, &images, poster, size, move |image| {
                     if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
                         window.set_series_poster(image);
                     }
@@ -603,12 +603,18 @@ impl SeriesController {
             let (width, height) = banner_box(width);
             let size = image_size(width, height, scale);
             let (target, current) = (window.as_weak(), Rc::clone(&self.instance));
-            self.loads
-                .track(load_into(app, id, &images, backdrop, size, move |image| {
+            self.loads.track(load_artwork(
+                app,
+                id,
+                &images,
+                backdrop,
+                size,
+                move |image| {
                     if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
                         window.set_series_backdrop(image);
                     }
-                }));
+                },
+            ));
         }
     }
 
