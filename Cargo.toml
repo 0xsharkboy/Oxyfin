@@ -20,6 +20,10 @@ expect_used = "warn"
 print_stdout = "warn"
 undocumented_unsafe_blocks = "warn"
 
+# Unoptimized text layout and drawing freeze the interface for up to a second.
+[profile.dev.package."*"]
+opt-level = 1
+
 # Trickplay sheets are large JPEGs: an unoptimized decoder takes seconds on each.
 [profile.dev.package.image]
 opt-level = 3
