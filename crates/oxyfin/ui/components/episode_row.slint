@@ -1,4 +1,4 @@
-import { Theme } from "../theme.slint";
+import { Messages, Theme } from "../theme.slint";
 import { MouseBack } from "mouse_back.slint";
 import { ContextMenu, MenuKeys } from "context_menu.slint";
 import { Icons } from "../icons.slint";
@@ -165,7 +165,7 @@ export component EpisodeRow inherits Rectangle {
                 }
                 if root.minutes > 0: duration := LabelText {
                     accessible-role: none;
-                    text: @tr("{} min", root.minutes);
+                    text: Messages.duration(root.minutes);
                     color: Theme.text-muted;
                     horizontal-stretch: 0;
                 }

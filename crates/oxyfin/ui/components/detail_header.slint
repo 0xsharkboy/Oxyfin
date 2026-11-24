@@ -1,4 +1,4 @@
-import { Theme } from "../theme.slint";
+import { Messages, Theme } from "../theme.slint";
 import { MouseBack } from "mouse_back.slint";
 import { Icons } from "../icons.slint";
 import { BodyText, DisplayText, LabelText } from "text.slint";
@@ -107,10 +107,6 @@ export component DetailHeader inherits Rectangle {
     callback toggle-favorite();
     callback open-collection(index: int);
 
-    pure function duration(total: int) -> string {
-        total >= 60 ? @tr("{}h {}m", floor(total / 60), mod(total, 60)) : @tr("{}m", total)
-    }
-
     accessible-role: groupbox;
     accessible-label: root.title;
 
@@ -189,7 +185,7 @@ export component DetailHeader inherits Rectangle {
                         text: root.year;
                     }
                     if root.minutes > 0: LabelText {
-                        text: root.duration(root.minutes);
+                        text: Messages.duration(root.minutes);
                     }
                     if root.season-count > 0: LabelText {
                         text: @tr("{n} season" | "{n} seasons" % root.season-count);
