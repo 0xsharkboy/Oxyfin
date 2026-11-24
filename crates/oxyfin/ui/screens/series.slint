@@ -179,7 +179,7 @@ export component SeriesScreen inherits Rectangle {
 
                     Button {
                         label: root.series.play-kind == SeriesPlayKind.resume-episode ? @tr("Resume {}", root.series.play-label) : (root.series.play-kind == SeriesPlayKind.play-episode ? @tr("Play {}", root.series.play-label) : @tr("Play"));
-                        icon: Icons.play;
+                        icon: Icons.play-on-accent;
                         clicked => {
                             root.play();
                         }

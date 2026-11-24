@@ -63,9 +63,8 @@ export component NoticeBanner inherits Rectangle {
         if root.notice.dismissible: VerticalLayout {
             alignment: center;
             IconButton {
-                icon: Icons.x;
+                icon: Icons.x-secondary;
                 label: @tr("Close");
-                icon-color: Theme.text-secondary;
                 clicked => {
                     root.dismiss();
                 }

@@ -197,10 +197,9 @@ export component DetailHeader inherits Rectangle {
                             alignment: center;
 
                             Image {
-                                source: Icons.star;
+                                source: Icons.star-accent;
                                 width: 16px;
                                 height: 16px;
-                                colorize: Theme.accent;
                             }
                         }
                         LabelText {
@@ -274,8 +273,7 @@ export component DetailHeader inherits Rectangle {
                         }
                     }
                     IconButton {
-                        icon: root.favorite ? Icons.heart-filled : Icons.heart;
-                        icon-color: root.favorite ? Theme.accent : Theme.text-primary;
+                        icon: root.favorite ? Icons.heart-filled-accent : Icons.heart;
                         label: root.favorite ? @tr("Remove from favorites") : @tr("Add to favorites");
                         enabled: !root.busy;
                         clicked => {

@@ -2,7 +2,6 @@ import { Theme } from "../theme.slint";
 import { MouseBack } from "mouse_back.slint";
 import { ContextMenu } from "context_menu.slint";
 import { Pointed } from "pointed.slint";
-import { Icons } from "../icons.slint";
 import { BodyStrongText } from "text.slint";
 
 export enum ButtonStyle { primary, secondary, ghost }
@@ -93,7 +92,6 @@ export component Button inherits Rectangle {
             source: root.icon;
             width: 24px;
             height: 24px;
-            colorize: Icons.tint(root.foreground);
         }
         label-text := BodyStrongText {
             accessible-role: none;

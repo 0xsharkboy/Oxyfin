@@ -1,7 +1,6 @@
 import { Theme } from "../theme.slint";
 import { MouseBack } from "mouse_back.slint";
 import { ContextMenu } from "context_menu.slint";
-import { Icons } from "../icons.slint";
 
 // Round icon button of the top bar and the player; `label` is announced by screen readers.
 export component IconButton inherits Rectangle {
@@ -12,7 +11,6 @@ export component IconButton inherits Rectangle {
     in property <bool> focus-on-click: true;
     // Highlighted while what it opens is shown.
     in property <bool> active;
-    in property <color> icon-color: Theme.text-primary;
     callback clicked();
 
     accessible-role: button;
@@ -71,6 +69,5 @@ export component IconButton inherits Rectangle {
         source: root.icon;
         width: 24px;
         height: 24px;
-        colorize: Icons.tint(root.icon-color);
     }
 }

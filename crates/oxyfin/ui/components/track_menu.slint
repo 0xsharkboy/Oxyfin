@@ -105,10 +105,9 @@ export component MenuOption inherits Rectangle {
             height: 18px;
 
             if root.selected: Image {
-                source: Icons.check;
+                source: Icons.check-accent;
                 width: parent.width;
                 height: parent.height;
-                colorize: Theme.accent;
             }
         }
 
@@ -167,7 +166,6 @@ export component MenuAction inherits Rectangle {
                 source: root.icon;
                 width: 18px;
                 height: 18px;
-                colorize: Theme.text-secondary;
             }
         }
 
@@ -392,7 +390,7 @@ export component TrackMenu inherits MenuPanel {
     if root.can-find-subtitles: MenuDivider { }
 
     if root.can-find-subtitles: MenuAction {
-        icon: Icons.search;
+        icon: Icons.search-secondary;
         label: @tr("Find subtitles online…");
         clicked => {
             root.find-subtitles();

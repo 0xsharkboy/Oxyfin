@@ -123,7 +123,7 @@ export component Banner inherits Rectangle {
 
             Button {
                 label: !root.resuming ? @tr("Play") : (root.episode-label != "" ? @tr("Resume {}", root.episode-label) : @tr("Resume"));
-                icon: Icons.play;
+                icon: Icons.play-on-accent;
                 enabled: root.play-enabled;
                 clicked => {
                     root.play();
