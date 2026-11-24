@@ -229,13 +229,21 @@ impl MovieController {
         };
         self.load.set(self.load.get() + 1);
         let load = self.load.get();
+        let last = match &*self.details.borrow() {
+            Some(_) => None,
+            None => catalog.last_movie(&ItemId::from(movie.as_str())),
+        };
+        let behind = last.is_some();
         if let Some(window) = app.window() {
             window.set_movie_error(SharedString::default());
+            if let Some(details) = last {
+                self.show(app, id, &window, details);
+            }
             window.set_movie_loading(self.details.borrow().is_none());
         }
         app.spawn(
             async move { catalog.movie(&ItemId::from(movie.as_str())).await },
-            move |app, result| app.movie.answered(app, load, id, result),
+            move |app, result| app.movie.answered(app, load, id, behind, result),
         );
     }
 
@@ -244,6 +252,7 @@ impl MovieController {
         app: &Rc<App>,
         load: u64,
         id: GenerationId,
+        behind: bool,
         result: Result<MovieDetails, CoreError>,
     ) {
         if self.load.get() != load || app.services().is_none_or(|(current, ..)| current != id) {
@@ -252,14 +261,7 @@ impl MovieController {
         let Some(window) = app.window() else { return };
         window.set_movie_loading(false);
         match result {
-            Ok(details) => {
-                *self.details.borrow_mut() = Some(details);
-                self.publish(app, id, &window);
-                if let Some(movie) = self.current.borrow().clone() {
-                    self.similar
-                        .request(app, &movie, AppWindow::set_movie_similar);
-                }
-            }
+            Ok(details) => self.show(app, id, &window, details),
             Err(CoreError::SessionExpired) => app.dispatch(Msg::Expired(id)),
             Err(error) => {
                 log::warn!("cannot load the movie: {error}");
@@ -269,8 +271,22 @@ impl MovieController {
                         .global::<Messages>()
                         .invoke_message_text(message, detail);
                     window.set_movie_error(text);
+                } else if behind {
+                    app.notify(core_error_message(&error).0);
                 }
             }
+        }
+    }
+
+    /// Shows `details` unless the page shows them already, and asks for similar titles.
+    fn show(&self, app: &Rc<App>, id: GenerationId, window: &AppWindow, details: MovieDetails) {
+        if self.details.borrow().as_ref() != Some(&details) {
+            *self.details.borrow_mut() = Some(details);
+            self.publish(app, id, window);
+        }
+        if let Some(movie) = self.current.borrow().clone() {
+            self.similar
+                .request(app, &movie, AppWindow::set_movie_similar);
         }
     }
 

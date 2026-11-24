@@ -13,6 +13,7 @@ use crate::app::App;
 use crate::back_cache::Parked;
 use crate::images::{PageLoads, load_artwork};
 use crate::present::{core_error_message, date_parts, image_size, initials, person_title_card};
+use crate::rows;
 use crate::screens::library::{load_posters, open_detail, target_of};
 use crate::state::{GenerationId, Msg, Screen};
 use crate::{AppWindow, CardData, Messages, PersonData, PersonFilter};
@@ -228,8 +229,22 @@ impl PersonController {
         };
         self.load.set(self.load.get() + 1);
         let load = self.load.get();
+        let last = match &*self.loaded.borrow() {
+            Some(_) => None,
+            None => {
+                let person = ItemId::from(person.as_str());
+                catalog
+                    .last_person(&person)
+                    .zip(catalog.last_person_titles(&person))
+            }
+        };
+        let behind = last.is_some();
         if let Some(window) = app.window() {
             window.set_person_error(SharedString::default());
+            if let Some(loaded) = last {
+                self.publish(app, id, &window, &loaded, true);
+                *self.loaded.borrow_mut() = Some(loaded);
+            }
             window.set_person_loading(self.loaded.borrow().is_none());
         }
         app.spawn(
@@ -239,7 +254,7 @@ impl PersonController {
                     tokio::join!(catalog.person(&person), catalog.person_titles(&person));
                 Ok::<_, CoreError>((details?, titles?))
             },
-            move |app, result| app.person.answered(app, load, id, result),
+            move |app, result| app.person.answered(app, load, id, behind, result),
         );
     }
 
@@ -248,6 +263,7 @@ impl PersonController {
         app: &Rc<App>,
         load: u64,
         id: GenerationId,
+        behind: bool,
         result: Result<Loaded, CoreError>,
     ) {
         if self.load.get() != load || app.services().is_none_or(|(current, ..)| current != id) {
@@ -257,9 +273,36 @@ impl PersonController {
         window.set_person_loading(false);
         match result {
             Ok(loaded) => {
-                let first = self.loaded.borrow().is_none();
-                self.publish(app, id, &window, &loaded, first);
-                *self.loaded.borrow_mut() = Some(loaded);
+                let shown = self.loaded.borrow().clone();
+                if shown.as_ref() == Some(&loaded) {
+                    return;
+                }
+                let moves = behind
+                    && shown.as_ref().is_some_and(|(_, shown)| {
+                        let ids = |titles: &[PersonTitle]| -> Vec<ItemId> {
+                            titles
+                                .iter()
+                                .map(|title| title.summary.id.clone())
+                                .collect()
+                        };
+                        ids(shown) != ids(&loaded.1)
+                    });
+                let first = shown.is_none();
+                let show = move |app: &Rc<App>| {
+                    let controller = &app.person;
+                    if controller.load.get() != load {
+                        return;
+                    }
+                    if let Some(window) = app.window() {
+                        controller.publish(app, id, &window, &loaded, first);
+                        *controller.loaded.borrow_mut() = Some(loaded);
+                    }
+                };
+                if moves {
+                    app.when_free(show);
+                } else {
+                    show(app);
+                }
             }
             Err(CoreError::SessionExpired) => app.dispatch(Msg::Expired(id)),
             Err(error) => {
@@ -270,6 +313,8 @@ impl PersonController {
                         .global::<Messages>()
                         .invoke_message_text(message, detail);
                     window.set_person_error(text);
+                } else if behind {
+                    app.notify(core_error_message(&error).0);
                 }
             }
         }
@@ -311,14 +356,17 @@ impl PersonController {
             .iter()
             .map(|title| (title.summary.id.as_str().into(), title.summary.kind))
             .collect();
-        self.cards.set_vec(cards);
+        let same = rows::same_items(&self.cards, &cards);
+        rows::update(&self.cards, cards);
         let shown = Rc::clone(self.shown_cards.borrow_mut().get_or_insert_with(|| {
             let (filter, kinds) = (Rc::clone(&self.filter), Rc::clone(&self.kinds));
             let keep: Box<dyn Fn(&CardData) -> bool> =
                 Box::new(move |card| accepts(filter.get(), kinds.borrow().get(&card.id).copied()));
             Rc::new(FilterModel::new(Rc::clone(&self.cards), keep))
         }));
-        shown.reset();
+        if !same {
+            shown.reset();
+        }
         window.set_person_titles(ModelRc::from(shown));
         window.set_person_loaded(true);
         load_posters(app, id, window, &self.cards, &missing, &self.loads);

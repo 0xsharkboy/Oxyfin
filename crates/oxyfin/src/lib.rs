@@ -21,6 +21,7 @@ mod menu;
 #[cfg(target_os = "linux")]
 pub mod mpris;
 pub mod present;
+mod rows;
 pub mod screens;
 pub mod state;
 #[cfg(feature = "mpv")]

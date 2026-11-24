@@ -1,6 +1,7 @@
 //! Helpers shared by the flow tests: a simulated Jellyfin 12.4 server and the app setup.
 #![allow(dead_code)]
 
+pub mod answers;
 pub mod collection;
 pub mod discovery;
 pub mod home_banner;

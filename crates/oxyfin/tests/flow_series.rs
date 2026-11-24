@@ -328,7 +328,8 @@ fn a_series_opens_with_seasons_and_episodes() {
                 .is_some_and(|query| has_param(query, "seasonId", SEASON_2))
         })
         .await?;
-        wait_until("the episode bones", || common::skeleton_shown(&window)).await?;
+        // The rows it last had show meanwhile.
+        wait_row(&window, "The Pact").await?;
         if exists(&window, "Pilot Light") || exists(&window, "Second Watch") {
             return Err("the rows of Season 1 stay under the Season 2 pill".into());
         }

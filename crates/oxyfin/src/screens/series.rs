@@ -15,6 +15,7 @@ use crate::present::{
     SeriesPlay, core_error_message, episode_row, image_size, initial_season, kept_thumbnails,
     series_play, thumbnail_tags,
 };
+use crate::rows;
 use crate::screens::cast::{cast_cards, load_photos};
 use crate::screens::home::{banner_artwork, banner_box};
 use crate::screens::similar::{ParkedRow, SimilarRow};
@@ -36,7 +37,7 @@ enum Flag {
 pub(crate) struct SeriesController {
     instance: Rc<Cell<u64>>,
     load: Cell<u64>,
-    episodes_load: Rc<Cell<u64>>,
+    episodes_load: Cell<u64>,
     current: RefCell<Option<String>>,
     depth: Cell<usize>,
     details: RefCell<Option<SeriesDetails>>,
@@ -340,13 +341,24 @@ impl SeriesController {
         self.load.set(self.load.get() + 1);
         let load = self.load.get();
         self.reloading.set(true);
+        let last = match &*self.details.borrow() {
+            Some(_) => None,
+            None => catalog.last_series(&ItemId::from(series.as_str())),
+        };
+        let behind = last.is_some();
         if let Some(window) = app.window() {
             window.set_series_error(SharedString::default());
+            if let Some(details) = last {
+                self.show(app, id, &window, details);
+                self.show_last_episodes(app, id, &window);
+                // Those asked for after the series come then.
+                window.set_series_episodes_loading(!self.episodes_ready.get());
+            }
             window.set_series_loading(self.details.borrow().is_none());
         }
         app.spawn(
             async move { catalog.series(&ItemId::from(series.as_str())).await },
-            move |app, result| app.series.answered(app, load, id, result),
+            move |app, result| app.series.answered(app, load, id, behind, result),
         );
     }
 
@@ -355,6 +367,7 @@ impl SeriesController {
         app: &Rc<App>,
         load: u64,
         id: GenerationId,
+        behind: bool,
         result: Result<SeriesDetails, CoreError>,
     ) {
         if self.load.get() != load || app.services().is_none_or(|(current, ..)| current != id) {
@@ -365,22 +378,8 @@ impl SeriesController {
         window.set_series_loading(false);
         match result {
             Ok(details) => {
-                // The chosen season is kept by id: the list may be reordered by a reload.
-                let wanted = self
-                    .wanted_season
-                    .take()
-                    .filter(|(series, _)| series == details.summary.id.as_str())
-                    .map(|(_, season)| season);
-                let chosen = wanted
-                    .or_else(|| self.chosen_season_id())
-                    .and_then(|chosen| details.seasons.iter().position(|s| s.id.as_str() == chosen))
-                    .or_else(|| initial_season(&details));
-                self.season.set(chosen);
-                *self.details.borrow_mut() = Some(details);
-                self.publish(app, id, &window);
+                self.show(app, id, &window, details);
                 if let Some(series) = self.current.borrow().clone() {
-                    self.similar
-                        .request(app, &series, AppWindow::set_series_similar);
                     app.dispatch(Msg::ItemChanged(Screen::Series(series)));
                 }
                 self.request_episodes(app);
@@ -394,8 +393,51 @@ impl SeriesController {
                         .global::<Messages>()
                         .invoke_message_text(message, detail);
                     window.set_series_error(text);
+                } else if behind {
+                    app.notify(core_error_message(&error).0);
                 }
             }
+        }
+    }
+
+    /// Shows `details` unless the page shows them already, with the season wanted or chosen, and
+    /// asks for similar titles.
+    fn show(&self, app: &Rc<App>, id: GenerationId, window: &AppWindow, details: SeriesDetails) {
+        // The chosen season is kept by id: the list may be reordered by a reload.
+        let wanted = self
+            .wanted_season
+            .take()
+            .filter(|(series, _)| series == details.summary.id.as_str())
+            .map(|(_, season)| season);
+        let chosen = wanted
+            .or_else(|| self.chosen_season_id())
+            .and_then(|chosen| details.seasons.iter().position(|s| s.id.as_str() == chosen))
+            .or_else(|| initial_season(&details));
+        if self.details.borrow().as_ref() != Some(&details) || self.season.get() != chosen {
+            self.season.set(chosen);
+            *self.details.borrow_mut() = Some(details);
+            self.publish(app, id, window);
+        }
+        if let Some(series) = self.current.borrow().clone() {
+            self.similar
+                .request(app, &series, AppWindow::set_series_similar);
+        }
+    }
+
+    /// Shows the last answer for the episodes of the chosen season, if there is one.
+    fn show_last_episodes(&self, app: &Rc<App>, id: GenerationId, window: &AppWindow) {
+        let (Some(series), Some((_, catalog, _))) = (self.current.borrow().clone(), app.services())
+        else {
+            return;
+        };
+        let season = self.chosen_season_id();
+        let last = catalog.last_episodes(
+            &ItemId::from(series.as_str()),
+            season.as_deref().map(ItemId::from).as_ref(),
+        );
+        if let Some(episodes) = last {
+            *self.rows_season.borrow_mut() = Some(season);
+            self.show_episodes(app, id, window, &episodes);
         }
     }
 
@@ -417,11 +459,13 @@ impl SeriesController {
             if changed {
                 self.episodes_ready.set(false);
                 window.set_series_episodes_stale(true);
+                self.show_last_episodes(app, id, &window);
             }
             window.set_series_episodes_loading(
                 window.get_series_episodes_stale() || self.episodes.row_count() == 0,
             );
         }
+        let behind = self.episodes_ready.get();
         app.spawn(
             async move {
                 let series = ItemId::from(series.as_str());
@@ -430,7 +474,7 @@ impl SeriesController {
                     None => catalog.all_episodes(&series).await,
                 }
             },
-            move |app, result| app.series.episodes_answered(app, load, id, result),
+            move |app, result| app.series.episodes_answered(app, load, id, behind, result),
         );
     }
 
@@ -447,6 +491,7 @@ impl SeriesController {
         app: &Rc<App>,
         load: u64,
         id: GenerationId,
+        behind: bool,
         result: Result<Vec<Episode>, CoreError>,
     ) {
         if self.episodes_load.get() != load
@@ -461,6 +506,9 @@ impl SeriesController {
             Err(CoreError::SessionExpired) => return app.dispatch(Msg::Expired(id)),
             Err(error) => {
                 log::warn!("cannot load the episodes: {error}");
+                if behind {
+                    return app.notify(core_error_message(&error).0);
+                }
                 let (message, detail) = core_error_message(&error);
                 let text = window
                     .global::<Messages>()
@@ -469,10 +517,21 @@ impl SeriesController {
                 return;
             }
         };
+        self.show_episodes(app, id, &window, &episodes);
+    }
+
+    fn show_episodes(
+        &self,
+        app: &Rc<App>,
+        id: GenerationId,
+        window: &AppWindow,
+        episodes: &[Episode],
+    ) {
         let rows: Vec<EpisodeData> = self.episodes.iter().collect();
-        let kept = kept_thumbnails(&rows, &self.thumbnail_tags.borrow(), &episodes);
-        *self.thumbnail_tags.borrow_mut() = thumbnail_tags(&episodes);
-        self.episodes.set_vec(
+        let kept = kept_thumbnails(&rows, &self.thumbnail_tags.borrow(), episodes);
+        *self.thumbnail_tags.borrow_mut() = thumbnail_tags(episodes);
+        rows::update(
+            &self.episodes,
             episodes
                 .iter()
                 .map(|episode| {
@@ -497,7 +556,7 @@ impl SeriesController {
             .filter(|(episode, _)| !kept.contains_key(episode.as_str()))
             .cloned()
             .collect();
-        self.load_thumbnails(app, id, &window, missing);
+        self.load_thumbnails(app, id, window, missing);
     }
 
     /// Loads the thumbnails `wanted`, by episode id, into the rows of the current episodes.
@@ -516,15 +575,16 @@ impl SeriesController {
             THUMB_ARTWORK.1,
             window.window().scale_factor(),
         );
-        let load = self.episodes_load.get();
+        let instance = self.instance.get();
         for (episode_id, thumb) in wanted {
-            let (target, current) = (window.as_weak(), Rc::clone(&self.episodes_load));
-            self.loads
-                .track(load_into(app, id, &images, thumb, size, move |image| {
+            let (target, current) = (window.as_weak(), Rc::clone(&self.instance));
+            let key = format!("{episode_id} {}", thumb.tag);
+            self.loads.once(key, || {
+                load_into(app, id, &images, thumb, size, move |image| {
                     let Some(window) = target.upgrade() else {
                         return;
                     };
-                    if current.get() != load {
+                    if current.get() != instance {
                         return;
                     }
                     let rows = window.get_series_episodes();
@@ -537,7 +597,8 @@ impl SeriesController {
                             break;
                         }
                     }
-                }));
+                })
+            });
         }
     }
 

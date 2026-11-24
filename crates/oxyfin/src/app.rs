@@ -33,7 +33,7 @@ use crate::screens::series::SeriesController;
 use crate::screens::settings;
 use crate::screens::sign_in::SignInController;
 use crate::state::{
-    AppState, Effect, GenerationId, LibraryTab, Msg, Notice, Screen, SessionInfo, Tab,
+    AppState, Effect, GenerationId, LibraryTab, Msg, Notice, Screen, SessionEnd, SessionInfo, Tab,
 };
 use crate::{AppWindow, Message, NoticeData, TopBarPage};
 
@@ -59,11 +59,17 @@ type FolderOpener = dyn Fn(&std::path::Path);
 /// Puts text on the clipboard of a window and tells whether it got there.
 type Clipboard = dyn Fn(&AppWindow, &str) -> bool;
 
+/// Changes of a list that wait until nothing points at it.
+type Waiting = Vec<Box<dyn FnOnce(&Rc<App>)>>;
+
 /// How long a notice that needs no action stays on screen.
 pub const NOTICE_DURATION: Duration = Duration::from_secs(5);
 
 /// How long the volume stays unchanged before it is saved.
 pub const VOLUME_SAVE_DELAY: Duration = Duration::from_secs(1);
+
+/// How long nothing on screen is pointed at before the changes that wait for it are shown.
+const RELEASE_DELAY: Duration = Duration::from_millis(250);
 
 /// The running application, living on the Slint thread.
 ///
@@ -90,6 +96,8 @@ pub struct App {
     pending_volume: Cell<Option<f64>>,
     sheets: RefCell<crate::images::SheetCache>,
     back_cache: RefCell<BackCache<Parked>>,
+    waiting: RefCell<Waiting>,
+    release_timer: Timer,
     #[cfg(feature = "mpv")]
     video: crate::video::VideoSource,
     #[cfg(feature = "mpv")]
@@ -155,6 +163,8 @@ impl App {
             pending_volume: Cell::new(None),
             sheets: RefCell::default(),
             back_cache: RefCell::default(),
+            waiting: RefCell::default(),
+            release_timer: Timer::default(),
             #[cfg(feature = "mpv")]
             video: Default::default(),
             #[cfg(feature = "mpv")]
@@ -276,6 +286,48 @@ impl App {
         let (generation, ..) = self.services()?;
         let depth = self.top_depth();
         self.back_cache.borrow_mut().take(depth, screen, generation)
+    }
+
+    /// Runs `change`, which adds, removes or moves what is on screen, once the pointer rests on
+    /// nothing it could move and no menu is open; at the latest when another page shows.
+    pub(crate) fn when_free(self: &Rc<Self>, change: impl FnOnce(&Rc<App>) + 'static) {
+        if self
+            .window()
+            .is_some_and(|window| window.get_content_held())
+        {
+            self.waiting.borrow_mut().push(Box::new(change));
+        } else {
+            change(self);
+        }
+    }
+
+    fn run_waiting(self: &Rc<Self>) {
+        let waiting = std::mem::take(&mut *self.waiting.borrow_mut());
+        for change in waiting {
+            change(self);
+        }
+    }
+
+    /// The pointer left what it rested on, perhaps only to reach what is beside it.
+    fn content_released(&self) {
+        let this = self.this.clone();
+        self.release_timer
+            .start(TimerMode::SingleShot, RELEASE_DELAY, move || {
+                let Some(app) = this.upgrade() else { return };
+                if app
+                    .window()
+                    .is_some_and(|window| !window.get_content_held())
+                {
+                    app.run_waiting();
+                }
+            });
+    }
+
+    /// Forgets the answers kept for the pages: what the user did made them wrong.
+    fn forget_answers(&self) {
+        if let Some((_, catalog, _)) = self.services() {
+            catalog.forget_answers();
+        }
     }
 
     /// Identifier, catalog and image cache of the current generation.
@@ -434,6 +486,8 @@ impl App {
             player::reset(&window);
             player::show_quality(&window, self.manager.quality());
         }
+        // The position of what plays changes from now on.
+        self.forget_answers();
         self.check_subtitle_permission();
         handle.send(PlaybackCommand::Play { item, mode });
         self.dispatch(Msg::OpenPlayer);
@@ -628,6 +682,7 @@ impl App {
         let ended = event == PlaybackEvent::Ended;
         if stopped {
             self.sheets.borrow_mut().clear();
+            self.forget_answers();
         }
         if let PlaybackEvent::NextUpCountdown { episode, .. }
         | PlaybackEvent::NextUpReady { episode } = &event
@@ -916,6 +971,7 @@ impl App {
         let Some((_, _, images)) = self.services() else {
             return;
         };
+        self.forget_answers();
         if let Some(window) = self.window() {
             window.set_settings_image_cache_kb(-1);
         }
@@ -1209,6 +1265,7 @@ impl App {
                 }
             }
         };
+        window.on_content_released(with(|app| app.content_released()));
         window.on_open_quick_connect(with(|app| app.sign_in.open_quick_connect(app)));
         window.on_cancel_quick_connect(with(|app| app.dispatch(Msg::CloseQuickConnect)));
         window.on_retry_quick_connect(with(|app| app.sign_in.start_quick_connect(app)));
@@ -1545,6 +1602,7 @@ impl App {
             }
             Effect::EndGeneration { id, end } => {
                 self.back_cache.borrow_mut().clear();
+                self.waiting.borrow_mut().clear();
                 self.library.end_generation();
                 let generation = {
                     let mut current = self.generation.borrow_mut();
@@ -1557,6 +1615,10 @@ impl App {
                     log::error!("generation {id:?} is not the current one");
                     return;
                 };
+                match end {
+                    SessionEnd::Close => generation.catalog.save_answers(),
+                    SessionEnd::SignOut | SessionEnd::Expire => generation.catalog.close(),
+                }
                 let manager = self.manager();
                 let (done, ended) = tokio::sync::oneshot::channel();
                 let task = self.runtime.spawn(async move {
@@ -1574,6 +1636,7 @@ impl App {
                 });
             }
             Effect::Show(screen) => {
+                self.run_waiting();
                 let previous = self.shown.replace(screen.clone());
                 self.page.set(self.page.get() + 1);
                 self.back_cache

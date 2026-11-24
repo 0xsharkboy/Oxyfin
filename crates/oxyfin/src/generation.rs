@@ -36,11 +36,12 @@ pub struct Generation {
 
 impl Generation {
     /// Creates the services of a session. Must run inside the Tokio runtime,
-    /// where the image cache starts its background trim.
+    /// where the image cache starts its background trim. The catalog starts from the answers
+    /// the last session of the account left on disk.
     pub fn new(id: GenerationId, session: Session, paths: &Paths) -> Self {
         Self {
             id,
-            catalog: Catalog::new(session.clone()),
+            catalog: Catalog::on_disk(session.clone(), paths),
             images: Arc::new(ImageCache::new(
                 session.clone(),
                 paths,

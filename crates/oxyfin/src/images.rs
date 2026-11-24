@@ -96,19 +96,35 @@ fn load(
 
 /// The image loads of one page, aborted together when the page shows something else.
 #[derive(Default)]
-pub(crate) struct PageLoads(RefCell<Vec<AbortHandle>>);
+pub(crate) struct PageLoads(RefCell<Vec<(Option<String>, AbortHandle)>>);
 
 impl PageLoads {
     /// Keeps `load` to abort it with the others.
     pub(crate) fn track(&self, load: AbortHandle) {
+        self.push(None, load);
+    }
+
+    /// Starts the load of `key` with `load` unless it is already running, and keeps it.
+    pub(crate) fn once(&self, key: String, load: impl FnOnce() -> AbortHandle) {
+        let running = self
+            .0
+            .borrow()
+            .iter()
+            .any(|(kept, load)| !load.is_finished() && kept.as_ref() == Some(&key));
+        if !running {
+            self.push(Some(key), load());
+        }
+    }
+
+    fn push(&self, key: Option<String>, load: AbortHandle) {
         let mut loads = self.0.borrow_mut();
-        loads.retain(|kept| !kept.is_finished());
-        loads.push(load);
+        loads.retain(|(_, kept)| !kept.is_finished());
+        loads.push((key, load));
     }
 
     /// Aborts every load still running.
     pub(crate) fn abort(&self) {
-        for load in self.0.borrow_mut().drain(..) {
+        for (_, load) in self.0.borrow_mut().drain(..) {
             load.abort();
         }
     }
@@ -260,6 +276,28 @@ mod tests {
             assert!(error.is_cancelled());
         }
         assert!(loads.0.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_load_already_running_is_not_started_again() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        let loads = PageLoads::default();
+        let started = std::cell::Cell::new(0);
+        let start = |key: &str| {
+            loads.once(key.to_owned(), || {
+                started.set(started.get() + 1);
+                runtime.spawn(std::future::pending::<()>()).abort_handle()
+            });
+        };
+        start("a");
+        start("a");
+        start("b");
+        assert_eq!(started.get(), 2);
+        loads.abort();
+        start("a");
+        assert_eq!(started.get(), 3, "an aborted load starts again");
     }
 
     #[test]

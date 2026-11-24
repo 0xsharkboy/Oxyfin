@@ -20,6 +20,7 @@ import { CollectionScreen, CollectionData } from "screens/collection.slint";
 import { TopBarPage } from "components/top_bar.slint";
 import { NoticeBanner, NoticeData } from "components/notice_banner.slint";
 import { HoverCard, HoverCardOverlay, HoverDetails, HoverKind } from "components/hover_card.slint";
+import { Pointed } from "components/pointed.slint";
 import { ContextMenu, ContextMenuOverlay, MenuAction, MenuEntry } from "components/context_menu.slint";
 import { Shortcut, ShortcutKey, Shortcuts, ShortcutsOverlay } from "components/shortcuts_overlay.slint";
 
@@ -302,6 +303,15 @@ export component AppWindow inherits Window {
     callback dismiss-notice();
     callback undo-notice();
 
+    // True while the pointer rests on something that must not move, or a menu is open over it.
+    out property <bool> content-held: Pointed.holder != 0 || ContextMenu.open;
+    callback content-released();
+    changed content-held => {
+        if !root.content-held {
+            root.content-released();
+        }
+    }
+
     title: "Oxyfin";
     background: transparent;
     default-font-family: "Inter";
@@ -312,6 +322,7 @@ export component AppWindow inherits Window {
     // The screens that take no focus of their own leave it here, where F11 works.
     changed screen => {
         HoverCard.hide();
+        Pointed.reset();
         ContextMenu.close();
         ContextMenu.focus-id = "";
         Shortcuts.close();

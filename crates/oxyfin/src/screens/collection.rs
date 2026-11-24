@@ -11,6 +11,7 @@ use crate::app::App;
 use crate::back_cache::Parked;
 use crate::images::{PageLoads, load_artwork};
 use crate::present::{core_error_message, image_size};
+use crate::rows;
 use crate::screens::home::{banner_artwork, banner_box};
 use crate::screens::library::{cards_with_posters, load_posters, open_detail, target_of};
 use crate::state::{GenerationId, Msg, Screen};
@@ -226,13 +227,22 @@ impl CollectionController {
         };
         self.load.set(self.load.get() + 1);
         let load = self.load.get();
+        let last = match &*self.details.borrow() {
+            Some(_) => None,
+            None => catalog.last_collection(&ItemId::from(collection.as_str())),
+        };
+        let behind = last.is_some();
         if let Some(window) = app.window() {
             window.set_collection_error(SharedString::default());
+            if let Some(details) = last {
+                *self.details.borrow_mut() = Some(details);
+                self.publish(app, id, &window);
+            }
             window.set_collection_loading(self.details.borrow().is_none());
         }
         app.spawn(
             async move { catalog.collection(&ItemId::from(collection.as_str())).await },
-            move |app, result| app.collection.answered(app, load, id, result),
+            move |app, result| app.collection.answered(app, load, id, behind, result),
         );
     }
 
@@ -241,6 +251,7 @@ impl CollectionController {
         app: &Rc<App>,
         load: u64,
         id: GenerationId,
+        behind: bool,
         result: Result<CollectionDetails, CoreError>,
     ) {
         if self.load.get() != load || app.services().is_none_or(|(current, ..)| current != id) {
@@ -250,8 +261,32 @@ impl CollectionController {
         window.set_collection_loading(false);
         match result {
             Ok(details) => {
-                *self.details.borrow_mut() = Some(details);
-                self.publish(app, id, &window);
+                let shown = self.details.borrow().clone();
+                if shown.as_ref() == Some(&details) {
+                    return;
+                }
+                let moves = behind
+                    && shown.is_some_and(|shown| {
+                        let ids = |details: &CollectionDetails| -> Vec<ItemId> {
+                            details.items.iter().map(|item| item.id.clone()).collect()
+                        };
+                        ids(&shown) != ids(&details)
+                    });
+                let show = move |app: &Rc<App>| {
+                    let controller = &app.collection;
+                    if controller.load.get() != load {
+                        return;
+                    }
+                    if let Some(window) = app.window() {
+                        *controller.details.borrow_mut() = Some(details);
+                        controller.publish(app, id, &window);
+                    }
+                };
+                if moves {
+                    app.when_free(show);
+                } else {
+                    show(app);
+                }
             }
             Err(CoreError::SessionExpired) => app.dispatch(Msg::Expired(id)),
             Err(error) => {
@@ -262,6 +297,8 @@ impl CollectionController {
                         .global::<Messages>()
                         .invoke_message_text(message, detail);
                     window.set_collection_error(text);
+                } else if behind {
+                    app.notify(core_error_message(&error).0);
                 }
             }
         }
@@ -275,7 +312,7 @@ impl CollectionController {
         window.set_collection_data(collection_data(details));
         let previous: Vec<CardData> = self.cards.iter().collect();
         let (cards, missing) = cards_with_posters(&details.items, &previous);
-        self.cards.set_vec(cards);
+        rows::update(&self.cards, cards);
         window.set_collection_items(ModelRc::from(Rc::clone(&self.cards)));
         window.set_collection_loaded(true);
         load_posters(app, id, window, &self.cards, &missing, &self.loads);

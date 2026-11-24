@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
 import { ContextMenu } from "context_menu.slint";
+import { Pointed } from "pointed.slint";
 import { Icons } from "../icons.slint";
 import { BodyStrongText } from "text.slint";
 
@@ -26,6 +27,16 @@ export component Button inherits Rectangle {
         activate();
     }
     forward-focus: focus;
+
+    property <int> pointing;
+    property <bool> hovered: touch.has-hover;
+    changed hovered => {
+        if root.hovered {
+            root.pointing = Pointed.enter();
+        } else {
+            Pointed.leave(root.pointing);
+        }
+    }
 
     border-radius: Theme.radius-md;
     background: style == ButtonStyle.primary ? Theme.accent : style == ButtonStyle.secondary ? Theme.bg-hover : (touch.has-hover && enabled ? Theme.bg-hover : transparent);

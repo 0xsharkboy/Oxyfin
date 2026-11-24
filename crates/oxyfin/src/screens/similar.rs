@@ -9,6 +9,7 @@ use slint::{Model, ModelRc, VecModel};
 
 use crate::app::App;
 use crate::images::PageLoads;
+use crate::rows;
 use crate::screens::library::{cards_with_posters, load_posters, open_detail, target_of};
 use crate::state::{GenerationId, Msg};
 use crate::{AppWindow, CardData};
@@ -105,13 +106,26 @@ impl SimilarRow {
         };
         let item = ItemId::from(item);
         let instance = self.instance.get();
+        let cards = Rc::clone(&self.cards.borrow());
+        let last = catalog
+            .last_similar(&item, LIMIT)
+            .filter(|_| !self.answered.get());
+        // The server can list the same titles in another order each time.
+        let kept = last.is_some();
+        if let (Some(found), Some(window)) = (last, app.window()) {
+            let (shown, missing) = cards_with_posters(&found, &[]);
+            cards.set_vec(shown);
+            *self.items.borrow_mut() = found;
+            self.answered.set(true);
+            publish(&window, ModelRc::from(Rc::clone(&cards)));
+            load_posters(app, id, &window, &cards, &missing, &self.loads);
+        }
         let (current, items, loads, answered) = (
             Rc::clone(&self.instance),
             Rc::clone(&self.items),
             Rc::clone(&self.loads),
             Rc::clone(&self.answered),
         );
-        let cards = Rc::clone(&self.cards.borrow());
         app.spawn(
             async move { catalog.similar(&item, LIMIT).await },
             move |app, result| {
@@ -119,11 +133,25 @@ impl SimilarRow {
                     return;
                 }
                 match result {
-                    Ok(found) => {
+                    Ok(mut found) => {
                         let Some(window) = app.window() else { return };
+                        if kept {
+                            // The row shown stays for this visit, with the new state of its titles.
+                            found = items
+                                .borrow()
+                                .iter()
+                                .map(|shown| {
+                                    found
+                                        .iter()
+                                        .find(|new| new.id == shown.id)
+                                        .unwrap_or(shown)
+                                        .clone()
+                                })
+                                .collect();
+                        }
                         let previous: Vec<CardData> = cards.iter().collect();
                         let (shown, missing) = cards_with_posters(&found, &previous);
-                        cards.set_vec(shown);
+                        rows::update(&cards, shown);
                         *items.borrow_mut() = found;
                         answered.set(true);
                         publish(&window, ModelRc::from(Rc::clone(&cards)));

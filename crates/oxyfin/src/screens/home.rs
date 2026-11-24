@@ -10,6 +10,7 @@ use std::rc::Rc;
 use crate::app::App;
 use crate::images::{PageLoads, load_artwork, load_into};
 use crate::present::{card, core_error_message, detail_target, home_banner, image_size};
+use crate::rows;
 use crate::screens::library::open_detail;
 use crate::state::{GenerationId, Msg, Screen};
 use crate::{AppWindow, CardData, HomeBanner, HomeRow, HomeRowKind, HomeTitles, Messages};
@@ -38,7 +39,28 @@ enum RowKey {
 
 struct Slot {
     key: RowKey,
+    /// Items of the row, none when it shows an error.
+    items: Vec<ItemSummary>,
     cards: Rc<VecModel<CardData>>,
+}
+
+/// What a row shows.
+struct RowContent {
+    title: SharedString,
+    kind: HomeRowKind,
+    resume: bool,
+    error: SharedString,
+    items: Vec<ItemSummary>,
+    cards: Vec<CardData>,
+}
+
+/// A load of the home screen.
+#[derive(Clone, Copy)]
+struct Load {
+    number: u64,
+    id: GenerationId,
+    /// The screen shows the last answers: what moves them waits until nothing points at them.
+    behind: bool,
 }
 
 /// What the banner is picked from, once every source has answered.
@@ -121,11 +143,18 @@ impl HomeController {
         if let Some(window) = app.window() {
             window.set_home_rows(ModelRc::from(Rc::clone(&self.rows)));
             window.set_home_settled(false);
-            if first {
-                window.set_home_loading(true);
-            }
         }
-        let load = self.load.get();
+        let behind = first && self.show_last(app, id, &catalog);
+        if let Some(window) = app.window()
+            && first
+        {
+            window.set_home_loading(!behind);
+        }
+        let load = Load {
+            number: self.load.get(),
+            id,
+            behind,
+        };
         *self.featured.borrow_mut() = Featured {
             pending: 2,
             ..Featured::default()
@@ -135,14 +164,14 @@ impl HomeController {
         app.spawn(
             async move { source.continue_watching(CONTINUE_WATCHING_LIMIT).await },
             move |app, result| {
-                if !app.home.current(app, load, id) {
+                if !app.home.current(app, load) {
                     return;
                 }
-                let items = result.as_ref().ok().cloned().unwrap_or_default();
+                let key = RowKey::ContinueWatching;
+                let items = app.home.answered_items(&key, &result);
+                app.home.row_answered(app, load, key, "", result);
                 app.home
-                    .row_loaded(app, id, RowKey::ContinueWatching, result);
-                app.home
-                    .settle(app, load, id, |featured| featured.continue_watching = items);
+                    .settle(app, load, |featured| featured.continue_watching = items);
             },
         );
 
@@ -150,8 +179,8 @@ impl HomeController {
         app.spawn(
             async move { source.next_up(NEXT_UP_LIMIT).await },
             move |app, result| {
-                if app.home.current(app, load, id) {
-                    app.home.row_loaded(app, id, RowKey::NextUp, result);
+                if app.home.current(app, load) {
+                    app.home.row_answered(app, load, RowKey::NextUp, "", result);
                 }
             },
         );
@@ -163,52 +192,173 @@ impl HomeController {
                 (source, libraries)
             },
             move |app, (catalog, result)| {
-                if app.home.current(app, load, id) {
-                    app.home.libraries_loaded(app, load, id, catalog, result);
+                if app.home.current(app, load) {
+                    app.home.libraries_loaded(app, load, catalog, result);
                 }
             },
         );
     }
 
-    fn current(&self, app: &App, load: u64, id: GenerationId) -> bool {
-        self.load.get() == load && app.services().is_some_and(|(current, ..)| current == id)
+    /// Shows the last answers of the server, when they make the whole screen; tells whether they
+    /// do.
+    fn show_last(&self, app: &Rc<App>, id: GenerationId, catalog: &Catalog) -> bool {
+        let (Some(resume), Some(next_up), Some(libraries)) = (
+            catalog.last_continue_watching(CONTINUE_WATCHING_LIMIT),
+            catalog.last_next_up(NEXT_UP_LIMIT),
+            catalog.last_libraries(),
+        ) else {
+            return false;
+        };
+        let latest: Option<Vec<Vec<ItemSummary>>> = libraries
+            .iter()
+            .map(|library| catalog.last_latest(&library.id, LATEST_LIMIT))
+            .collect();
+        let Some(latest) = latest else { return false };
+        self.set_layout(&libraries);
+        *self.featured.borrow_mut() = Featured {
+            pending: 0,
+            continue_watching: resume.clone(),
+            latest: latest.clone(),
+        };
+        self.show_banner(app);
+        self.show_row(app, id, RowKey::ContinueWatching, "", Ok(resume));
+        self.show_row(app, id, RowKey::NextUp, "", Ok(next_up));
+        for (library, items) in libraries.into_iter().zip(latest) {
+            let key = RowKey::Library(library.id);
+            self.show_row(app, id, key, &library.name, Ok(items));
+        }
+        true
     }
 
-    fn libraries_loaded(
-        &self,
-        app: &Rc<App>,
-        load: u64,
-        id: GenerationId,
-        catalog: Catalog,
-        result: CoreResult<Vec<Library>>,
-    ) {
-        let libraries = match result {
-            Ok(libraries) => libraries,
-            Err(CoreError::SessionExpired) => return app.dispatch(Msg::Expired(id)),
-            Err(error) => {
-                log::warn!("cannot list the libraries: {error}");
-                Vec::new()
-            }
-        };
+    fn set_layout(&self, libraries: &[Library]) {
         let mut layout = vec![RowKey::ContinueWatching, RowKey::NextUp];
         layout.extend(
             libraries
                 .iter()
                 .map(|library| RowKey::Library(library.id.clone())),
         );
-        let stale: Vec<RowKey> = self
-            .slots
+        *self.layout.borrow_mut() = layout;
+    }
+
+    fn current(&self, app: &App, load: Load) -> bool {
+        self.load.get() == load.number
+            && app
+                .services()
+                .is_some_and(|(current, ..)| current == load.id)
+    }
+
+    /// Items of the row `key`, none without that row.
+    fn items(&self, key: &RowKey) -> Vec<ItemSummary> {
+        self.slots
             .borrow()
             .iter()
-            .map(|slot| slot.key.clone())
-            .filter(|key| !layout.contains(key))
-            .collect();
-        *self.layout.borrow_mut() = layout;
-        for key in stale {
-            self.upsert(key, None);
+            .find(|slot| slot.key == *key)
+            .map(|slot| slot.items.clone())
+            .unwrap_or_default()
+    }
+
+    /// Items the banner picks from: those answered, or still shown when the answer failed.
+    fn answered_items(
+        &self,
+        key: &RowKey,
+        result: &CoreResult<Vec<ItemSummary>>,
+    ) -> Vec<ItemSummary> {
+        match result {
+            Ok(items) => items.clone(),
+            Err(_) => self.items(key),
+        }
+    }
+
+    /// Shows the answer for a row. Behind the last answers, an error keeps the row and is told,
+    /// and other items wait until nothing points at what they move.
+    fn row_answered(
+        &self,
+        app: &Rc<App>,
+        load: Load,
+        key: RowKey,
+        library_name: &str,
+        result: CoreResult<Vec<ItemSummary>>,
+    ) {
+        if !load.behind {
+            return self.show_row(app, load.id, key, library_name, result);
+        }
+        let items = match result {
+            Ok(items) => items,
+            Err(CoreError::SessionExpired) => return app.dispatch(Msg::Expired(load.id)),
+            Err(error) => {
+                log::warn!("cannot load the home row {key:?}: {error}");
+                return app.notify(core_error_message(&error).0);
+            }
+        };
+        let shown = self.items(&key);
+        if shown == items {
+            return;
+        }
+        let same = shown.len() == items.len()
+            && shown.iter().zip(&items).all(|(old, new)| old.id == new.id);
+        if same {
+            return self.show_row(app, load.id, key, library_name, Ok(items));
+        }
+        let library_name = library_name.to_owned();
+        app.when_free(move |app| {
+            if app.home.current(app, load) {
+                app.home
+                    .show_row(app, load.id, key, &library_name, Ok(items));
+            }
+        });
+    }
+
+    fn libraries_loaded(
+        &self,
+        app: &Rc<App>,
+        load: Load,
+        catalog: Catalog,
+        result: CoreResult<Vec<Library>>,
+    ) {
+        let libraries = match result {
+            Ok(libraries) => libraries,
+            Err(CoreError::SessionExpired) => return app.dispatch(Msg::Expired(load.id)),
+            Err(error) => {
+                log::warn!("cannot list the libraries: {error}");
+                if load.behind {
+                    app.notify(core_error_message(&error).0);
+                    let layout = self.layout.borrow().clone();
+                    let latest = layout
+                        .iter()
+                        .filter(|key| matches!(key, RowKey::Library(_)))
+                        .map(|key| self.items(key))
+                        .collect();
+                    return self.settle(app, load, |featured| featured.latest = latest);
+                }
+                Vec::new()
+            }
+        };
+        self.set_layout(&libraries);
+        let stale: Vec<RowKey> = {
+            let layout = self.layout.borrow();
+            self.slots
+                .borrow()
+                .iter()
+                .map(|slot| slot.key.clone())
+                .filter(|key| !layout.contains(key))
+                .collect()
+        };
+        if !stale.is_empty() {
+            let remove = move |app: &Rc<App>| {
+                if app.home.current(app, load) {
+                    for key in stale {
+                        app.home.upsert(key, None);
+                    }
+                }
+            };
+            if load.behind {
+                app.when_free(remove);
+            } else {
+                remove(app);
+            }
         }
 
-        self.settle(app, load, id, |featured| {
+        self.settle(app, load, |featured| {
             featured.pending += libraries.len();
             featured.latest = vec![Vec::new(); libraries.len()];
         });
@@ -218,14 +368,13 @@ impl HomeController {
             app.spawn(
                 async move { source.latest(&library_id, LATEST_LIMIT).await },
                 move |app, result| {
-                    if !app.home.current(app, load, id) {
+                    if !app.home.current(app, load) {
                         return;
                     }
-                    let items = result.as_ref().ok().cloned().unwrap_or_default();
                     let key = RowKey::Library(library.id.clone());
-                    app.home
-                        .row_loaded_titled(app, id, key, &library.name, result);
-                    app.home.settle(app, load, id, |featured| {
+                    let items = app.home.answered_items(&key, &result);
+                    app.home.row_answered(app, load, key, &library.name, result);
+                    app.home.settle(app, load, |featured| {
                         if let Some(slot) = featured.latest.get_mut(index) {
                             *slot = items;
                         }
@@ -235,17 +384,7 @@ impl HomeController {
         }
     }
 
-    fn row_loaded(
-        &self,
-        app: &Rc<App>,
-        id: GenerationId,
-        key: RowKey,
-        result: CoreResult<Vec<ItemSummary>>,
-    ) {
-        self.row_loaded_titled(app, id, key, "", result);
-    }
-
-    fn row_loaded_titled(
+    fn show_row(
         &self,
         app: &Rc<App>,
         id: GenerationId,
@@ -276,14 +415,15 @@ impl HomeController {
                 let text = window
                     .global::<Messages>()
                     .invoke_message_text(message, detail);
-                let row = HomeRow {
+                let row = RowContent {
                     title,
                     kind,
-                    items: ModelRc::default(),
-                    error: text,
                     resume,
+                    error: text,
+                    items: Vec::new(),
+                    cards: Vec::new(),
                 };
-                return self.upsert(key, Some((row, Rc::new(VecModel::default()))));
+                return self.upsert(key, Some(row));
             }
         };
 
@@ -306,20 +446,20 @@ impl HomeController {
                         data.image = image.clone();
                         data.has_image = true;
                     }
-                    None => missing.push(item),
+                    None => missing.push(item.clone()),
                 }
                 data
             })
             .collect();
-        let cards = Rc::new(VecModel::from(cards));
-        let row = HomeRow {
+        let row = RowContent {
             title: title.clone(),
             kind,
-            items: ModelRc::from(Rc::clone(&cards)),
-            error: SharedString::default(),
             resume,
+            error: SharedString::default(),
+            items,
+            cards,
         };
-        self.upsert(key, Some((row, cards)));
+        self.upsert(key, Some(row));
 
         let Some((generation, _, images)) = app.services() else {
             return;
@@ -340,18 +480,14 @@ impl HomeController {
             let target = window.as_weak();
             let row_title = title.clone();
             let item_id: SharedString = item.id.as_str().into();
-            self.loads.track(load_into(
-                app,
-                generation,
-                &images,
-                artwork,
-                size,
-                move |image| {
+            let load = format!("{row_title} {item_id} {}", artwork.tag);
+            self.loads.once(load, || {
+                load_into(app, generation, &images, artwork, size, move |image| {
                     if let Some(window) = target.upgrade() {
                         set_card_image(&window, &row_title, &item_id, image);
                     }
-                },
-            ));
+                })
+            });
         }
     }
 
@@ -380,39 +516,58 @@ impl HomeController {
             .unwrap_or(usize::MAX)
     }
 
-    fn upsert(&self, key: RowKey, row: Option<(HomeRow, Rc<VecModel<CardData>>)>) {
+    fn upsert(&self, key: RowKey, row: Option<RowContent>) {
         let mut slots = self.slots.borrow_mut();
         let existing = slots.iter().position(|slot| slot.key == key);
         match (existing, row) {
-            (Some(index), Some((row, cards))) => {
-                slots[index].cards = cards;
-                self.rows.set_row_data(index, row);
+            (Some(index), Some(content)) => {
+                let slot = &mut slots[index];
+                slot.items = content.items;
+                rows::update(&slot.cards, content.cards);
+                let row = HomeRow {
+                    title: content.title,
+                    kind: content.kind,
+                    items: ModelRc::from(Rc::clone(&slot.cards)),
+                    error: content.error,
+                    resume: content.resume,
+                };
+                // The row keeps its cards unless what stands around them changes.
+                if self.rows.row_data(index).as_ref() != Some(&row) {
+                    self.rows.set_row_data(index, row);
+                }
             }
             (Some(index), None) => {
                 slots.remove(index);
                 self.rows.remove(index);
             }
-            (None, Some((row, cards))) => {
+            (None, Some(content)) => {
+                let cards = Rc::new(VecModel::from(content.cards));
+                let row = HomeRow {
+                    title: content.title,
+                    kind: content.kind,
+                    items: ModelRc::from(Rc::clone(&cards)),
+                    error: content.error,
+                    resume: content.resume,
+                };
                 let rank = self.rank(&key);
                 let index = slots
                     .iter()
                     .take_while(|slot| self.rank(&slot.key) <= rank)
                     .count();
-                slots.insert(index, Slot { key, cards });
+                let slot = Slot {
+                    key,
+                    items: content.items,
+                    cards,
+                };
+                slots.insert(index, slot);
                 self.rows.insert(index, row);
             }
             (None, None) => {}
         }
     }
 
-    fn settle(
-        &self,
-        app: &Rc<App>,
-        load: u64,
-        id: GenerationId,
-        update: impl FnOnce(&mut Featured),
-    ) {
-        if !self.current(app, load, id) {
+    fn settle(&self, app: &Rc<App>, load: Load, update: impl FnOnce(&mut Featured)) {
+        if !self.current(app, load) {
             return;
         }
         let done = {
@@ -422,7 +577,20 @@ impl HomeController {
             featured.pending == 0
         };
         if done {
-            self.show_banner(app);
+            let shown = app.window().map(|window| window.get_home_banner());
+            let picked = self.picked().map(|(item, _)| item.id);
+            let same = shown.is_some_and(|shown| {
+                picked.as_ref().map(ItemId::as_str) == shown.has.then_some(shown.card.id.as_str())
+            });
+            if load.behind && !same {
+                app.when_free(move |app| {
+                    if app.home.current(app, load) {
+                        app.home.show_banner(app);
+                    }
+                });
+            } else {
+                self.show_banner(app);
+            }
             if let Some(window) = app.window() {
                 window.set_home_settled(true);
                 window.set_home_loading(false);
@@ -430,21 +598,21 @@ impl HomeController {
         }
     }
 
+    /// The item of the banner, and whether it is the first one to resume.
+    fn picked(&self) -> Option<(ItemSummary, bool)> {
+        let featured = self.featured.borrow();
+        let latest: Vec<ItemSummary> = featured.latest.iter().flatten().cloned().collect();
+        let item = Catalog::featured(&featured.continue_watching, &latest)?;
+        let resuming = featured
+            .continue_watching
+            .first()
+            .is_some_and(|first| first.id == item.id);
+        Some((item, resuming))
+    }
+
     fn show_banner(&self, app: &Rc<App>) {
         let Some(window) = app.window() else { return };
-        let (item, resuming) = {
-            let featured = self.featured.borrow();
-            let latest: Vec<ItemSummary> = featured.latest.iter().flatten().cloned().collect();
-            let item = Catalog::featured(&featured.continue_watching, &latest);
-            let resuming = item.as_ref().is_some_and(|item| {
-                featured
-                    .continue_watching
-                    .first()
-                    .is_some_and(|first| first.id == item.id)
-            });
-            (item, resuming)
-        };
-        let Some(item) = item else {
+        let Some((item, resuming)) = self.picked() else {
             window.set_home_banner(HomeBanner::default());
             return;
         };
@@ -459,10 +627,12 @@ impl HomeController {
         let mut banner = home_banner(&item, resuming, has_detail);
         let kept = previous.has && previous.card.id == banner.card.id && previous.card.has_image;
         if kept {
-            banner.card.image = previous.card.image;
+            banner.card.image = previous.card.image.clone();
             banner.card.has_image = true;
         }
-        window.set_home_banner(banner);
+        if banner != previous {
+            window.set_home_banner(banner);
+        }
         if !kept && let Some(backdrop) = banner_artwork(&item) {
             self.load_banner_image(app, &window, backdrop, item.id.as_str().into());
         }
@@ -483,13 +653,9 @@ impl HomeController {
         let (width, height) = banner_box(width);
         let size = image_size(width, height, scale);
         let target = window.as_weak();
-        self.loads.track(load_artwork(
-            app,
-            generation,
-            &images,
-            artwork,
-            size,
-            move |image| {
+        let load = format!("banner {item_id} {}", artwork.tag);
+        self.loads.once(load, || {
+            load_artwork(app, generation, &images, artwork, size, move |image| {
                 let Some(window) = target.upgrade() else {
                     return;
                 };
@@ -499,8 +665,8 @@ impl HomeController {
                     banner.card.has_image = true;
                     window.set_home_banner(banner);
                 }
-            },
-        ));
+            })
+        });
     }
 }
 
