@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { MouseBack } from "mouse_back.slint";
 import { Icons } from "../icons.slint";
 import { BodyText, DisplayText, LabelText } from "text.slint";
 import { Button, ButtonStyle } from "button.slint";
@@ -67,6 +68,9 @@ component CollectionLink inherits Rectangle {
 
     TouchArea {
         mouse-cursor: pointer;
+        pointer-event(event) => {
+            MouseBack.handle(event);
+        }
         clicked => {
             root.clicked();
         }

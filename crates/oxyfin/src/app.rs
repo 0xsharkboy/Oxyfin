@@ -35,7 +35,7 @@ use crate::screens::sign_in::SignInController;
 use crate::state::{
     AppState, Effect, GenerationId, LibraryTab, Msg, Notice, Screen, SessionEnd, SessionInfo, Tab,
 };
-use crate::{AppWindow, Message, NoticeData, TopBarPage};
+use crate::{AppWindow, Message, MouseBack, NoticeData, Shortcuts, TopBarPage};
 
 /// Logical size of the next episode thumbnail, as laid out by the toast.
 #[cfg(feature = "mpv")]
@@ -1347,6 +1347,15 @@ impl App {
         window.on_search_retry_more(with(|app| app.search.retry_more(app)));
         window.on_search_near_end(with(|app| app.search.near_end(app)));
         window.on_back(with(|app| app.dispatch(Msg::Back)));
+        window.global::<MouseBack>().on_pressed(with(|app| {
+            // The shortcuts dialog covers the page.
+            let covered = app
+                .window()
+                .is_some_and(|window| window.global::<Shortcuts>().get_open());
+            if !covered {
+                app.dispatch(Msg::Back);
+            }
+        }));
         window.on_movie_toggle_watched(with(|app| app.movie.toggle_watched(app)));
         window.on_movie_toggle_favorite(with(|app| app.movie.toggle_favorite(app)));
         window.on_movie_retry(with(|app| app.movie.retry(app)));

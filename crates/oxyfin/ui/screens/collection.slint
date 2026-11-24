@@ -1,4 +1,5 @@
 import { HoverCard } from "../components/hover_card.slint";
+import { MouseBack } from "../components/mouse_back.slint";
 import { ContextMenu } from "../components/context_menu.slint";
 import { Theme, CardData } from "../theme.slint";
 import { Icons } from "../icons.slint";
@@ -101,9 +102,7 @@ export component CollectionScreen inherits Rectangle {
                 width: flick.content-width;
                 height: flick.content-height;
                 pointer-event(event) => {
-                    if event.button == PointerEventButton.back && event.kind == PointerEventKind.up {
-                        root.back();
-                    }
+                    MouseBack.handle(event);
                 }
             }
 
@@ -211,9 +210,6 @@ export component CollectionScreen inherits Rectangle {
     }
 
     top-bar := TopBar {
-        back-pressed => {
-            root.back();
-        }
         scrolled-by: -flick.content-y;
         y: 0;
         height: self.preferred-height;

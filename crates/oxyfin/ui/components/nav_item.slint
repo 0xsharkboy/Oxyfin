@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { MouseBack } from "mouse_back.slint";
 import { ContextMenu } from "context_menu.slint";
 import { BodyText } from "text.slint";
 
@@ -8,8 +9,6 @@ export component NavItem inherits Rectangle {
     in property <bool> active;
     in property <bool> enabled: true;
     callback clicked();
-    // The mouse back button was pressed over it.
-    callback back-pressed();
 
     accessible-role: tab;
     accessible-label: label;
@@ -31,9 +30,7 @@ export component NavItem inherits Rectangle {
         enabled: root.enabled;
         mouse-cursor: root.enabled ? pointer : default;
         pointer-event(event) => {
-            if event.button == PointerEventButton.back && event.kind == PointerEventKind.up {
-                root.back-pressed();
-            }
+            MouseBack.handle(event);
         }
         clicked => {
             focus.focus();

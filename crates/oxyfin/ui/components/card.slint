@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { MouseBack } from "mouse_back.slint";
 import { Icons } from "../icons.slint";
 import { ProgressBar } from "progress_bar.slint";
 import { BodyStrongText, CaptionText } from "text.slint";
@@ -161,6 +162,7 @@ export component MediaCard {
         enabled: root.enabled;
         mouse-cursor: root.enabled ? pointer : default;
         pointer-event(event) => {
+            MouseBack.handle(event);
             if event.kind == PointerEventKind.move && HoverCard.held {
                 HoverCard.pointer-moved(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
             }

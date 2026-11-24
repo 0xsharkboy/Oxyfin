@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { MouseBack } from "mouse_back.slint";
 import { ContextMenu, MenuKeys } from "context_menu.slint";
 import { Icons } from "../icons.slint";
 import { CardStatus } from "card.slint";
@@ -55,6 +56,7 @@ export component EpisodeRow inherits Rectangle {
     touch := TouchArea {
         mouse-cursor: pointer;
         pointer-event(event) => {
+            MouseBack.handle(event);
             if event.button == PointerEventButton.right && event.kind == PointerEventKind.down && root.menu-id != "" {
                 ContextMenu.show(root.menu-id, false, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y, false, root.title, "");
             }

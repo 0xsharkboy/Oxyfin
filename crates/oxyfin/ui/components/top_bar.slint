@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { MouseBack } from "mouse_back.slint";
 import { Icons } from "../icons.slint";
 import { HeadingText } from "text.slint";
 import { NavItem } from "nav_item.slint";
@@ -18,8 +19,6 @@ export component TopBar inherits Rectangle {
     callback favorites-clicked();
     callback search-clicked();
     callback settings-clicked();
-    // The mouse back button was pressed over the bar.
-    callback back-pressed();
 
     accessible-role: tab-list;
     accessible-label: @tr("Navigation");
@@ -35,9 +34,7 @@ export component TopBar inherits Rectangle {
     // button as the page does.
     TouchArea {
         pointer-event(event) => {
-            if event.button == PointerEventButton.back && event.kind == PointerEventKind.up {
-                root.back-pressed();
-            }
+            MouseBack.handle(event);
         }
     }
 
@@ -73,18 +70,12 @@ export component TopBar inherits Rectangle {
             clicked => {
                 root.home-clicked();
             }
-            back-pressed => {
-                root.back-pressed();
-            }
         }
         NavItem {
             label: @tr("Movies");
             active: root.current == TopBarPage.movies;
             clicked => {
                 root.movies-clicked();
-            }
-            back-pressed => {
-                root.back-pressed();
             }
         }
         NavItem {
@@ -93,18 +84,12 @@ export component TopBar inherits Rectangle {
             clicked => {
                 root.shows-clicked();
             }
-            back-pressed => {
-                root.back-pressed();
-            }
         }
         NavItem {
             label: @tr("Favorites");
             active: root.current == TopBarPage.favorites;
             clicked => {
                 root.favorites-clicked();
-            }
-            back-pressed => {
-                root.back-pressed();
             }
         }
 
@@ -121,9 +106,6 @@ export component TopBar inherits Rectangle {
                 clicked => {
                     root.search-clicked();
                 }
-                back-pressed => {
-                    root.back-pressed();
-                }
             }
         }
         VerticalLayout {
@@ -134,9 +116,6 @@ export component TopBar inherits Rectangle {
                 active: root.settings-active;
                 clicked => {
                     root.settings-clicked();
-                }
-                back-pressed => {
-                    root.back-pressed();
                 }
             }
         }
