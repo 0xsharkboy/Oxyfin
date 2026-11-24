@@ -309,7 +309,8 @@ impl App {
         }
     }
 
-    fn run_waiting(self: &Rc<Self>) {
+    /// Runs what [`App::when_free`] held back.
+    pub(crate) fn run_waiting(self: &Rc<Self>) {
         let waiting = std::mem::take(&mut *self.waiting.borrow_mut());
         for change in waiting {
             change(self);

@@ -130,14 +130,21 @@ impl Respond for Listing {
         }
         let query = request.url.query().unwrap_or("");
         let movies = has_param(query, "includeItemTypes", "Movie");
-        let items: Vec<serde_json::Value> = held
-            .movies
+        let all: &[usize] = if movies { &held.movies } else { &[] };
+        let param = |key: &str| {
+            query.split('&').find_map(|pair| {
+                pair.strip_prefix(&format!("{key}="))
+                    .and_then(|value| value.parse::<usize>().ok())
+            })
+        };
+        let start = param("startIndex").unwrap_or(0).min(all.len());
+        let end = (start + param("limit").unwrap_or(all.len())).min(all.len());
+        let items: Vec<serde_json::Value> = all[start..end]
             .iter()
-            .filter(|_| movies)
             .map(|number| Answers::movie(&held, *number))
             .collect();
         let answer = json(
-            serde_json::json!({"Items": items, "TotalRecordCount": items.len(), "StartIndex": 0})
+            serde_json::json!({"Items": items, "TotalRecordCount": all.len(), "StartIndex": start})
                 .to_string(),
         );
         match held.slow {

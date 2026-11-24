@@ -137,6 +137,8 @@ pub(crate) struct LibraryController {
     genre_names: Rc<VecModel<SharedString>>,
     total: Cell<u32>,
     in_flight: Cell<bool>,
+    // An answer waits until nothing points at what it moves.
+    held_back: Cell<bool>,
     // The end of the grid came near while a request was on its way.
     more_wanted: Cell<bool>,
     // First item and number of items of the last request.
@@ -299,6 +301,11 @@ impl LibraryController {
     /// The end of the grid is near: asks for the next page when there is one.
     pub(crate) fn near_end(&self, app: &Rc<App>) {
         let loaded = self.items.borrow().len();
+        if self.held_back.get() && loaded < self.total.get() as usize {
+            // Scrolling moves the cards anyway, and the next page follows that answer.
+            self.more_wanted.set(true);
+            return app.run_waiting();
+        }
         self.more_wanted.set(self.in_flight.get());
         if self.tab.get().is_some()
             && !self.more_failed.get()
@@ -382,6 +389,7 @@ impl LibraryController {
         self.tab.set(None);
         self.in_flight.set(false);
         self.more_wanted.set(false);
+        self.held_back.set(false);
         self.more_failed.set(false);
         self.ready.set(false);
         self.total.set(0);
@@ -447,6 +455,7 @@ impl LibraryController {
         self.load.set(self.load.get() + 1);
         let load = self.load.get();
         self.in_flight.set(true);
+        self.held_back.set(false);
         self.asked.set((start, limit));
         self.more_failed.set(false);
         if start == 0 && ask == Ask::First {
@@ -490,12 +499,14 @@ impl LibraryController {
             && !self.holds_items(&page.items)
         {
             let page = page.clone();
+            self.held_back.set(true);
             // Still in flight: a change made meanwhile asks for it again.
             return app.when_free(move |app| {
                 let controller = &app.library;
                 if let Some(window) = app.window()
                     && controller.current(app, load, id)
                 {
+                    controller.held_back.set(false);
                     controller.in_flight.set(false);
                     controller.show_page(app, id, &window, start, page);
                     controller.resume_more(app);
