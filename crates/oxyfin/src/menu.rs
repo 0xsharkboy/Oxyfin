@@ -376,6 +376,9 @@ impl MenuController {
         let Some((generation, catalog, _)) = app.services() else {
             return;
         };
+        if let Some(window) = app.window() {
+            window.global::<ContextMenu>().invoke_change_sent();
+        }
         let item = id.clone();
         app.spawn(
             async move {
@@ -386,6 +389,9 @@ impl MenuController {
                 }
             },
             move |app, result| {
+                if let Some(window) = app.window() {
+                    window.global::<ContextMenu>().invoke_change_answered();
+                }
                 if app
                     .services()
                     .is_none_or(|(current, ..)| current != generation)

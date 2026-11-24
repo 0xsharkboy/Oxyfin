@@ -70,6 +70,8 @@ export global ContextMenu {
     in-out property <string> focus-row;
     // Row of cards of the element the menu was opened on.
     in-out property <string> opener-row;
+    // Changes of items sent to the server that it has not answered yet.
+    out property <int> changes-pending;
     // Checks left before the window stops watching for an element that keeps the focus.
     property <int> checks-left;
     // While `focus-id` is set, the window asks with `focus-check` and the element holding the
@@ -159,15 +161,28 @@ export global ContextMenu {
         self.pointer-y = y;
     }
 
-    // The element holding the focus answered a check: after a while its row will not be rebuilt
-    // any more.
+    // The element holding the focus answered a check: a while after the answer of the server, its
+    // row will not be rebuilt any more.
     public function focus-held() {
-        self.checks-left -= 1;
+        if self.changes-pending <= 0 {
+            self.checks-left -= 1;
+        }
         if self.checks-left <= 0 {
             self.focus-id = "";
         } else {
             self.focus-check += 1;
         }
+    }
+
+    // A change of an item was sent to the server.
+    public function change-sent() {
+        self.changes-pending += 1;
+    }
+
+    // The server answered a change: what it rebuilds comes next.
+    public function change-answered() {
+        self.changes-pending -= 1;
+        self.checks-left = Theme.focus-check-limit;
     }
 
     // Another control took the focus: it keeps it.

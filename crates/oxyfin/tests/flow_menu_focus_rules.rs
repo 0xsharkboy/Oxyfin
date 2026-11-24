@@ -8,7 +8,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use i_slint_backend_testing::{AccessibleRole, ElementHandle};
-use oxyfin::{AppWindow, Screen};
+use oxyfin::{AppWindow, CardData, HomeRow, HomeRowKind, Screen};
 use page::{MenuPage, PageCard};
 use slint::platform::{Key, PointerEventButton, WindowEvent};
 use slint::{ComponentHandle, LogicalPosition, ModelRc, VecModel};
@@ -190,4 +190,73 @@ fn the_window_stops_watching_for_the_focus() {
         menu.set_focus_answer(menu.get_focus_check());
     }
     assert_eq!(menu.get_focus_id(), "", "still watched after 50 s");
+}
+
+fn home_rows() -> ModelRc<HomeRow> {
+    ModelRc::new(VecModel::from(vec![HomeRow {
+        title: "Recently Added".into(),
+        kind: HomeRowKind::Poster,
+        items: ModelRc::new(VecModel::from(vec![CardData {
+            id: "there".into(),
+            title: "There".into(),
+            ..CardData::default()
+        }])),
+        ..HomeRow::default()
+    }]))
+}
+
+/// A home screen whose card had a row of its menu chosen from the keyboard, with the number of
+/// times the card was opened.
+fn chosen_from_a_card() -> (AppWindow, Rc<Cell<u32>>) {
+    let (window, _) = home_window();
+    window.set_home_rows(home_rows());
+    let opened = Rc::new(Cell::new(0));
+    let count = Rc::clone(&opened);
+    window.on_open_item(move |_| count.set(count.get() + 1));
+    common::click(&window, &home_card(&window));
+    assert_eq!(opened.replace(0), 1, "the card opens");
+    press(&window, Key::Menu);
+    let menu = window.global::<oxyfin::ContextMenu>();
+    assert!(menu.get_open(), "the menu key opens the menu");
+    menu.invoke_choose(oxyfin::MenuAction::AddFavorite);
+    (window, opened)
+}
+
+fn home_card(window: &AppWindow) -> ElementHandle {
+    ElementHandle::find_by_accessible_label(window, "There")
+        .next()
+        .unwrap_or_else(|| panic!("no card"))
+}
+
+/// Builds the rows again, as an answer of the server does.
+fn rebuild(window: &AppWindow) {
+    window.set_home_rows(home_rows());
+    let _ = home_card(window);
+}
+
+#[test]
+fn every_rebuild_gives_the_focus_back() {
+    let (window, opened) = chosen_from_a_card();
+    // The change reloads the rows, then their images or a second source build them again.
+    for _ in 0..3 {
+        rebuild(&window);
+        elapse(2);
+    }
+    press(&window, Key::Return);
+    assert_eq!(opened.get(), 1, "a rebuilt card lost the focus");
+}
+
+#[test]
+fn the_watch_starts_to_end_once_the_server_answered() {
+    let (window, opened) = chosen_from_a_card();
+    let menu = window.global::<oxyfin::ContextMenu>();
+    menu.invoke_change_sent();
+    // A slow server: longer than the watch lasts.
+    elapse(100);
+    menu.invoke_change_answered();
+    rebuild(&window);
+    press(&window, Key::Return);
+    assert_eq!(opened.get(), 1, "the answer came after the watch ended");
+    elapse(100);
+    assert_eq!(menu.get_focus_id(), "", "still watched after the answer");
 }

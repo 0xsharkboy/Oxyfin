@@ -175,6 +175,14 @@ fn a_keyboard_menu_row_keeps_the_focus_through_a_rebuilt_row() {
 
         shift_f10(&window);
         choose_with_keys(&window, "Add to favorites").await?;
+        let menu = window.global::<ContextMenu>();
+        if menu.get_changes_pending() != 1 {
+            return Err("the window does not wait for the answer of the server".into());
+        }
+        wait_until("the answer of the server", || {
+            menu.get_changes_pending() == 0
+        })
+        .await?;
         // The change reloads the home rows, which builds the cards again.
         pause(Duration::from_millis(600)).await;
         shift_f10(&window);
