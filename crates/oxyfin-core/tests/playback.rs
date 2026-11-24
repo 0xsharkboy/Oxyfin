@@ -2598,18 +2598,87 @@ impl Harness {
     }
 }
 
+/// Whether a playback info request says the player draws the image subtitles of the file.
+fn embeds_image_subtitles(info: &Value) -> bool {
+    info["DeviceProfile"]["SubtitleProfiles"]
+        .as_array()
+        .is_some_and(|profiles| profiles.contains(&json!({"Format": "pgssub", "Method": "Embed"})))
+}
+
+/// The fixture answer with a French image subtitle (4) inside the file, shown by default.
+fn image_subtitle_info() -> Value {
+    let mut info = fixture("playback_info");
+    let source = &mut info["MediaSources"][0];
+    source["DefaultSubtitleStreamIndex"] = json!(4);
+    let streams = source["MediaStreams"].as_array_mut();
+    streams.unwrap_or_else(|| panic!("no streams")).push(json!({
+        "Index": 4,
+        "Type": "Subtitle",
+        "Codec": "PGSSUB",
+        "Language": "fre",
+        "IsExternal": false,
+        "IsTextSubtitleStream": false,
+        "DeliveryMethod": "Embed",
+    }));
+    info
+}
+
+fn image_subtitle_tracks() -> Vec<Track> {
+    let mut tracks = file_tracks();
+    tracks.push(track(7, TrackKind::Subtitle, 3, false));
+    tracks
+}
+
+#[tokio::test]
+async fn the_default_image_subtitle_of_the_file_is_selected_on_direct_play() {
+    let mock = MockServer::start().await;
+    mount_playback_info(&mock, image_subtitle_info()).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.play(PlayMode::FromStart).await;
+    let ready = h.loaded_with(image_subtitle_tracks()).await;
+    position_of(&h.player.calls(), &Call::SelectSubtitle(Some(TrackId(7))));
+    let PlaybackEvent::Ready { subtitles, .. } = ready else {
+        unreachable!();
+    };
+    let selected: Vec<i32> = subtitles
+        .iter()
+        .filter(|subtitle| subtitle.selected)
+        .map(|subtitle| subtitle.index)
+        .collect();
+    assert_eq!(selected, [4]);
+    let start = wait_requests(&h.mock, START, 1).await;
+    assert_eq!(start[0]["PlayMethod"], json!("DirectPlay"));
+    assert_eq!(start[0]["SubtitleStreamIndex"], json!(4));
+}
+
+#[tokio::test]
+async fn a_remembered_off_hides_the_default_image_subtitle_on_direct_play() {
+    let mock = MockServer::start().await;
+    mount_info_for(&mock, EPISODES[0], image_subtitle_info()).await;
+    let mut h = harness_in(
+        mock,
+        episode_timings(Duration::from_secs(3600)),
+        remembered_french(),
+    )
+    .await;
+    let calls = h.load_episode(EPISODES[0], image_subtitle_tracks()).await;
+    assert_eq!(selected_subtitles(&calls), [None], "{calls:?}");
+}
+
 #[tokio::test]
 async fn the_quality_limit_is_asked_of_the_server() {
     let mut h = harness(quiet()).await;
     h.play(PlayMode::Auto).await;
     let first = wait_requests(&h.mock, PLAYBACK_INFO, 1).await;
-    assert_eq!(first[0].get("MaxStreamingBitrate"), None);
+    assert_eq!(first[0]["MaxStreamingBitrate"], json!(1_000_000_000));
+    assert!(embeds_image_subtitles(&first[0]));
     assert!(first[0]["DeviceProfile"]["TranscodingProfiles"].is_array());
 
     h.handle.send(PlaybackCommand::SetQuality(LOW));
     h.play_item(OTHER_ID, PlayMode::Auto).await;
     let other = wait_requests(&h.mock, &format!("/Items/{OTHER_ID}/PlaybackInfo"), 1).await;
     assert_eq!(other[0]["MaxStreamingBitrate"], json!(1_500_000));
+    assert!(!embeds_image_subtitles(&other[0]));
 }
 
 #[tokio::test]

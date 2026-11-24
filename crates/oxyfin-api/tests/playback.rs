@@ -68,8 +68,8 @@ async fn playback_info_decodes() {
     }
 }
 
-/// The `PlaybackInfo` body every request carries, before the options.
-fn playback_info_body() -> serde_json::Value {
+/// The `PlaybackInfo` body of a request with a bitrate or height limit, before the options.
+fn limited_info_body() -> serde_json::Value {
     json!({
         "UserId": TEST_USER_ID,
         "EnableDirectPlay": true,
@@ -102,6 +102,36 @@ fn playback_info_body() -> serde_json::Value {
     })
 }
 
+/// The `PlaybackInfo` body of a request without any limit.
+fn playback_info_body() -> serde_json::Value {
+    let mut body = limited_info_body();
+    body["MaxStreamingBitrate"] = json!(1_000_000_000);
+    body["DeviceProfile"]["MaxStreamingBitrate"] = json!(1_000_000_000);
+    if let Some(profiles) = body["DeviceProfile"]["SubtitleProfiles"].as_array_mut() {
+        for format in [
+            "srt",
+            "subrip",
+            "ass",
+            "ssa",
+            "vtt",
+            "webvtt",
+            "mov_text",
+            "text",
+            "pgssub",
+            "pgs",
+            "hdmv_pgs_subtitle",
+            "dvdsub",
+            "dvd_subtitle",
+            "dvbsub",
+            "dvb_subtitle",
+            "xsub",
+        ] {
+            profiles.push(json!({ "Format": format, "Method": "Embed" }));
+        }
+    }
+    body
+}
+
 #[tokio::test]
 async fn playback_info_posts_the_device_profile() {
     let mock = MockServer::start().await;
@@ -125,7 +155,7 @@ async fn playback_info_posts_the_device_profile() {
 #[tokio::test]
 async fn playback_info_posts_the_bitrate_and_the_tracks() {
     let mock = MockServer::start().await;
-    let mut body = playback_info_body();
+    let mut body = limited_info_body();
     body["MaxStreamingBitrate"] = json!(4_000_000);
     body["MediaSourceId"] = json!("def");
     body["AudioStreamIndex"] = json!(3);
@@ -153,7 +183,7 @@ async fn playback_info_posts_the_bitrate_and_the_tracks() {
 #[tokio::test]
 async fn limited_quality_sends_a_height_condition() {
     let mock = MockServer::start().await;
-    let mut body = playback_info_body();
+    let mut body = limited_info_body();
     body["MaxStreamingBitrate"] = json!(1_500_000);
     body["DeviceProfile"]["CodecProfiles"] = json!([{
         "Type": "Video",

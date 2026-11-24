@@ -43,7 +43,7 @@ pub enum PlayMethod {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PlaybackOptions {
     /// Highest bitrate the player accepts, in bits per second: a file above it
-    /// is transcoded. `None` accepts any bitrate.
+    /// is transcoded. `None` accepts any bitrate the server allows the user.
     pub max_streaming_bitrate: Option<u64>,
     /// Media source the stream indexes belong to: the server ignores them
     /// without it.
@@ -114,8 +114,7 @@ impl<'a> ReportBody<'a> {
 #[serde(rename_all = "PascalCase")]
 struct PlaybackInfoBody<'a> {
     user_id: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    max_streaming_bitrate: Option<u64>,
+    max_streaming_bitrate: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     media_source_id: Option<&'a MediaSourceId>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -134,18 +133,52 @@ struct PlaybackInfoBody<'a> {
 /// Text subtitle formats the player loads as separate files.
 const TEXT_SUBTITLES: [&str; 6] = ["srt", "subrip", "ass", "ssa", "vtt", "webvtt"];
 
+/// Subtitle formats inside a file that mpv draws, as the server and FFmpeg name them.
+const EMBEDDED_SUBTITLES: [&str; 16] = [
+    "srt",
+    "subrip",
+    "ass",
+    "ssa",
+    "vtt",
+    "webvtt",
+    "mov_text",
+    "text",
+    "pgssub",
+    "pgs",
+    "hdmv_pgs_subtitle",
+    "dvdsub",
+    "dvd_subtitle",
+    "dvbsub",
+    "dvb_subtitle",
+    "xsub",
+];
+
+/// Bitrate asked for without a limit: a server told none assumes 8 Mbps.
+const ANY_BITRATE: u64 = 1_000_000_000;
+
 /// What the player can play, for the server to decide between direct play
 /// and transcoding.
 ///
 /// mpv plays nearly every container and codec, so direct play has no
 /// restriction and only the bitrate and height limits force a transcode.
 /// The transcode is H.264 in MPEG-TS over HLS, the most widely decodable,
-/// with text subtitles as separate files.
-fn device_profile(max_height: Option<u32>) -> Value {
-    let subtitles: Vec<Value> = TEXT_SUBTITLES
+/// with text subtitles as separate files. Without any limit, the subtitles
+/// inside the file never force a transcode; under one, an image subtitle
+/// shown by default does, as it is drawn into the picture then.
+fn device_profile(options: &PlaybackOptions) -> Value {
+    let unlimited = options.max_streaming_bitrate.is_none() && options.max_height.is_none();
+    let profile = |format: &&str, method: &str| json!({ "Format": format, "Method": method });
+    let mut subtitles: Vec<Value> = TEXT_SUBTITLES
         .iter()
-        .map(|format| json!({ "Format": format, "Method": "External" }))
+        .map(|format| profile(format, "External"))
         .collect();
+    if unlimited {
+        subtitles.extend(
+            EMBEDDED_SUBTITLES
+                .iter()
+                .map(|format| profile(format, "Embed")),
+        );
+    }
     let mut profile = json!({
         "Name": crate::CLIENT_NAME,
         "DirectPlayProfiles": [{ "Type": "Video" }, { "Type": "Audio" }],
@@ -160,7 +193,10 @@ fn device_profile(max_height: Option<u32>) -> Value {
         }],
         "SubtitleProfiles": subtitles,
     });
-    if let Some(height) = max_height {
+    if options.max_streaming_bitrate.is_none() {
+        profile["MaxStreamingBitrate"] = json!(ANY_BITRATE);
+    }
+    if let Some(height) = options.max_height {
         // Under a bitrate limit the server ignores a height alone, so the 16:9 width goes along.
         let width = (u64::from(height) * 16).div_ceil(9);
         let limit = |property: &str, value: u64| {
@@ -197,7 +233,7 @@ impl Session {
     ) -> Result<PlaybackInfoResponse> {
         let body = PlaybackInfoBody {
             user_id: self.user_id().as_str(),
-            max_streaming_bitrate: options.max_streaming_bitrate,
+            max_streaming_bitrate: options.max_streaming_bitrate.unwrap_or(ANY_BITRATE),
             media_source_id: options.media_source_id.as_ref(),
             audio_stream_index: options.audio_stream_index,
             subtitle_stream_index: options.subtitle_stream_index,
@@ -207,7 +243,7 @@ impl Session {
             allow_video_stream_copy: true,
             allow_audio_stream_copy: true,
             auto_open_live_stream: false,
-            device_profile: device_profile(options.max_height),
+            device_profile: device_profile(options),
         };
         let query = [("userId", self.user_id().to_string())];
         self.server()
