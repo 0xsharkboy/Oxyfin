@@ -83,6 +83,7 @@ impl SignInController {
         let Some(window) = app.window() else { return };
         set_status(&window, ServerState::Checking, SharedString::default());
         *self.checked.borrow_mut() = address.clone();
+        app.knows_server(&address);
         let request = self.request.get();
         let manager = app.manager();
         app.spawn(

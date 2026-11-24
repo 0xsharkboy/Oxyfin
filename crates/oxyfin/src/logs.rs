@@ -24,6 +24,12 @@ pub const ROTATED_LOG_FILE: &str = "oxyfin.1.log";
 
 const REDACTED: &str = "<redacted>";
 
+/// Schemes of the URLs whose host is a server.
+const SERVER_SCHEMES: [&str; 4] = ["http", "https", "ws", "wss"];
+
+/// Domains of local networks, which complete the short name of a server.
+const LOCAL_SUFFIXES: [&str; 5] = [".local", ".lan", ".home", ".internal", ".arpa"];
+
 /// Keys whose value never reaches the log file, compared without case.
 const SECRET_KEYS: [&str; 6] = [
     "api_key",
@@ -258,12 +264,21 @@ fn host_span(rest: &str) -> Option<std::ops::Range<usize>> {
 fn hosts_in(text: &str) -> Vec<String> {
     text.match_indices("://")
         .filter_map(|(at, separator)| {
-            let scheme = text[..at].bytes().next_back();
-            scheme.filter(u8::is_ascii_alphanumeric)?;
+            let scheme = text[..at]
+                .rsplit(|c: char| !c.is_ascii_alphanumeric())
+                .next()?;
+            SERVER_SCHEMES.contains(&scheme).then_some(())?;
             let rest = text[at + separator.len()..].lines().next()?;
-            Some(rest[host_span(rest)?].to_owned())
+            let host = &rest[host_span(rest)?];
+            is_host(host).then(|| host.to_owned())
         })
         .collect()
+}
+
+/// Whether `host` can name a server: a name with a letter or a whole IP address.
+fn is_host(host: &str) -> bool {
+    let bare = host.trim_matches(['[', ']']);
+    bare.chars().any(char::is_alphabetic) || bare.parse::<std::net::IpAddr>().is_ok()
 }
 
 /// `text` with every mention of `hosts` and of the hosts of its URLs replaced by `<server>`,
@@ -272,7 +287,10 @@ pub fn redact_hosts(text: &str, hosts: &[String]) -> String {
     let lower = text.to_ascii_lowercase();
     let mut wanted = hosts_in(&lower);
     wanted.extend(hosts.iter().map(|host| host.to_ascii_lowercase()));
-    wanted.retain(|host| !host.is_empty());
+    wanted.retain(|host| is_host(host));
+    // An IPv6 address is also logged without its brackets.
+    let bare = |host: &String| Some(host.strip_prefix('[')?.strip_suffix(']')?.to_owned());
+    wanted.extend(wanted.iter().filter_map(bare).collect::<Vec<_>>());
     // The longest first: a host can end with another one.
     wanted.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
     wanted.dedup();
@@ -281,7 +299,10 @@ pub fn redact_hosts(text: &str, hosts: &[String]) -> String {
         for (start, _) in lower.match_indices(host.as_str()) {
             let end = start + host.len();
             let covered = spans.iter().any(|(from, to)| start < *to && *from < end);
-            if !covered && names_host(lower.as_bytes(), start, end, host) {
+            if covered {
+                continue;
+            }
+            if let Some(end) = named_host_end(&lower, start, end, host) {
                 spans.push((user_info_start(&lower, start), end));
             }
         }
@@ -300,32 +321,44 @@ pub fn redact_hosts(text: &str, hosts: &[String]) -> String {
     out
 }
 
-/// Whether the text from `start` to `end`, which spells `host`, stands for that host rather than
-/// for a part of another word or of another host.
-fn names_host(text: &[u8], start: usize, end: usize, host: &str) -> bool {
+/// The end of the host named by the text from `start` to `end`, which spells `host`; none when
+/// that text is a part of another word or of another host.
+fn named_host_end(text: &str, start: usize, end: usize, host: &str) -> Option<usize> {
     let word =
         |byte: u8| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_') || byte >= 0x80;
-    let (before, after) = (&text[..start], &text[end..]);
-    let whole = match before.last() {
+    let (before, after) = (&text.as_bytes()[..start], &text.as_bytes()[end..]);
+    let whole_before = match before.last() {
         // A longer name of the same domain is hidden up to the part known.
         Some(b'.') => host.contains('.'),
         Some(byte) => !word(*byte),
         None => true,
-    } && match after {
-        [b'.', next, ..] => !word(*next),
-        [byte, ..] => !word(*byte),
-        [] => true,
     };
-    if !whole {
-        return false;
+    if !whole_before {
+        return None;
     }
+    let has_port = |rest: &[u8]| matches!(rest, [b':', digit, ..] if digit.is_ascii_digit());
+    let local_end = || {
+        let labels = after
+            .iter()
+            .take_while(|byte| word(**byte) || **byte == b'.');
+        let domain = text[end..end + labels.count()].trim_end_matches('.');
+        let local = LOCAL_SUFFIXES.iter().any(|suffix| domain.ends_with(suffix));
+        (local || has_port(&after[domain.len()..])).then_some(end + domain.len())
+    };
+    let whole_end = match after {
+        // The short name of a server, completed with the domain of its network.
+        [b'.', next, ..] if word(*next) => {
+            return (!host.contains('.')).then(local_end).flatten();
+        }
+        [byte, ..] if *byte != b'.' => (!word(*byte)).then_some(end),
+        _ => Some(end),
+    }?;
     // A server can be named like a word of the log, or like the module a line comes from.
-    let in_url = before.ends_with(b"//") || before.ends_with(b"@");
-    let with_port = matches!(after, [b':', digit, ..] if digit.is_ascii_digit());
     if host == env!("CARGO_PKG_NAME") {
-        return in_url || with_port;
+        let in_url = before.ends_with(b"//") || before.ends_with(b"@");
+        return (in_url || has_port(after)).then_some(whole_end);
     }
-    !before.ends_with(b"::") && !after.starts_with(b"::")
+    (!before.ends_with(b"::") && !after.starts_with(b"::")).then_some(whole_end)
 }
 
 /// Where the user name and password before the host at `start` begin, else `start`.
@@ -333,10 +366,14 @@ fn user_info_start(text: &str, start: usize) -> usize {
     if !text[..start].ends_with('@') {
         return start;
     }
-    match text[..start].rfind("://") {
-        Some(at) if !text[at + 3..start].contains(char::is_whitespace) => at + 3,
-        _ => start,
-    }
+    let token = text[..start]
+        .rfind(|c: char| c.is_whitespace() || "\"'`<>()".contains(c))
+        .map_or(0, |at| {
+            at + text[at..].chars().next().map_or(1, char::len_utf8)
+        });
+    text[token..start]
+        .rfind("://")
+        .map_or(token, |at| token + at + "://".len())
 }
 
 /// The header of a copied log: the app version, the system and the libmpv version `mpv`.
@@ -805,6 +842,73 @@ mod tests {
             "media::load of <server>"
         );
         assert_eq!(redacted("file:///home/a/x", &[]), "file:///home/a/x");
+    }
+
+    #[test]
+    fn a_short_host_is_hidden_with_the_domain_of_its_network() {
+        for (text, expected) in [
+            ("reached nas.home.arpa.", "reached <server>."),
+            ("http to nas.lan, nas.Local", "http to <server>, <server>"),
+            ("via nas.box:8096 again", "via <server>:8096 again"),
+            ("x nas.internal/web", "x <server>/web"),
+            (
+                "nas.rs, nas.localized, nas.home.example, nas. Local",
+                "nas.rs, nas.localized, nas.home.example, <server>. Local",
+            ),
+            ("my.nas.lan stays", "my.nas.lan stays"),
+        ] {
+            assert_eq!(redacted(text, &["nas"]), expected, "{text}");
+        }
+        assert_eq!(redacted("oxyfin.lan:8096", &["oxyfin"]), "<server>:8096");
+    }
+
+    #[test]
+    fn only_the_urls_of_servers_name_a_host() {
+        for (text, expected) in [
+            ("open fd://12 after 12 tries", "open fd://12 after 12 tries"),
+            ("file://media/x of media", "file://media/x of media"),
+            ("http://12/a and 12 more", "http://12/a and 12 more"),
+            (
+                "ws://10.0.0.7/a, 10.0.0.7 and 10.0.0.70",
+                "ws://<server>/a, <server> and 10.0.0.70",
+            ),
+            ("http://box/a then box", "http://<server>/a then <server>"),
+        ] {
+            assert_eq!(redacted(text, &[]), expected, "{text}");
+        }
+        assert_eq!(redacted("12 tries", &["12"]), "12 tries");
+    }
+
+    #[test]
+    fn an_ipv6_address_is_hidden_without_its_brackets() {
+        assert_eq!(
+            redacted("http://[fe80::1]:8096/ is fe80::1", &[]),
+            "http://<server>:8096/ is <server>"
+        );
+        assert_eq!(
+            redacted("to fe80::1, not fe80::12", &["[fe80::1]"]),
+            "to <server>, not fe80::12"
+        );
+    }
+
+    #[test]
+    fn the_user_information_before_a_host_is_hidden() {
+        for text in [
+            "me:hunter2@box.lan",
+            "\"me:p,a=ss@box.lan\"",
+            "http://me:hunter2@box.lan",
+        ] {
+            let hidden = redacted(text, &["box.lan"]);
+            assert!(hidden.contains("<server>"), "{hidden}");
+            for part in ["me", "hunter2", "ss"] {
+                assert!(!hidden.contains(&format!("{part}:")), "{hidden}");
+                assert!(!hidden.contains(&format!("{part}@")), "{hidden}");
+            }
+        }
+        assert_eq!(
+            redacted("try me:hunter2@box.lan:80", &["box.lan"]),
+            "try <server>:80"
+        );
     }
 
     #[test]

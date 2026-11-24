@@ -57,7 +57,7 @@ fn logs_are_copied_scrubbed_and_their_folder_opens() {
             let old = "INFO oxyfin: an old line\n".repeat(4 * RECENT_LOG_BYTES / 24);
             std::fs::write(
                 dir.join(LOG_FILE),
-                old + "INFO oxyfin: hello from the log GET http://127.0.0.1/Items?api_key=s3cr3t&x=1 not http://other.example.net/x nor other.example.net",
+                old + "INFO oxyfin: hello from the log GET http://127.0.0.1/Items?api_key=s3cr3t&x=1 not http://other.example.net/x nor other.example.net yet failing-host.invalid refused",
             )
             .unwrap();
         },
@@ -72,6 +72,8 @@ fn logs_are_copied_scrubbed_and_their_folder_opens() {
                     .ok_or("no paths")?,
             );
 
+            // An address tried at the sign-in, which never answers.
+            window.invoke_server_confirmed("failing-host.invalid".into());
             let copy = wait_role(window, "Copy logs", AccessibleRole::Button).await?;
             click(window, &copy);
             wait_until("the copied label", || button(window, "Copied").is_some()).await?;
@@ -97,6 +99,9 @@ fn logs_are_copied_scrubbed_and_their_folder_opens() {
                 || !pasted.contains("not http://<server>/x nor <server>")
             {
                 return Err(format!("another server is in the copied log: {pasted:?}"));
+            }
+            if pasted.contains("failing-host") {
+                return Err("a server that failed is in the copied log".into());
             }
             if pasted.chars().count() >= 65_536 {
                 return Err(format!(
