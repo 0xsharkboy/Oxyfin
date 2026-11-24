@@ -5,7 +5,8 @@
 
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
-use std::thread::JoinHandle;
+use std::sync::mpsc::{self, Receiver};
+use std::time::Duration;
 
 use slint::fontique_011::fontique::{
     Collection, FamilyId, FamilyInfo, FontInfo, GenericFamily, SourceKind,
@@ -19,19 +20,37 @@ const DRAWN_TABLES: [&[u8; 4]; 7] = [
     b"CFF ", b"CFF2", b"CBDT", b"COLR", b"SVG ", b"glyf", b"sbix",
 ];
 
-/// Puts the fallback families that draw every text first, on a thread of its own: looking at
-/// every font installed takes a while. Join it before the first text is laid out.
-pub fn prefer_drawn_in_background() -> Option<JoinHandle<()>> {
+/// The look at the fallback fonts, on a thread of its own.
+pub struct FontCheck(Receiver<()>);
+
+impl FontCheck {
+    fn start(look: impl FnOnce() + Send + 'static) -> io::Result<Self> {
+        let (done, receiver) = mpsc::channel();
+        std::thread::Builder::new()
+            .name("fonts".into())
+            .spawn(move || {
+                look();
+                done.send(()).ok();
+            })?;
+        Ok(Self(receiver))
+    }
+
+    /// Waits for the end of the look, at most `limit`; returns whether it came to its end.
+    pub fn wait(&self, limit: Duration) -> bool {
+        self.0.recv_timeout(limit).is_ok()
+    }
+}
+
+/// Puts the fallback families that draw every text first, in the background: looking at every
+/// font installed takes a while. Wait for it before the first text is laid out.
+pub fn prefer_drawn_in_background() -> Option<FontCheck> {
     // Windows and macOS pick their fallback fonts themselves.
     if !cfg!(target_os = "linux") {
         return None;
     }
     let mut collection = slint::fontique_011::shared_collection();
-    let spawned = std::thread::Builder::new()
-        .name("fonts".into())
-        .spawn(move || prefer_drawn(&mut collection));
-    match spawned {
-        Ok(thread) => Some(thread),
+    match FontCheck::start(move || prefer_drawn(&mut collection)) {
+        Ok(check) => Some(check),
         Err(error) => {
             log::warn!("cannot look at the fallback fonts: {error}");
             None
@@ -180,6 +199,20 @@ mod tests {
             ..Default::default()
         };
         collection.register_fonts(Blob::new(Arc::new(data)), Some(info))[0].0
+    }
+
+    #[test]
+    fn the_wait_for_the_fonts_is_bounded() {
+        let (release, held) = std::sync::mpsc::channel::<()>();
+        let check = FontCheck::start(move || {
+            held.recv().ok();
+        })
+        .unwrap();
+        assert!(!check.wait(Duration::ZERO), "still looked at");
+        release.send(()).unwrap();
+        assert!(check.wait(Duration::from_secs(30)), "done");
+        let failed = FontCheck::start(|| panic!("no fonts")).unwrap();
+        assert!(!failed.wait(Duration::from_secs(30)), "failed");
     }
 
     #[test]

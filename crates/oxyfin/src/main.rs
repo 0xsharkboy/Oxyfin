@@ -14,6 +14,8 @@ use slint::{BackendSelector, ComponentHandle, LogicalSize, PhysicalSize};
 const EXIT_GRACE: Duration = Duration::from_secs(3);
 /// How long the exit waits for the Discord activity to clear.
 const DISCORD_GRACE: Duration = Duration::from_secs(1);
+/// How long the window waits for the fallback fonts to be looked at.
+const FONTS_GRACE: Duration = Duration::from_millis(300);
 
 #[allow(clippy::print_stdout)]
 fn main() -> ExitCode {
@@ -115,9 +117,9 @@ fn run(paths: Paths) -> Result<(), Box<dyn std::error::Error>> {
         launch::fullscreen_requested(std::env::args_os().skip(1)) || app.start_fullscreen();
     window.window().set_fullscreen(fullscreen);
     if let Some(fonts) = fonts
-        && fonts.join().is_err()
+        && !fonts.wait(FONTS_GRACE)
     {
-        log::warn!("the fallback fonts could not be looked at");
+        log::warn!("the window shows before the fallback fonts are all looked at");
     }
     window.show()?;
     if fullscreen {
