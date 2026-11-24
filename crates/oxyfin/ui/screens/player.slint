@@ -107,6 +107,8 @@ export component PlayerScreen inherits Rectangle {
     property <bool> popup-open: root.menu != PlayerMenu.none;
     // The delay a shortcut or the volume the wheel changed, shown for a moment over the video.
     property <OsdKind> osd: OsdKind.none;
+    // Speaker of the volume feedback.
+    out property <image> osd-image: controls.volume-icon;
     // Wheel scrolling not yet turned into volume steps.
     property <length> wheel-delta;
     // What one notch of a mouse wheel scrolls: one volume step.
@@ -634,8 +636,8 @@ export component PlayerScreen inherits Rectangle {
             if root.stats-visible: StatsPanel {
                 x: parent.width - self.width - Theme.space-2xl;
                 y: root.menu-bottom - self.height;
-                // Where the skip button goes above, its room is kept so the panel never jumps.
-                limit: root.menu-max-height - (root.stack-above ? max(root.stack-height, Theme.button-height) + Theme.space-sm : 0px);
+                // Where the skip button and the notice go above, their room is kept: the panel never jumps.
+                limit: root.menu-max-height - (root.stack-above ? max(root.stack-height, Theme.skip-stack-height) + Theme.space-sm : 0px);
                 sections: root.stats;
             }
 
@@ -745,7 +747,7 @@ export component PlayerScreen inherits Rectangle {
 
                         osd-icon := Image {
                             accessible-role: none;
-                            source: controls.volume-icon;
+                            source: root.osd-image;
                             width: Theme.link-icon-size;
                             height: Theme.link-icon-size;
                         }

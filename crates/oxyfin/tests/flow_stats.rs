@@ -692,3 +692,38 @@ fn the_panel_keeps_its_height_when_a_skip_button_shows_in_a_narrow_window() {
     find(&window, "Skip intro", AccessibleRole::Button).unwrap_or_else(|| panic!("no skip button"));
     assert_eq!(edges(&panel(&window)), before, "the panel jumps");
 }
+
+#[test]
+fn the_panel_keeps_its_height_when_a_notice_stacks_on_the_skip_button() {
+    let (window, _sent) = player_window();
+    window.window().set_size(LogicalSize::new(560., 600.));
+    press(&window, "i");
+    player::apply(&window, PlaybackEvent::Stats(Box::new(full_report())));
+    i_slint_backend_testing::mock_elapsed_time(Duration::ZERO);
+    let before = edges(&panel(&window));
+    player::apply(&window, PlaybackEvent::Position(Duration::from_secs(30)));
+    player::apply(
+        &window,
+        PlaybackEvent::Segment(Some(SkippableSegment {
+            kind: SegmentKind::Intro,
+            start: Duration::from_secs(20),
+            end: Duration::from_secs(60),
+        })),
+    );
+    player::apply(
+        &window,
+        PlaybackEvent::SegmentSkipped {
+            kind: SegmentKind::Recap,
+            from: Duration::from_secs(20),
+        },
+    );
+    i_slint_backend_testing::mock_elapsed_time(Duration::ZERO);
+    let notice = find(&window, "Recap skipped", AccessibleRole::Groupbox)
+        .unwrap_or_else(|| panic!("no skip notice"));
+    let skip = find(&window, "Skip intro", AccessibleRole::Button)
+        .unwrap_or_else(|| panic!("no skip button"));
+    assert!(edges(&notice).3 <= edges(&skip).1, "the notice stacks");
+    assert_eq!(edges(&panel(&window)), before, "the panel jumps");
+    assert_clear_of_panel(&window, &notice, 560.);
+    assert_clear_of_panel(&window, &skip, 560.);
+}

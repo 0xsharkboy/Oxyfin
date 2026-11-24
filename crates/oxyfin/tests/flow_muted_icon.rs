@@ -7,7 +7,7 @@ use i_slint_backend_testing::{AccessibleRole, ElementHandle};
 use oxyfin::screens::player;
 use oxyfin::{AppWindow, Screen};
 use oxyfin_core::PlaybackEvent;
-use page::MutePage;
+use page::{FeedbackPage, MutePage};
 use slint::platform::WindowEvent;
 use slint::{ComponentHandle, LogicalPosition, LogicalSize};
 
@@ -16,6 +16,7 @@ mod page {
     slint::slint! {
         import { PlayerControls } from "ui/components/player_controls.slint";
         import { Icons } from "ui/icons.slint";
+        import { PlayerScreen } from "ui/screens/player.slint";
 
         export component MutePage inherits Window {
             in property <bool> muted <=> controls.muted;
@@ -28,12 +29,41 @@ mod page {
 
             controls := PlayerControls { }
         }
+
+        export component FeedbackPage inherits Window {
+            in property <bool> muted;
+            out property <bool> crossed: player.osd-image == Icons.volume-muted;
+            out property <bool> plain: player.osd-image == Icons.volume;
+
+            width: 1280px;
+            height: 720px;
+
+            player := PlayerScreen {
+                muted: root.muted;
+                volume: 50;
+            }
+        }
     }
 }
 
 fn labelled(window: &impl ComponentHandle, label: &str) -> bool {
     ElementHandle::find_by_accessible_label(window, label)
         .any(|element| element.accessible_role() == Some(AccessibleRole::Button))
+}
+
+/// Scrolls the wheel by one notch over the video.
+fn wheel(window: &impl ComponentHandle) {
+    let position = LogicalPosition::new(640., 300.);
+    window
+        .window()
+        .dispatch_event(WindowEvent::PointerMoved { position });
+    window
+        .window()
+        .dispatch_event(WindowEvent::PointerScrolled {
+            position,
+            delta_x: 0.,
+            delta_y: 60.,
+        });
 }
 
 #[test]
@@ -75,19 +105,28 @@ fn the_volume_feedback_shows_the_speaker_of_the_button() {
             .next()
             .is_some()
     };
-    let position = LogicalPosition::new(640., 300.);
-    window
-        .window()
-        .dispatch_event(WindowEvent::PointerMoved { position });
-    window
-        .window()
-        .dispatch_event(WindowEvent::PointerScrolled {
-            position,
-            delta_x: 0.,
-            delta_y: 60.,
-        });
+    wheel(&window);
     assert!(
         icon("PlayerScreen::osd-icon"),
         "no speaker beside the volume"
     );
+}
+
+#[test]
+fn the_volume_feedback_follows_the_muted_state() {
+    i_slint_backend_testing::init_no_event_loop();
+    let page = FeedbackPage::new().unwrap_or_else(|err| panic!("cannot create the page: {err}"));
+    page.show()
+        .unwrap_or_else(|err| panic!("cannot show the page: {err}"));
+    page.set_muted(true);
+    wheel(&page);
+    assert!(
+        ElementHandle::find_by_element_id(&page, "PlayerScreen::osd-icon")
+            .next()
+            .is_some()
+    );
+    assert!(page.get_crossed() && !page.get_plain());
+    page.set_muted(false);
+    wheel(&page);
+    assert!(page.get_plain() && !page.get_crossed());
 }
