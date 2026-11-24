@@ -1,0 +1,647 @@
+//! The last answers of the server, shown again at once while they are asked for anew.
+//!
+//! They live as long as the session of one account. The answers of the home screen and the first
+//! pages of the libraries are also kept on disk, for the next launch.
+
+use std::collections::HashMap;
+use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+
+use oxyfin_api::ItemId;
+use serde::{Deserialize, Serialize};
+use tokio::time::{Duration, Instant};
+
+use crate::catalog::{BrowseQuery, BrowseSource, SortField, WatchFilter};
+use crate::models::{
+    CollectionDetails, Episode, ItemSummary, Library, MovieDetails, Page, PersonDetails,
+    PersonTitle, SeriesDetails,
+};
+use crate::{Paths, Result};
+
+/// Answers kept; the least recently used ones are forgotten first.
+pub(crate) const KEPT_ANSWERS: usize = 96;
+
+/// Items a kept list holds; a longer list is not kept.
+const LONGEST_LIST: usize = 300;
+
+/// Items of a listing kept: its first page.
+pub(crate) const FIRST_PAGE: usize = 60;
+
+/// Format of the file; a file of another format is ignored.
+const VERSION: u32 = 1;
+
+/// Largest file written or read, in bytes.
+const LARGEST_FILE: u64 = 4 * 1024 * 1024;
+
+/// How long answers gather before the file is written.
+const SAVE_DELAY: Duration = Duration::from_secs(1);
+
+const FILE_NAME: &str = "pages.json";
+
+/// What a kept answer answers.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub(crate) enum PageKey {
+    Resume(u32),
+    NextUp(u32),
+    Libraries,
+    Latest(ItemId, u32),
+    Browse(Listing),
+    Genres(BrowseSource),
+    Movie(ItemId),
+    Series(ItemId),
+    Episodes(ItemId, Option<ItemId>),
+    Similar(ItemId, u32),
+    Person(ItemId),
+    PersonTitles(ItemId),
+    Collection(ItemId),
+}
+
+impl PageKey {
+    /// Whether the next launch may show the answer.
+    fn on_disk(&self) -> bool {
+        match self {
+            Self::Resume(_)
+            | Self::NextUp(_)
+            | Self::Libraries
+            | Self::Latest(..)
+            | Self::Genres(_) => true,
+            // The filters and the sort of a library start over at every launch.
+            Self::Browse(listing) => listing.is_default(),
+            _ => false,
+        }
+    }
+}
+
+/// A listing, whatever the page asked for.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub(crate) struct Listing {
+    source: BrowseSource,
+    sort: SortField,
+    descending: bool,
+    genre: Option<String>,
+    watch: WatchFilter,
+}
+
+impl Listing {
+    pub(crate) fn of(query: &BrowseQuery) -> Self {
+        Self {
+            source: query.source.clone(),
+            sort: query.sort,
+            descending: query.descending,
+            genre: query.genre.clone(),
+            watch: query.watch,
+        }
+    }
+
+    fn is_default(&self) -> bool {
+        self.sort == SortField::DateAdded
+            && self.descending
+            && self.genre.is_none()
+            && self.watch == WatchFilter::All
+    }
+}
+
+/// A kept answer.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) enum PageValue {
+    Items(Vec<ItemSummary>),
+    Libraries(Vec<Library>),
+    Page(Page<ItemSummary>),
+    Names(Vec<String>),
+    #[serde(skip)]
+    Movie(Box<MovieDetails>),
+    #[serde(skip)]
+    Series(Box<SeriesDetails>),
+    #[serde(skip)]
+    Episodes(Vec<Episode>),
+    #[serde(skip)]
+    Person(Box<PersonDetails>),
+    #[serde(skip)]
+    Titles(Vec<PersonTitle>),
+    #[serde(skip)]
+    Collection(Box<CollectionDetails>),
+}
+
+/// A type of answer that can be kept.
+pub(crate) trait Kept: Clone + Sized {
+    fn keep(&self) -> PageValue;
+    fn kept(value: &PageValue) -> Option<Self>;
+    fn length(&self) -> usize {
+        0
+    }
+}
+
+macro_rules! kept {
+    ($type:ty, $variant:ident, list) => {
+        impl Kept for $type {
+            fn keep(&self) -> PageValue {
+                PageValue::$variant(self.clone())
+            }
+            fn kept(value: &PageValue) -> Option<Self> {
+                match value {
+                    PageValue::$variant(value) => Some(value.clone()),
+                    _ => None,
+                }
+            }
+            fn length(&self) -> usize {
+                self.len()
+            }
+        }
+    };
+    ($type:ty, $variant:ident) => {
+        impl Kept for $type {
+            fn keep(&self) -> PageValue {
+                PageValue::$variant(Box::new(self.clone()))
+            }
+            fn kept(value: &PageValue) -> Option<Self> {
+                match value {
+                    PageValue::$variant(value) => Some((**value).clone()),
+                    _ => None,
+                }
+            }
+        }
+    };
+}
+
+kept!(Vec<ItemSummary>, Items, list);
+kept!(Vec<Library>, Libraries, list);
+kept!(Vec<String>, Names, list);
+kept!(Vec<Episode>, Episodes, list);
+kept!(Vec<PersonTitle>, Titles, list);
+kept!(MovieDetails, Movie);
+kept!(SeriesDetails, Series);
+kept!(PersonDetails, Person);
+kept!(CollectionDetails, Collection);
+
+impl Kept for Page<ItemSummary> {
+    fn keep(&self) -> PageValue {
+        let mut page = self.clone();
+        page.items.truncate(FIRST_PAGE);
+        PageValue::Page(page)
+    }
+
+    fn kept(value: &PageValue) -> Option<Self> {
+        match value {
+            PageValue::Page(page) => Some(page.clone()),
+            _ => None,
+        }
+    }
+}
+
+struct Entry {
+    value: PageValue,
+    used: u64,
+    /// When the server answered; `None` for an answer read from the disk.
+    answered: Option<Instant>,
+}
+
+#[derive(Default)]
+struct State {
+    entries: HashMap<PageKey, Entry>,
+    clock: u64,
+    revision: u64,
+    closed: bool,
+    save_planned: bool,
+    /// What the file holds, not to write the same again.
+    written: Vec<u8>,
+}
+
+struct Disk {
+    file: PathBuf,
+    account: String,
+}
+
+/// The answers kept for one account.
+pub(crate) struct PageCache {
+    state: Mutex<State>,
+    disk: Option<Disk>,
+}
+
+#[derive(Serialize)]
+struct Saved<'a> {
+    version: u32,
+    account: &'a str,
+    answers: Vec<(&'a PageKey, &'a PageValue)>,
+}
+
+#[derive(Deserialize)]
+struct Head {
+    version: u32,
+    account: String,
+}
+
+#[derive(Deserialize)]
+struct Answers {
+    answers: Vec<(PageKey, PageValue)>,
+}
+
+impl std::fmt::Debug for PageCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PageCache").finish_non_exhaustive()
+    }
+}
+
+impl PageCache {
+    /// Answers kept in memory only.
+    pub(crate) fn in_memory() -> Self {
+        Self {
+            state: Mutex::default(),
+            disk: None,
+        }
+    }
+
+    /// Answers kept for `account`, starting with those its last session left on disk.
+    pub(crate) fn on_disk(paths: &Paths, account: &str) -> Self {
+        let disk = Disk {
+            file: paths.cache_dir.join(FILE_NAME),
+            account: account.to_owned(),
+        };
+        let mut state = State::default();
+        match disk.read() {
+            Some(answers) => {
+                for (key, value) in answers {
+                    state.insert(key, value, None);
+                }
+            }
+            None => disk.remove(),
+        }
+        Self {
+            state: Mutex::new(state),
+            disk: Some(disk),
+        }
+    }
+
+    fn lock(&self) -> MutexGuard<'_, State> {
+        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// The last answer to `key`.
+    pub(crate) fn last<T: Kept>(&self, key: &PageKey) -> Option<T> {
+        let mut state = self.lock();
+        state.clock += 1;
+        let clock = state.clock;
+        let entry = state.entries.get_mut(key)?;
+        entry.used = clock;
+        T::kept(&entry.value)
+    }
+
+    /// Whether the server answered `key` within `age`.
+    pub(crate) fn is_fresh(&self, key: &PageKey, age: Duration) -> bool {
+        self.lock()
+            .entries
+            .get(key)
+            .and_then(|entry| entry.answered)
+            .is_some_and(|answered| answered.elapsed() < age)
+    }
+
+    /// Grows each time the answers are forgotten: an answer asked for before is not kept.
+    pub(crate) fn revision(&self) -> u64 {
+        self.lock().revision
+    }
+
+    /// Asks with `fetch` and keeps the answer to `key`.
+    pub(crate) async fn keep<T: Kept>(
+        self: &Arc<Self>,
+        key: PageKey,
+        fetch: impl Future<Output = Result<T>>,
+    ) -> Result<T> {
+        let asked = self.revision();
+        let answer = fetch.await?;
+        self.store(asked, key, &answer);
+        Ok(answer)
+    }
+
+    /// Keeps the answer to `key`, unless what was asked at revision `asked` was forgotten since.
+    pub(crate) fn store<T: Kept>(self: &Arc<Self>, asked: u64, key: PageKey, answer: &T) {
+        let on_disk = key.on_disk();
+        {
+            let mut state = self.lock();
+            if state.closed || state.revision != asked {
+                return;
+            }
+            if answer.length() > LONGEST_LIST {
+                state.entries.remove(&key);
+            } else {
+                state.insert(key, answer.keep(), Some(Instant::now()));
+            }
+        }
+        if on_disk {
+            self.plan_save();
+        }
+    }
+
+    /// Forgets every answer, in memory and on disk: what the user did made them wrong.
+    pub(crate) fn forget(&self) {
+        let mut state = self.lock();
+        state.revision += 1;
+        state.entries.clear();
+        state.written.clear();
+        // Under the lock: a file being written would come back after its removal.
+        if let Some(disk) = &self.disk {
+            disk.remove();
+        }
+    }
+
+    /// Forgets every answer and keeps none from now on: the account signed out.
+    pub(crate) fn close(&self) {
+        self.lock().closed = true;
+        self.forget();
+    }
+
+    fn plan_save(self: &Arc<Self>) {
+        if self.disk.is_none() {
+            return;
+        }
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        if std::mem::replace(&mut self.lock().save_planned, true) {
+            return;
+        }
+        let this = Arc::clone(self);
+        runtime.spawn(async move {
+            tokio::time::sleep(SAVE_DELAY).await;
+            let _ = tokio::task::spawn_blocking(move || this.save()).await;
+        });
+    }
+
+    /// Writes the answers the next launch may show.
+    pub(crate) fn save(&self) {
+        let Some(disk) = &self.disk else { return };
+        let mut state = self.lock();
+        state.save_planned = false;
+        if state.closed || state.entries.is_empty() {
+            return;
+        }
+        let mut answers: Vec<(&PageKey, &PageValue)> = state
+            .entries
+            .iter()
+            .filter(|(key, _)| key.on_disk())
+            .map(|(key, entry)| (key, &entry.value))
+            .collect();
+        answers.sort_by_cached_key(|(key, _)| format!("{key:?}"));
+        let saved = Saved {
+            version: VERSION,
+            account: &disk.account,
+            answers,
+        };
+        let bytes = match serde_json::to_vec(&saved) {
+            Ok(bytes) => bytes,
+            Err(error) => return log::warn!("cannot save the last pages: {error}"),
+        };
+        if bytes == state.written {
+            return;
+        }
+        if bytes.len() as u64 > LARGEST_FILE {
+            return disk.remove();
+        }
+        match disk.write(&bytes) {
+            Ok(()) => state.written = bytes,
+            Err(error) => {
+                log::warn!("cannot save the last pages: {error}");
+                disk.remove();
+            }
+        }
+    }
+}
+
+impl State {
+    fn insert(&mut self, key: PageKey, value: PageValue, answered: Option<Instant>) {
+        self.clock += 1;
+        let entry = Entry {
+            value,
+            used: self.clock,
+            answered,
+        };
+        self.entries.insert(key, entry);
+        while self.entries.len() > KEPT_ANSWERS {
+            let oldest = self
+                .entries
+                .iter()
+                .min_by_key(|(_, entry)| entry.used)
+                .map(|(key, _)| key.clone());
+            match oldest {
+                Some(key) => self.entries.remove(&key),
+                None => break,
+            };
+        }
+    }
+}
+
+impl Disk {
+    fn read(&self) -> Option<Vec<(PageKey, PageValue)>> {
+        if fs::metadata(&self.file).ok()?.len() > LARGEST_FILE {
+            return None;
+        }
+        let bytes = fs::read(&self.file).ok()?;
+        let head: Head = serde_json::from_slice(&bytes).ok()?;
+        if head.version != VERSION || head.account != self.account {
+            return None;
+        }
+        let saved: Answers = serde_json::from_slice(&bytes).ok()?;
+        Some(saved.answers)
+    }
+
+    fn write(&self, bytes: &[u8]) -> std::io::Result<()> {
+        if let Some(dir) = self.file.parent() {
+            fs::create_dir_all(dir)?;
+        }
+        let tmp = self.file.with_extension("json.tmp");
+        let _ = fs::remove_file(&tmp);
+        let mut file = private(&tmp)?;
+        file.write_all(bytes)?;
+        drop(file);
+        fs::rename(&tmp, &self.file)
+    }
+
+    fn remove(&self) {
+        for file in [&self.file, &self.file.with_extension("json.tmp")] {
+            match fs::remove_file(file) {
+                Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                    log::warn!("cannot remove the last pages: {error}");
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+/// Creates a file only the user can read: titles tell what they watch.
+fn private(path: &Path) -> std::io::Result<fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options.open(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    const ACCOUNT: &str = "user@https://server.example/";
+
+    fn names(text: &str) -> Vec<String> {
+        vec![text.to_owned()]
+    }
+
+    fn genres() -> PageKey {
+        PageKey::Genres(BrowseSource::Favorites)
+    }
+
+    fn movie(id: &str) -> PageKey {
+        PageKey::Movie(id.into())
+    }
+
+    fn on_disk(dir: &TempDir, account: &str) -> Arc<PageCache> {
+        Arc::new(PageCache::on_disk(&Paths::under(dir.path()), account))
+    }
+
+    fn file(dir: &TempDir) -> PathBuf {
+        Paths::under(dir.path()).cache_dir.join(FILE_NAME)
+    }
+
+    fn last(cache: &PageCache) -> Option<Vec<String>> {
+        cache.last(&genres())
+    }
+
+    #[test]
+    fn an_answer_asked_for_before_a_change_is_not_kept() {
+        let cache = Arc::new(PageCache::in_memory());
+        let asked = cache.revision();
+        cache.store(asked, genres(), &names("before"));
+        assert_eq!(last(&cache), Some(names("before")));
+        cache.forget();
+        assert_eq!(last(&cache), None);
+        cache.store(asked, genres(), &names("late"));
+        assert_eq!(last(&cache), None);
+        cache.store(cache.revision(), genres(), &names("after"));
+        assert_eq!(last(&cache), Some(names("after")));
+    }
+
+    #[test]
+    fn the_least_recently_used_answers_go_first() {
+        let cache = Arc::new(PageCache::in_memory());
+        let keep = |index: usize| {
+            let key = PageKey::Episodes(format!("{index}").as_str().into(), None);
+            cache.store(cache.revision(), key, &Vec::<Episode>::new());
+        };
+        let kept = |index: usize| {
+            let key = PageKey::Episodes(format!("{index}").as_str().into(), None);
+            cache.last::<Vec<Episode>>(&key).is_some()
+        };
+        for index in 0..KEPT_ANSWERS {
+            keep(index);
+        }
+        assert!(kept(0));
+        keep(KEPT_ANSWERS);
+        assert!(kept(0));
+        assert!(!kept(1));
+        assert_eq!(cache.lock().entries.len(), KEPT_ANSWERS);
+    }
+
+    #[test]
+    fn a_list_too_long_is_not_kept() {
+        let cache = Arc::new(PageCache::in_memory());
+        cache.store(cache.revision(), genres(), &names("a"));
+        let long = vec![String::new(); LONGEST_LIST + 1];
+        cache.store(cache.revision(), genres(), &long);
+        assert_eq!(last(&cache), None);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn an_answer_is_fresh_for_a_while() {
+        let cache = Arc::new(PageCache::in_memory());
+        let age = Duration::from_secs(60);
+        assert!(!cache.is_fresh(&genres(), age));
+        cache.store(cache.revision(), genres(), &names("a"));
+        assert!(cache.is_fresh(&genres(), age));
+        tokio::time::advance(age).await;
+        assert!(!cache.is_fresh(&genres(), age));
+    }
+
+    #[test]
+    fn the_next_launch_of_the_same_account_shows_the_saved_answers() {
+        let dir = TempDir::new().unwrap();
+        let cache = on_disk(&dir, ACCOUNT);
+        cache.store(cache.revision(), genres(), &names("Drama"));
+        cache.store(cache.revision(), movie("m"), &names("not on disk"));
+        cache.save();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(file(&dir)).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+        let next = on_disk(&dir, ACCOUNT);
+        assert_eq!(last(&next), Some(names("Drama")));
+        assert_eq!(next.lock().entries.len(), 1);
+        assert!(!next.is_fresh(&genres(), Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn another_account_sees_nothing_and_removes_the_file() {
+        let dir = TempDir::new().unwrap();
+        let cache = on_disk(&dir, ACCOUNT);
+        cache.store(cache.revision(), genres(), &names("Drama"));
+        cache.save();
+        assert_eq!(last(&on_disk(&dir, "other@https://server.example/")), None);
+        assert!(!file(&dir).exists());
+    }
+
+    #[test]
+    fn another_format_and_unreadable_content_are_ignored() {
+        let dir = TempDir::new().unwrap();
+        let cache = on_disk(&dir, ACCOUNT);
+        cache.store(cache.revision(), genres(), &names("Drama"));
+        cache.save();
+        let good = fs::read_to_string(file(&dir)).unwrap();
+        let newer = good.replace("\"version\":1", "\"version\":2");
+        assert_ne!(good, newer);
+        for text in [newer.as_str(), &good[..good.len() / 2], "", "[]"] {
+            fs::write(file(&dir), text).unwrap();
+            assert_eq!(last(&on_disk(&dir, ACCOUNT)), None, "{text}");
+            assert!(!file(&dir).exists());
+        }
+        fs::write(file(&dir), good).unwrap();
+        assert_eq!(last(&on_disk(&dir, ACCOUNT)), Some(names("Drama")));
+    }
+
+    #[test]
+    fn a_change_and_a_sign_out_remove_the_file() {
+        let dir = TempDir::new().unwrap();
+        let cache = on_disk(&dir, ACCOUNT);
+        let save = |text: &str| {
+            cache.store(cache.revision(), genres(), &names(text));
+            cache.save();
+        };
+        save("Drama");
+        cache.forget();
+        assert!(!file(&dir).exists());
+        cache.save();
+        assert!(!file(&dir).exists(), "nothing is left to write");
+        save("Drama");
+        assert!(file(&dir).exists(), "the same answer is written again");
+        cache.close();
+        save("late");
+        assert!(!file(&dir).exists());
+        assert_eq!(last(&cache), None);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn answers_are_saved_together_after_a_while() {
+        let dir = TempDir::new().unwrap();
+        let cache = on_disk(&dir, ACCOUNT);
+        cache.store(cache.revision(), genres(), &names("Drama"));
+        cache.store(cache.revision(), PageKey::Libraries, &Vec::<Library>::new());
+        assert!(!file(&dir).exists());
+        tokio::time::sleep(SAVE_DELAY * 2).await;
+        while !file(&dir).exists() {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(last(&on_disk(&dir, ACCOUNT)), Some(names("Drama")));
+    }
+}

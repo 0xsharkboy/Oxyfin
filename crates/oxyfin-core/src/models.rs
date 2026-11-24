@@ -1,10 +1,11 @@
 //! Domain models displayed by the UI, converted from API DTOs.
 
 use oxyfin_api::{BaseItemDto, BaseItemKind, BaseItemPerson, ImageType, ItemId, UserItemDataDto};
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 /// Kind of item the UI can display.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ItemKind {
     /// A movie.
     Movie,
@@ -19,7 +20,7 @@ pub enum ItemKind {
 }
 
 /// Reference to an image of an item.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ImageRef {
     /// Item owning the image.
     pub item_id: ItemId,
@@ -32,7 +33,7 @@ pub struct ImageRef {
 }
 
 /// State of an item for the signed-in user.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct UserState {
     /// Whether the item was played.
     pub played: bool,
@@ -129,7 +130,7 @@ fn duration(dto: &BaseItemDto) -> Option<Duration> {
 }
 
 /// Compact description of a movie, video, series, episode or box set, for lists and cards.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ItemSummary {
     /// Identifier of the item.
     pub id: ItemId,
@@ -662,7 +663,7 @@ impl CollectionDetails {
 }
 
 /// Kind of content a library holds.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum LibraryKind {
     /// Movies.
     Movies,
@@ -675,7 +676,7 @@ pub enum LibraryKind {
 }
 
 /// A library of the server.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Library {
     /// Identifier of the library.
     pub id: ItemId,
@@ -703,7 +704,7 @@ impl Library {
 }
 
 /// A page of results.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Page<T> {
     /// Items of this page.
     pub items: Vec<T>,

@@ -6,7 +6,7 @@ use common::{TEST_USER_ID, fixture, session};
 use oxyfin_api::ItemId;
 use oxyfin_core::{
     BrowseQuery, BrowseSource, Catalog, CollectionLink, ContentKind, CoreError, ItemKind,
-    ItemSummary, LibraryKind, MenuTarget, MovieDetails, PersonKind, SortField, WatchFilter,
+    ItemSummary, LibraryKind, MenuTarget, MovieDetails, Paths, PersonKind, SortField, WatchFilter,
 };
 use serde_json::{Value, json};
 use wiremock::matchers::{body_json, method, path, query_param};
@@ -1653,4 +1653,125 @@ async fn restore_resume_puts_the_position_back() {
         .unwrap();
     assert!(state.can_resume());
     assert_eq!(state.position, std::time::Duration::from_secs(720));
+}
+
+async fn mount_played(mock: &MockServer) {
+    mount(
+        mock,
+        "POST",
+        &format!("/UserPlayedItems/{MOVIE_ID}"),
+        json!({"Played": true, "IsFavorite": false, "PlaybackPositionTicks": 0}),
+    )
+    .await;
+}
+
+async fn mount_movie(mock: &MockServer, delay: std::time::Duration) {
+    Mock::given(method("GET"))
+        .and(path(format!("/Items/{MOVIE_ID}")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(fixture("item_movie"))
+                .set_delay(delay),
+        )
+        .mount(mock)
+        .await;
+}
+
+#[tokio::test]
+async fn the_last_answers_are_kept_until_the_user_changes_something() {
+    let mock = MockServer::start().await;
+    mount_movie(&mock, std::time::Duration::ZERO).await;
+    mount_played(&mock).await;
+    mount(
+        &mock,
+        "GET",
+        "/Items",
+        json!({"Items": [fixture("item_movie")], "TotalRecordCount": 41, "StartIndex": 0}),
+    )
+    .await;
+    let catalog = catalog(&mock);
+    let movie = ItemId::from(MOVIE_ID);
+    let movies = query(BrowseSource::All(ContentKind::Movies));
+    assert_eq!(catalog.last_movie(&movie), None);
+    let details = catalog.movie(&movie).await.unwrap();
+    let page = catalog.browse(&movies).await.unwrap();
+    assert_eq!(catalog.last_movie(&movie), Some(details));
+    let other_page = BrowseQuery {
+        start: 20,
+        ..movies.clone()
+    };
+    let other_filter = BrowseQuery {
+        watch: WatchFilter::Played,
+        ..movies.clone()
+    };
+    assert_eq!(catalog.last_browse(&other_page), Some(page));
+    assert_eq!(catalog.last_browse(&other_filter), None);
+
+    catalog.clone().set_played(&movie, true).await.unwrap();
+    assert_eq!(catalog.last_movie(&movie), None);
+    assert_eq!(catalog.last_browse(&movies), None);
+}
+
+#[tokio::test]
+async fn an_answer_on_its_way_during_a_change_is_not_kept() {
+    let mock = MockServer::start().await;
+    mount_movie(&mock, std::time::Duration::from_millis(300)).await;
+    mount_played(&mock).await;
+    let catalog = catalog(&mock);
+    let movie = ItemId::from(MOVIE_ID);
+    let (asked, changed) = tokio::join!(catalog.movie(&movie), catalog.set_played(&movie, true));
+    assert!(asked.is_ok() && changed.is_ok());
+    assert_eq!(catalog.last_movie(&movie), None);
+}
+
+#[tokio::test]
+async fn a_refused_change_forgets_the_answers_too() {
+    let mock = MockServer::start().await;
+    mount_movie(&mock, std::time::Duration::ZERO).await;
+    let catalog = catalog(&mock);
+    let movie = ItemId::from(MOVIE_ID);
+    catalog.movie(&movie).await.unwrap();
+    // No route answers: the server may have made the change before the connection failed.
+    assert!(catalog.set_favorite(&movie, true).await.is_err());
+    assert_eq!(catalog.last_movie(&movie), None);
+}
+
+#[tokio::test]
+async fn the_brief_of_a_movie_opens_its_page() {
+    let mock = MockServer::start().await;
+    mount_movie(&mock, std::time::Duration::ZERO).await;
+    let catalog = catalog(&mock);
+    let movie = ItemId::from(MOVIE_ID);
+    catalog.item_brief(&movie).await.unwrap();
+    let opened = catalog.last_movie(&movie).unwrap();
+    assert_eq!(catalog.movie(&movie).await.unwrap(), opened);
+}
+
+#[tokio::test]
+async fn the_next_launch_of_the_account_starts_from_its_last_answers() {
+    let mock = MockServer::start().await;
+    mount(&mock, "GET", "/UserViews", fixture("user_views")).await;
+    let dir = tempfile::TempDir::new().unwrap();
+    let paths = Paths::under(dir.path());
+    let first = Catalog::on_disk(session(&mock), &paths);
+    let libraries = first.libraries().await.unwrap();
+    first.save_answers();
+
+    let other = oxyfin_api::Server::new(
+        &mock.uri(),
+        oxyfin_api::ClientInfo::new("Test Device", "test-device-id"),
+    )
+    .unwrap()
+    .restore_session("other", oxyfin_api::UserId::from("other"), None);
+    let next = Catalog::on_disk(session(&mock), &paths);
+    assert_eq!(next.last_libraries(), Some(libraries));
+    assert_eq!(Catalog::on_disk(other, &paths).last_libraries(), None);
+
+    first.save_answers();
+    next.close();
+    assert_eq!(next.last_libraries(), None);
+    assert_eq!(
+        Catalog::on_disk(session(&mock), &paths).last_libraries(),
+        None
+    );
 }

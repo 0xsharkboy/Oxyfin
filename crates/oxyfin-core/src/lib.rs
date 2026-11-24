@@ -61,6 +61,7 @@ mod fetch_queue;
 mod images;
 mod languages;
 mod models;
+mod pages;
 mod paths;
 mod playback;
 mod presence;
