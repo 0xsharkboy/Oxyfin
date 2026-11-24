@@ -25,6 +25,7 @@ mod page {
         export component MenuPage inherits Window {
             in property <[CardData]> first;
             in property <[CardData]> second;
+            in property <string> first-title: "Row";
             callback opened(string);
 
             width: 1000px;
@@ -34,12 +35,14 @@ mod page {
                 alignment: start;
 
                 PosterRow {
-                    title: "First";
+                    title: root.first-title;
+                    row-key: "first";
                     items: root.first;
                     clicked(id) => { root.opened("first"); }
                 }
                 PosterRow {
-                    title: "Second";
+                    title: "Row";
+                    row-key: "second";
                     items: root.second;
                     clicked(id) => { root.opened("second"); }
                 }
@@ -99,6 +102,21 @@ fn only_the_card_that_had_the_focus_takes_it_back() {
     page.set_second(cards(false));
     let _ = (card(&page, 0), card(&page, 1));
     i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(100));
+    press(&page, Key::Return);
+    assert_eq!(*opened.borrow(), ["first", "first"]);
+}
+
+#[test]
+fn a_row_named_anew_gives_the_focus_back() {
+    let (page, opened) = menu_page();
+    common::click(&page, &card(&page, 0));
+    press(&page, Key::Menu);
+    page.global::<page::ContextMenu>()
+        .invoke_choose(page::MenuAction::AddFavorite);
+    // The titles of the rows change with the language.
+    page.set_first_title("Autre".into());
+    page.set_first(cards(false));
+    let _ = card(&page, 0);
     press(&page, Key::Return);
     assert_eq!(*opened.borrow(), ["first", "first"]);
 }
@@ -194,6 +212,7 @@ fn the_window_stops_watching_for_the_focus() {
 
 fn home_rows() -> ModelRc<HomeRow> {
     ModelRc::new(VecModel::from(vec![HomeRow {
+        key: "row".into(),
         title: "Recently Added".into(),
         kind: HomeRowKind::Poster,
         items: ModelRc::new(VecModel::from(vec![CardData {

@@ -176,6 +176,7 @@ export component MovieScreen inherits Rectangle {
                     padding-bottom: Theme.space-3xl;
 
                     PosterRow {
+                        row-key: "similar";
                         title: @tr("More like this");
                         items: root.similar;
                         clicked(id) => {

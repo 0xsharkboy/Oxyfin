@@ -37,6 +37,17 @@ enum RowKey {
     Library(ItemId),
 }
 
+impl RowKey {
+    /// What tells the row from the others in the interface, whatever the language.
+    fn name(&self) -> SharedString {
+        match self {
+            Self::ContinueWatching => "continue-watching".into(),
+            Self::NextUp => "next-up".into(),
+            Self::Library(id) => id.as_str().into(),
+        }
+    }
+}
+
 struct Slot {
     key: RowKey,
     /// Items of the row, none when it shows an error.
@@ -530,6 +541,7 @@ impl HomeController {
                 slot.items = content.items;
                 rows::update(&slot.cards, content.cards);
                 let row = HomeRow {
+                    key: key.name(),
                     title: content.title,
                     kind: content.kind,
                     items: ModelRc::from(Rc::clone(&slot.cards)),
@@ -548,6 +560,7 @@ impl HomeController {
             (None, Some(content)) => {
                 let cards = Rc::new(VecModel::from(content.cards));
                 let row = HomeRow {
+                    key: key.name(),
                     title: content.title,
                     kind: content.kind,
                     items: ModelRc::from(Rc::clone(&cards)),

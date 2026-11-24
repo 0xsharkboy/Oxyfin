@@ -200,9 +200,8 @@ impl SeriesController {
             self.request_episodes(app);
         }
         window.set_series_viewport_y(page.viewport_y);
-        let wanted = wanted.and_then(|(series, season)| self.season_index(&series, &season));
-        if let Some(index) = wanted {
-            self.select_season(app, index);
+        if let Some((_, season)) = wanted.filter(|(wanted, _)| *wanted == series) {
+            self.show_season(app, &series, &season);
         }
     }
 
@@ -245,6 +244,8 @@ impl SeriesController {
 
     /// A season pill was clicked.
     pub(crate) fn select_season(&self, app: &Rc<App>, index: usize) {
+        // An answer still to come does not undo that choice.
+        self.wanted_season.take();
         let count = self
             .details
             .borrow()
@@ -260,15 +261,21 @@ impl SeriesController {
         self.request_episodes(app);
     }
 
-    /// Shows season `season` of series `series`: at once when the page shows that series, or
-    /// once the series page about to open has loaded.
+    /// Shows season `season` of series `series`: at once when the page shows that series, once its
+    /// list of seasons is asked for anew when it lacks that season, or once the series page about
+    /// to open has loaded.
     pub(crate) fn show_season(&self, app: &Rc<App>, series: &str, season: &str) {
         // A page of that series kept below another screen stays as it was left.
         let current = matches!(app.screen(), Screen::Series(id) if id == series);
         let index = self.season_index(series, season).filter(|_| current);
         match index {
             Some(index) => self.select_season(app, index),
-            None => *self.wanted_season.borrow_mut() = Some((series.to_owned(), season.to_owned())),
+            None => {
+                *self.wanted_season.borrow_mut() = Some((series.to_owned(), season.to_owned()));
+                if current && self.details.borrow().is_some() {
+                    self.request(app);
+                }
+            }
         }
     }
 
@@ -349,7 +356,16 @@ impl SeriesController {
         if let Some(window) = app.window() {
             window.set_series_error(SharedString::default());
             if let Some(details) = last {
+                let wanted = self
+                    .wanted_season
+                    .borrow()
+                    .clone()
+                    .filter(|(wanted, _)| *wanted == series);
                 self.show(app, id, &window, details);
+                // An older list may lack the season wanted.
+                if wanted.as_ref().map(|(_, season)| season) != self.chosen_season_id().as_ref() {
+                    *self.wanted_season.borrow_mut() = wanted;
+                }
                 self.show_last_episodes(app, id, &window);
                 // Those asked for after the series come then.
                 window.set_series_episodes_loading(!self.episodes_ready.get());
@@ -387,6 +403,10 @@ impl SeriesController {
             Err(CoreError::SessionExpired) => app.dispatch(Msg::Expired(id)),
             Err(error) => {
                 log::warn!("cannot load the series: {error}");
+                if self.details.borrow().is_some() {
+                    // A later reload leaves the season shown.
+                    self.wanted_season.take();
+                }
                 if self.details.borrow().is_none() {
                     let (message, detail) = core_error_message(&error);
                     let text = window
@@ -409,9 +429,13 @@ impl SeriesController {
             .take()
             .filter(|(series, _)| series == details.summary.id.as_str())
             .map(|(_, season)| season);
+        let index = |season: String| {
+            let mut seasons = details.seasons.iter();
+            seasons.position(|s| s.id.as_str() == season)
+        };
         let chosen = wanted
-            .or_else(|| self.chosen_season_id())
-            .and_then(|chosen| details.seasons.iter().position(|s| s.id.as_str() == chosen))
+            .and_then(index)
+            .or_else(|| self.chosen_season_id().and_then(index))
             .or_else(|| initial_season(&details));
         if self.details.borrow().as_ref() != Some(&details) || self.season.get() != chosen {
             self.season.set(chosen);

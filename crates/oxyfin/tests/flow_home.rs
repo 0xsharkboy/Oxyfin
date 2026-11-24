@@ -137,6 +137,11 @@ fn home_shows_every_row_that_loads() {
         })
         .await?;
         let movies = row(&window, "Recently Added in Movies").ok_or("no Movies row")?;
+        let keys: std::collections::HashSet<_> =
+            rows(&window).into_iter().map(|row| row.key).collect();
+        if keys.len() != 3 || keys.contains("") {
+            return Err(format!("the rows share keys: {keys:?}"));
+        }
         if movies.kind != HomeRowKind::Poster || !movies.error.is_empty() {
             return Err("unexpected Movies row".into());
         }

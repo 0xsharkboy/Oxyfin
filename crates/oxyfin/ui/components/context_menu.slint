@@ -66,9 +66,9 @@ export global ContextMenu {
     // Item whose element takes the focus back after a row chosen from the keyboard, also when
     // the action rebuilds its row; empty for none.
     in-out property <string> focus-id;
-    // The row of cards it is in: the same item can show in several. Empty outside such rows.
+    // Key of the row of cards it is in: the same item can show in several. Empty outside such rows.
     in-out property <string> focus-row;
-    // Row of cards of the element the menu was opened on.
+    // Key of the row of cards of the element the menu was opened on.
     in-out property <string> opener-row;
     // Changes of items sent to the server that it has not answered yet.
     out property <int> changes-pending;

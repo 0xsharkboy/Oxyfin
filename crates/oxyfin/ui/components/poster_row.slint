@@ -7,6 +7,8 @@ import { HeadingText } from "text.slint";
 // A titled row of posters that scrolls sideways across the whole window width.
 export component PosterRow inherits Rectangle {
     in property <string> title;
+    // Tells the row from the others of the page, whatever the language.
+    in property <string> row-key;
     in property <[CardData]> items;
     in property <length> title-spacing: Theme.space-lg;
     in property <length> card-spacing: Theme.space-xl;
@@ -41,7 +43,7 @@ export component PosterRow inherits Rectangle {
 
             for card[index] in root.items: PosterCard {
                 hover-id: card.id;
-                row-name: root.title;
+                row-key: root.row-key;
                 no-menu: card.no-menu;
                 title: card.title;
                 subtitle: card.subtitle;

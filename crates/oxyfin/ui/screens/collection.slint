@@ -147,6 +147,7 @@ export component CollectionScreen inherits Rectangle {
                     padding-bottom: Theme.space-3xl;
 
                     PosterRow {
+                        row-key: "collection";
                         title: @tr("In this collection");
                         items: root.items;
                         clicked(id) => {

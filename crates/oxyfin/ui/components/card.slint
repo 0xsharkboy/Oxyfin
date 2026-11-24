@@ -72,8 +72,8 @@ export component MediaCard {
     in property <string> hover-id;
     // True for a card of Continue Watching, whose menu can take it out of that row.
     in property <bool> from-resume;
-    // Row of cards this one is in, where the same item can show in several.
-    in property <string> row-name;
+    // Key of the row of cards this one is in, where the same item can show in several.
+    in property <string> row-key;
     // True for an item without a context menu.
     in property <bool> no-menu;
     // Becoming true gives the card the keyboard focus.
@@ -89,7 +89,7 @@ export component MediaCard {
     property <bool> hovered: touch.has-hover;
     property <int> scrolls: root.hovered ? HoverCard.scrolls : 0;
     // Takes the focus back after a row of its menu chosen from the keyboard, also once rebuilt.
-    property <bool> focus-return: root.hover-id != "" && ContextMenu.focus-id == root.hover-id && ContextMenu.focus-row == root.row-name;
+    property <bool> focus-return: root.hover-id != "" && ContextMenu.focus-id == root.hover-id && ContextMenu.focus-row == root.row-key;
     // Answers the window while it holds that focus.
     property <int> focus-check: focus.has-focus && root.focus-return ? ContextMenu.focus-check : -1;
 
@@ -154,7 +154,7 @@ export component MediaCard {
 
     function open-menu(x: length, y: length, by-keyboard: bool) {
         ContextMenu.show(root.hover-id, root.from-resume, x, y, by-keyboard, root.title, root.subtitle);
-        ContextMenu.opener-row = root.row-name;
+        ContextMenu.opener-row = root.row-key;
     }
 
     touch := TouchArea {

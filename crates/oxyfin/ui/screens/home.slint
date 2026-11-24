@@ -33,6 +33,8 @@ export struct HomeBanner {
 
 // A row of the home screen; `error` is set instead of `items` when it failed to load.
 export struct HomeRow {
+    // Tells the row from the others, whatever the language.
+    key: string,
     title: string,
     kind: HomeRowKind,
     items: [CardData],
@@ -70,6 +72,7 @@ component HomeRowView inherits Rectangle {
 
     VerticalLayout {
         if root.posters: PosterRow {
+            row-key: root.section.key;
             title: root.section.title;
             items: root.section.items;
             title-spacing: Theme.space-md;
@@ -113,7 +116,7 @@ component HomeRowView inherits Rectangle {
 
                     for card[index] in root.section.items: LandscapeCard {
                         hover-id: card.id;
-                        row-name: root.section.title;
+                        row-key: root.section.key;
                         no-menu: card.no-menu;
                         from-resume: root.section.resume;
                         title: card.title;
