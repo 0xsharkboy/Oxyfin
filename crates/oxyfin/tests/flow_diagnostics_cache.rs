@@ -1,4 +1,5 @@
-//! Settings > Diagnostics shows the size of the image cache, and "Clear cache" empties it;
+//! Settings > Diagnostics shows the size of the image cache, and "Clear cache" empties it and
+//! removes the last pages;
 //! Escape still leaves the settings afterwards.
 
 mod common;
@@ -47,6 +48,14 @@ fn the_image_cache_size_is_shown_and_cleared() {
                 .cache_dir
                 .join("images");
             wait_until("the image cache row", || shown(window, "Image cache")).await?;
+            let pages = paths
+                .lock()
+                .map_err(|_| "paths poisoned")?
+                .clone()
+                .ok_or("no paths")?
+                .cache_dir
+                .join("pages.json");
+            wait_until("the last pages on disk", || pages.exists()).await?;
             wait_until("the cache size", || shown(window, "3 MB")).await?;
             if !clear_enabled(window) {
                 return Err("Clear cache is disabled with images stored".into());
@@ -58,6 +67,9 @@ fn the_image_cache_size_is_shown_and_cleared() {
             let left = std::fs::read_dir(&images).map_or(0, |entries| entries.count());
             if left != 0 {
                 return Err(format!("{left} files left in the image cache"));
+            }
+            if pages.exists() {
+                return Err("the last pages are left on disk".into());
             }
             wait_until("Clear cache disabled", || !clear_enabled(window)).await?;
 
