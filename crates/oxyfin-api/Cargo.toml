@@ -17,7 +17,7 @@ tokio = { version = "1", features = ["net", "time"] }
 url = "2"
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.31", default-features = false, features = ["net"] }
+nix = { version = "0.32", default-features = false, features = ["net"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
