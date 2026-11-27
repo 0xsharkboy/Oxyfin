@@ -231,10 +231,24 @@ impl Catalog {
             .is_fresh(&PageKey::Browse(Listing::of(query)), age)
     }
 
-    /// Whether the server answered [`Catalog::libraries`], which the home screen lists, within
-    /// `age`.
-    pub fn listed_libraries_within(&self, age: Duration) -> bool {
-        self.pages.is_fresh(&PageKey::Libraries, age)
+    /// Whether the server answered every list of the home screen within `age`:
+    /// [`Catalog::continue_watching`], [`Catalog::next_up`] and [`Catalog::latest`] of each
+    /// library with these limits, and [`Catalog::libraries`].
+    pub fn home_within(&self, age: Duration, resume: u32, next_up: u32, latest: u32) -> bool {
+        let fresh = |key: PageKey| self.pages.is_fresh(&key, age);
+        fresh(PageKey::Resume(resume))
+            && fresh(PageKey::NextUp(next_up))
+            && fresh(PageKey::Libraries)
+            && self.last_libraries().is_some_and(|libraries| {
+                libraries
+                    .iter()
+                    .all(|library| fresh(PageKey::Latest(library.id.clone(), latest)))
+            })
+    }
+
+    /// Bytes the answers kept for the next launch take on disk.
+    pub fn saved_bytes(&self) -> u64 {
+        self.pages.saved_bytes()
     }
 
     fn last<T: Kept>(&self, key: PageKey) -> Option<T> {

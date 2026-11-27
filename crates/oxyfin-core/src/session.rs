@@ -301,6 +301,7 @@ impl SessionManager {
     /// Rebuilds the remembered session without any network request.
     pub async fn restore(&self) -> Result<Option<SignedIn>> {
         let Some(saved) = self.config().session.clone() else {
+            crate::pages::remove_saved(&self.paths);
             return Ok(None);
         };
         let server = Server::new(&saved.server_url, self.client_info())?;
@@ -308,6 +309,7 @@ impl SessionManager {
         let Some((token, token_storage)) =
             self.vault_call(move |vault| vault.load(&account)).await?
         else {
+            crate::pages::remove_saved(&self.paths);
             return Ok(None);
         };
         let session = server.restore_session(token, UserId::from(saved.user_id), saved.server_id);

@@ -1010,14 +1010,18 @@ impl App {
 
     /// Measures the image cache for the Diagnostics section of the settings.
     fn measure_image_cache(&self) {
-        let Some((_, _, images)) = self.services() else {
+        let Some((_, catalog, images)) = self.services() else {
             return;
         };
-        self.spawn(async move { images.disk_usage().await }, |app, bytes| {
-            if let Some(window) = app.window() {
-                window.set_settings_image_cache_kb(settings::cache_kb(bytes));
-            }
-        });
+        let saved = catalog.saved_bytes();
+        self.spawn(
+            async move { images.disk_usage().await + saved },
+            |app, bytes| {
+                if let Some(window) = app.window() {
+                    window.set_settings_image_cache_kb(settings::cache_kb(bytes));
+                }
+            },
+        );
     }
 
     fn clear_image_cache(&self) {

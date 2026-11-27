@@ -1775,3 +1775,46 @@ async fn the_next_launch_of_the_account_starts_from_its_last_answers() {
         None
     );
 }
+
+#[tokio::test]
+async fn the_saved_answers_count_on_disk_until_forgotten() {
+    let mock = MockServer::start().await;
+    mount(&mock, "GET", "/UserViews", fixture("user_views")).await;
+    let dir = tempfile::TempDir::new().unwrap();
+    let catalog = Catalog::on_disk(session(&mock), &Paths::under(dir.path()));
+    assert_eq!(catalog.saved_bytes(), 0);
+    catalog.libraries().await.unwrap();
+    catalog.save_answers();
+    assert!(catalog.saved_bytes() > 0);
+    catalog.forget_answers();
+    assert_eq!(catalog.saved_bytes(), 0);
+}
+
+#[tokio::test]
+async fn the_home_is_fresh_only_once_every_list_of_it_answered() {
+    let mock = MockServer::start().await;
+    mount(&mock, "GET", "/UserViews", fixture("user_views")).await;
+    mount(
+        &mock,
+        "GET",
+        "/UserItems/Resume",
+        fixture("user_items_resume"),
+    )
+    .await;
+    mount(&mock, "GET", "/Shows/NextUp", fixture("shows_next_up")).await;
+    mount(&mock, "GET", "/Items/Latest", fixture("items_latest")).await;
+    let catalog = catalog(&mock);
+    let age = std::time::Duration::from_secs(60);
+    let fresh = |catalog: &Catalog| catalog.home_within(age, 12, 5, 8);
+    let libraries = catalog.libraries().await.unwrap();
+    catalog.continue_watching(12).await.unwrap();
+    for library in &libraries {
+        catalog.latest(&library.id, 8).await.unwrap();
+    }
+    assert!(!fresh(&catalog), "next up was not asked for");
+    catalog.next_up(5).await.unwrap();
+    assert!(fresh(&catalog));
+    catalog.forget_answers();
+    catalog.libraries().await.unwrap();
+    assert!(!fresh(&catalog), "the libraries alone");
+}

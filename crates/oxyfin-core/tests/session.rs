@@ -730,3 +730,16 @@ async fn discovered_version_is_none_when_the_server_does_not_answer() {
         None
     );
 }
+
+#[tokio::test]
+async fn a_launch_without_a_session_removes_the_saved_pages() {
+    let mock = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let paths = Paths::under(dir.path());
+    let pages = paths.cache_dir.join("pages.json");
+    std::fs::create_dir_all(&paths.cache_dir).unwrap();
+    std::fs::write(&pages, b"{}").unwrap();
+    let manager = manager(&mock, &dir, memory_vault());
+    assert!(manager.restore().await.unwrap().is_none());
+    assert!(!pages.exists());
+}

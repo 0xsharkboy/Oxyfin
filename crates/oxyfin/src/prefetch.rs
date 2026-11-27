@@ -133,7 +133,7 @@ async fn likely_next(
     images: &Arc<ImageCache>,
     size: ImageSize,
 ) -> Result<(), CoreError> {
-    if !catalog.listed_libraries_within(FRESH) {
+    if !catalog.home_within(FRESH, CONTINUE_WATCHING_LIMIT, NEXT_UP_LIMIT, LATEST_LIMIT) {
         catalog.continue_watching(CONTINUE_WATCHING_LIMIT).await?;
         catalog.next_up(NEXT_UP_LIMIT).await?;
         for library in catalog.libraries().await? {

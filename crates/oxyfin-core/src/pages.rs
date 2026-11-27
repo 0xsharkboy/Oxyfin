@@ -355,6 +355,13 @@ impl PageCache {
         }
     }
 
+    /// Bytes the answers kept for the next launch take on disk.
+    pub(crate) fn saved_bytes(&self) -> u64 {
+        let Some(disk) = &self.disk else { return 0 };
+        let _state = self.lock();
+        fs::metadata(&disk.file).map_or(0, |meta| meta.len())
+    }
+
     /// Forgets every answer and keeps none from now on: the account signed out.
     pub(crate) fn close(&self) {
         self.lock().closed = true;
@@ -509,6 +516,15 @@ impl Disk {
             }
         }
     }
+}
+
+/// Removes the answers kept for the next launch under `paths`: no account starts from them.
+pub(crate) fn remove_saved(paths: &Paths) {
+    Disk {
+        file: paths.cache_dir.join(FILE_NAME),
+        account: String::new(),
+    }
+    .remove();
 }
 
 /// Creates a file only the user can read: titles tell what they watch.
