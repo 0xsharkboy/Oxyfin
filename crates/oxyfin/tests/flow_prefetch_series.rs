@@ -4,11 +4,10 @@ mod common;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
 
 use common::answers::open_tab;
 use common::{
-    click_at, fixture, json, mount_browse_basics, pause, run, save_session, start_with, wait_role,
+    click_at, fixture, json, mount_browse_basics, run, save_session, start_with, wait_role,
     wait_until,
 };
 use i_slint_backend_testing::AccessibleRole;
@@ -59,6 +58,7 @@ fn a_hovered_series_opens_at_once() {
     let count = Arc::clone(&asked);
     let flow = start_with(move |mock| mount(mock, count), save_session);
     flow.app.set_prefetch(true);
+    let app = std::rc::Rc::clone(&flow.app);
     let window = flow.window.as_weak();
 
     run(&flow, async move {
@@ -73,7 +73,7 @@ fn a_hovered_series_opens_at_once() {
             .dispatch_event(WindowEvent::PointerMoved { position: over });
         wait_until("the seasons", || asked.load(Ordering::SeqCst) == 1).await?;
         // The next episode, asked for at the same time, answers too.
-        pause(Duration::from_millis(400)).await;
+        wait_until("the series answered", || !app.prefetching()).await?;
         click_at(&window, over);
         if window.get_screen() != Screen::Series || !window.get_series_loaded() {
             return Err("the series page waits for the server".into());

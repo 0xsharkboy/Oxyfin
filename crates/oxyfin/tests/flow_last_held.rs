@@ -2,13 +2,12 @@
 
 mod common;
 
-use common::answers::{Answers, SLOW, open_tab, titles, visit_movies, watched};
-use common::{pause, run, save_session, start_with, wait_role, wait_until};
+use common::answers::{Answers, open_tab, titles, visit_movies, watched};
+use common::{run, save_session, start_with, wait_role, wait_until};
 use i_slint_backend_testing::AccessibleRole;
 use oxyfin::Screen;
 use slint::platform::WindowEvent;
 use slint::{ComponentHandle, LogicalPosition};
-use std::time::Duration;
 
 #[test]
 fn a_new_answer_waits_for_the_pointer_to_leave_the_cards() {
@@ -16,6 +15,7 @@ fn a_new_answer_waits_for_the_pointer_to_leave_the_cards() {
     let server = answers.clone();
     let flow = start_with(move |mock| server.mount(mock), save_session);
     let window = flow.window.as_weak();
+    let app = std::rc::Rc::clone(&flow.app);
 
     run(&flow, async move {
         let window = window.upgrade().ok_or("window dropped")?;
@@ -25,7 +25,7 @@ fn a_new_answer_waits_for_the_pointer_to_leave_the_cards() {
             window.get_screen() == Screen::Library && titles(&window).is_empty()
         })
         .await?;
-        answers.held().slow = true;
+        answers.hold();
         answers.held().movies = vec![9, 1, 2, 3];
         open_tab(&window, "Movies").await?;
         let card = wait_role(&window, "Movie 2", AccessibleRole::Button).await?;
@@ -34,11 +34,12 @@ fn a_new_answer_waits_for_the_pointer_to_leave_the_cards() {
         window
             .window()
             .dispatch_event(WindowEvent::PointerMoved { position: over });
-        let asked = answers.asked(&["/Items?", "includeItemTypes=Movie"]);
-        if asked != 2 {
-            return Err(format!("the movies were asked {asked} times"));
-        }
-        pause(SLOW + Duration::from_millis(500)).await;
+        wait_until("the movies asked again", || {
+            answers.asked(&["/Items?", "includeItemTypes=Movie"]) == 2
+        })
+        .await?;
+        answers.release();
+        wait_until("the new answer held", || app.holds_changes()).await?;
         if titles(&window) != ["Movie 1", "Movie 2", "Movie 3"] {
             return Err("the card under the pointer moved".into());
         }

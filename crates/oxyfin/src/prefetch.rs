@@ -35,6 +35,7 @@ pub const POSTERS: usize = 32;
 /// The background requests running.
 pub(crate) struct Prefetcher {
     enabled: Cell<bool>,
+    delay: Cell<Duration>,
     idle: RefCell<Option<AbortHandle>>,
     hovered: RefCell<Option<AbortHandle>>,
 }
@@ -43,6 +44,7 @@ impl Default for Prefetcher {
     fn default() -> Self {
         Self {
             enabled: Cell::new(true),
+            delay: Cell::new(IDLE_DELAY),
             idle: RefCell::default(),
             hovered: RefCell::default(),
         }
@@ -53,6 +55,20 @@ impl Prefetcher {
     /// Turns the background requests on or off.
     pub(crate) fn enable(&self, on: bool) {
         self.enabled.set(on);
+    }
+
+    /// Sets how long the page shown has been loaded before anything else is asked for.
+    pub(crate) fn set_delay(&self, delay: Duration) {
+        self.delay.set(delay);
+    }
+
+    /// Whether something is asked for in the background.
+    pub(crate) fn busy(&self) -> bool {
+        [&self.idle, &self.hovered].iter().any(|task| {
+            task.borrow()
+                .as_ref()
+                .is_some_and(|task| !task.is_finished())
+        })
     }
 
     /// Another page shows: everything stops.
@@ -76,9 +92,10 @@ impl Prefetcher {
         };
         let (width, height) = POSTER_ARTWORK;
         let size = image_size(width, height, window.window().scale_factor());
+        let delay = self.delay.get();
         *running = Some(app.spawn(
             async move {
-                tokio::time::sleep(IDLE_DELAY).await;
+                tokio::time::sleep(delay).await;
                 if let Err(error) = likely_next(&catalog, &images, size).await {
                     log::debug!("background loading stopped: {error}");
                 }

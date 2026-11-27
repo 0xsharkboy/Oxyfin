@@ -1,6 +1,6 @@
 //! A server whose movies, delay and failures a flow changes while the app runs.
 
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use i_slint_backend_testing::AccessibleRole;
@@ -34,7 +34,17 @@ pub struct Held {
 }
 
 #[derive(Clone, Default)]
-pub struct Answers(Arc<Mutex<Held>>);
+pub struct Answers(Arc<Mutex<Held>>, Arc<Gate>);
+
+/// Keeps listings from answering until the flow lets them; they answer anyway after
+/// [`GATE_LIMIT`], so that a failed flow never leaves the server stuck.
+#[derive(Default)]
+struct Gate {
+    closed: Mutex<bool>,
+    opened: Condvar,
+}
+
+const GATE_LIMIT: Duration = Duration::from_secs(10);
 
 pub fn id(number: usize) -> String {
     format!("{number:032x}")
@@ -45,6 +55,25 @@ impl Answers {
         let answers = Self::default();
         answers.held().movies = movies.to_vec();
         answers
+    }
+
+    /// Listings asked from now on wait for [`Answers::release`] to answer.
+    pub fn hold(&self) {
+        *self.1.closed.lock().unwrap_or_else(PoisonError::into_inner) = true;
+    }
+
+    /// Lets the listings held answer.
+    pub fn release(&self) {
+        *self.1.closed.lock().unwrap_or_else(PoisonError::into_inner) = false;
+        self.1.opened.notify_all();
+    }
+
+    fn pass_gate(&self) {
+        let closed = self.1.closed.lock().unwrap_or_else(PoisonError::into_inner);
+        let _ = self
+            .1
+            .opened
+            .wait_timeout_while(closed, GATE_LIMIT, |closed| *closed);
     }
 
     pub fn held(&self) -> MutexGuard<'_, Held> {
@@ -147,10 +176,13 @@ impl Respond for Listing {
             serde_json::json!({"Items": items, "TotalRecordCount": all.len(), "StartIndex": start})
                 .to_string(),
         );
-        match held.slow {
+        let answer = match held.slow {
             true => answer.set_delay(SLOW),
             false => answer,
-        }
+        };
+        drop(held);
+        self.0.pass_gate();
+        answer
     }
 }
 

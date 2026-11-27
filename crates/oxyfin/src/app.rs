@@ -226,6 +226,21 @@ impl App {
         self.prefetch.enable(on);
     }
 
+    /// Sets how long a loaded page waits before anything is asked for in the background.
+    pub fn set_prefetch_delay(&self, delay: Duration) {
+        self.prefetch.set_delay(delay);
+    }
+
+    /// Whether something is asked for in the background.
+    pub fn prefetching(&self) -> bool {
+        self.prefetch.busy()
+    }
+
+    /// Whether a new answer waits for the pointer to leave what it would move.
+    pub fn holds_changes(&self) -> bool {
+        !self.waiting.borrow().is_empty()
+    }
+
     /// Takes the generation shutdowns still running, for `main` to wait on before exiting.
     pub fn take_pending_ends(&self) -> Vec<JoinHandle<()>> {
         std::mem::take(&mut *self.ending.borrow_mut())

@@ -3,10 +3,8 @@
 
 mod common;
 
-use std::time::Duration;
-
-use common::answers::{Answers, SLOW, id, open_tab, titles};
-use common::{click_at, pause, run, save_session, start_with, wait_role, wait_until};
+use common::answers::{Answers, id, open_tab, titles};
+use common::{click_at, run, save_session, start_with, wait_role, wait_until};
 use i_slint_backend_testing::AccessibleRole;
 use oxyfin::{HoverCard, Screen};
 use slint::platform::WindowEvent;
@@ -22,6 +20,7 @@ fn what_is_opened_next_was_asked_for_once() {
     let server = answers.clone();
     let flow = start_with(move |mock| server.mount(mock), save_session);
     flow.app.set_prefetch(true);
+    let app = std::rc::Rc::clone(&flow.app);
     let window = flow.window.as_weak();
 
     run(&flow, async move {
@@ -31,20 +30,25 @@ fn what_is_opened_next_was_asked_for_once() {
             answers.asked(&SHOWS) == 1 && answers.asked(&["/Genres"]) == 2
         })
         .await?;
-        pause(Duration::from_millis(900)).await;
+        wait_until("the background done", || {
+            !app.prefetching() && answers.asked(&["/Images/Primary", "tag=tag&"]) >= 3
+        })
+        .await?;
         let posters = answers.asked(&["/Images/Primary", "tag=tag&"]);
         let listings = answers.asked(&MOVIES) + answers.asked(&SHOWS);
         if (listings, answers.asked(&["/Genres"]), posters) != (2, 2, 3) {
             return Err(format!("too many requests: {:?}", answers.held().asked));
         }
 
-        answers.held().slow = true;
+        answers.hold();
         open_tab(&window, "Movies").await?;
         if titles(&window) != ["Movie 1", "Movie 2", "Movie 3"] || window.get_library_loading() {
             return Err("Movies waits for the server".into());
         }
         // The page is asked for anew, and nothing else is: the rest was answered a moment ago.
-        pause(SLOW + Duration::from_millis(900)).await;
+        wait_until("the page asked again", || answers.asked(&MOVIES) == 2).await?;
+        answers.release();
+        wait_until("the background done", || !app.prefetching()).await?;
         if (answers.asked(&MOVIES), answers.asked(&SHOWS)) != (2, 1) {
             return Err(format!("too many requests: {:?}", answers.held().asked));
         }
