@@ -214,11 +214,18 @@ impl LibraryController {
     }
 
     /// The page came back from the player or holds stale data: every page loaded is asked again
-    /// in one request, and the grid keeps its place.
+    /// in one request, and the grid keeps its place; an answer that moves cards waits for the
+    /// pointer, and a failure keeps the grid.
     pub(crate) fn refresh(&self, app: &Rc<App>) {
+        let shown = !self.items.borrow().is_empty();
+        self.ask_loaded(app, if shown { Ask::Behind } else { Ask::Again });
+    }
+
+    /// Asks again for every page loaded, in one request.
+    fn ask_loaded(&self, app: &Rc<App>, ask: Ask) {
         if self.tab.get().is_some() {
             let loaded = u32::try_from(self.items.borrow().len()).unwrap_or(u32::MAX);
-            self.request(app, 0, loaded.max(PAGE_SIZE), Ask::Again);
+            self.request(app, 0, loaded.max(PAGE_SIZE), ask);
         }
     }
 
@@ -228,7 +235,8 @@ impl LibraryController {
         let Some(tab) = self.tab.get() else { return };
         patch_card(&self.items, &self.cards, id, user);
         if self.settings(tab).watch != WatchFilter::All || tab == LibraryTab::Favorites {
-            self.refresh(app);
+            // The user's own change: the card leaves at once.
+            self.ask_loaded(app, Ask::Again);
         } else if self.in_flight.get() {
             // The answer on its way may hold the item as it was: it is asked for again.
             let (start, limit) = self.asked.get();

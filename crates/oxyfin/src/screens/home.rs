@@ -103,15 +103,21 @@ impl HomeController {
             return;
         }
         if !self.loaded.get() {
-            self.reload(app);
+            self.reload(app, false);
         } else if app.window().is_some_and(|window| window.get_home_settled()) {
             app.prefetch.idle(app);
         }
     }
 
-    /// The home screen came back from the player.
+    /// The home screen came back from the player or holds stale data: what it shows stays
+    /// until the new answers come, and those that move rows wait for the pointer.
     pub(crate) fn refresh(&self, app: &Rc<App>) {
-        self.reload(app);
+        self.reload(app, false);
+    }
+
+    /// The user changed an item from the home screen: the new answers show at once.
+    pub(crate) fn changed(&self, app: &Rc<App>) {
+        self.reload(app, true);
     }
 
     /// The poster or banner of item `id` was opened.
@@ -146,7 +152,7 @@ impl HomeController {
         }
     }
 
-    fn reload(&self, app: &Rc<App>) {
+    fn reload(&self, app: &Rc<App>, at_once: bool) {
         let Some((id, catalog, _)) = app.services() else {
             return;
         };
@@ -160,7 +166,11 @@ impl HomeController {
             window.set_home_rows(ModelRc::from(Rc::clone(&self.rows)));
             window.set_home_settled(false);
         }
-        let behind = first && self.show_last(app, id, &catalog);
+        let behind = if first {
+            self.show_last(app, id, &catalog)
+        } else {
+            !at_once
+        };
         if let Some(window) = app.window()
             && first
         {

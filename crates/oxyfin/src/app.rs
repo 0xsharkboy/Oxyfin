@@ -251,6 +251,7 @@ impl App {
         match &screen {
             Screen::Library(_) => self.library.patch(self, id, user),
             Screen::Search => self.search.patch(self, id, user),
+            Screen::Home => self.home.changed(self),
             _ => self.refresh(&screen),
         }
         self.dispatch(Msg::ItemChanged(screen));
