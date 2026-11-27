@@ -1747,6 +1747,8 @@ impl App {
                             self.manager.playback_prefs(),
                         ));
                     }
+                    // A page of the same kind keeps the screen, not the card pointed at.
+                    window.global::<crate::Pointed>().invoke_reset();
                     window.set_screen(slint_screen(&screen));
                 }
                 self.sign_in.shown(self, &screen, &previous);
