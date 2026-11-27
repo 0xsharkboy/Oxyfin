@@ -192,6 +192,7 @@ pub fn reset(window: &AppWindow) {
     window.set_player_loading(true);
     window.set_player_has_error(false);
     window.set_player_paused(false);
+    window.set_player_buffering(false);
     window.set_player_speed(1.0);
     window.set_player_has_next(false);
     window.set_player_audio(ModelRc::default());
@@ -256,6 +257,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             window.set_player_subtitle(subtitle);
             clear_preview(window);
             window.set_player_loading(true);
+            window.set_player_buffering(false);
             window.set_player_has_error(false);
             window.set_player_next_up(NextUp::default());
             clear_chapters(window);
@@ -333,6 +335,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
         PlaybackEvent::StopReported => {}
         PlaybackEvent::NextUpCancelled => window.set_player_next_up(NextUp::default()),
         PlaybackEvent::Stopped => {
+            window.set_player_buffering(false);
             window.set_player_next_up(NextUp::default());
             show_segment(window, None);
             hide_skipped(window);
@@ -348,6 +351,8 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             crate::screens::subtitle_search::reloaded(window, added);
         }
         PlaybackEvent::Converting => return Some(Message::Converting),
+        PlaybackEvent::Buffering(waiting) => window.set_player_buffering(waiting),
+        PlaybackEvent::LowerQualityAdvised(_) => return Some(Message::SlowStream),
         PlaybackEvent::Ended | PlaybackEvent::SessionExpired => {}
         PlaybackEvent::Error(error @ PlaybackError::Command { .. }) => {
             log::warn!("playback command failed: {error}");
@@ -359,6 +364,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
             window.set_player_loading(false);
             window.set_player_seek_pending(false);
             show_segment(window, None);
+            window.set_player_buffering(false);
             window.set_player_error(playback_error_message(&error));
             window.set_player_has_error(true);
         }

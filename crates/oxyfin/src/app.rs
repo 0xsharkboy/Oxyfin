@@ -11,7 +11,7 @@ use oxyfin_core::{
     Catalog, Config, CoreError, ImageCache, ImagePriority, Paths, SessionManager, SignedIn,
     TokenVault,
 };
-use oxyfin_core::{PlayMode, PlaybackCommand, UserState};
+use oxyfin_core::{PlayMode, PlaybackCommand, Quality, UserState};
 use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode};
 use tokio::runtime::Handle;
 use tokio::task::{AbortHandle, JoinHandle};
@@ -35,7 +35,7 @@ use crate::screens::sign_in::SignInController;
 use crate::state::{
     AppState, Effect, GenerationId, LibraryTab, Msg, Notice, Screen, SessionEnd, SessionInfo, Tab,
 };
-use crate::{AppWindow, Message, MouseBack, NoticeData, Shortcuts, TopBarPage};
+use crate::{AppWindow, Message, MouseBack, NoticeAction, NoticeData, Shortcuts, TopBarPage};
 
 /// Logical size of the next episode thumbnail, as laid out by the toast.
 #[cfg(feature = "mpv")]
@@ -94,6 +94,8 @@ pub struct App {
     volume_timer: Timer,
     /// A volume set but not saved yet.
     pending_volume: Cell<Option<f64>>,
+    /// The lower quality the notice offers.
+    advised: Cell<Option<Quality>>,
     sheets: RefCell<crate::images::SheetCache>,
     back_cache: RefCell<BackCache<Parked>>,
     waiting: RefCell<Waiting>,
@@ -125,14 +127,6 @@ pub struct App {
     pub(crate) prefetch: crate::prefetch::Prefetcher,
 }
 
-/// What a notice offers about undoing what it tells.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Undo {
-    None,
-    Offered,
-    Failed,
-}
-
 impl App {
     /// Creates the application for `window`, then restores the saved session in the background.
     pub fn new(
@@ -162,6 +156,7 @@ impl App {
             notice_timer: Timer::default(),
             volume_timer: Timer::default(),
             pending_volume: Cell::new(None),
+            advised: Cell::new(None),
             sheets: RefCell::default(),
             back_cache: RefCell::default(),
             waiting: RefCell::default(),
@@ -683,7 +678,7 @@ impl App {
 
     /// Shows an event of the current playback, then leaves the player when playback is over.
     #[cfg(feature = "mpv")]
-    fn show_playback(self: &Rc<Self>, event: oxyfin_core::PlaybackEvent) {
+    pub fn show_playback(self: &Rc<Self>, event: oxyfin_core::PlaybackEvent) {
         use oxyfin_core::PlaybackEvent;
 
         let Some(window) = self.window() else { return };
@@ -714,8 +709,17 @@ impl App {
             PlaybackEvent::Chapters(chapters) => Some(chapters.clone()),
             _ => None,
         };
-        if let Some(message) = player::apply(&window, event) {
-            self.notify(message);
+        let advised = match &event {
+            PlaybackEvent::LowerQualityAdvised(quality) => Some(*quality),
+            _ => None,
+        };
+        match player::apply(&window, event) {
+            Some(message) if advised.is_some() => {
+                self.advised.set(advised);
+                self.show_notice(message, NoticeAction::LowerQuality);
+            }
+            Some(message) => self.notify(message),
+            None => {}
         }
         if let Some(chapters) = chapters {
             self.load_chapter_images(&window, &chapters);
@@ -1111,20 +1115,20 @@ impl App {
     /// that need no action leave after [`NOTICE_DURATION`]; the others stay
     /// until the user closes them.
     pub(crate) fn notify(&self, message: Message) {
-        self.show_notice(message, Undo::None);
+        self.show_notice(message, NoticeAction::None);
     }
 
     /// Shows `message` with an Undo button, which calls [`crate::menu::MenuController::undo`].
     pub(crate) fn notify_undo(&self, message: Message) {
-        self.show_notice(message, Undo::Offered);
+        self.show_notice(message, NoticeAction::Undo);
     }
 
     /// Shows `message`, the failure of an undo, with a Retry button that undoes again.
     pub(crate) fn notify_undo_failed(&self, message: Message) {
-        self.show_notice(message, Undo::Failed);
+        self.show_notice(message, NoticeAction::RetryUndo);
     }
 
-    fn show_notice(&self, message: Message, undo: Undo) {
+    fn show_notice(&self, message: Message, action: NoticeAction) {
         let Some(window) = self.window() else { return };
         let dismissible = is_persistent(message);
         window.set_notice(NoticeData {
@@ -1132,8 +1136,7 @@ impl App {
             message,
             detail: Default::default(),
             dismissible,
-            undo: undo != Undo::None,
-            undo_failed: undo == Undo::Failed,
+            action,
         });
         if dismissible {
             self.notice_timer.stop();
@@ -1148,16 +1151,22 @@ impl App {
             });
     }
 
-    /// Undo was clicked on the notice: only the notice still showing can be undone.
-    fn undo_notice(self: &Rc<Self>) {
+    /// The button of the notice was clicked: only the notice still showing acts.
+    fn notice_action(self: &Rc<Self>) {
         let Some(window) = self.window() else { return };
         let notice = window.get_notice();
-        if !notice.visible || !notice.undo {
+        if !notice.visible || notice.action == NoticeAction::None {
             return;
         }
         self.notice_timer.stop();
         hide_notice(&window);
-        self.menu.undo(self);
+        if notice.action != NoticeAction::LowerQuality {
+            return self.menu.undo(self);
+        }
+        if let Some(quality) = self.advised.take() {
+            player::show_quality(&window, quality);
+            self.send_playback(PlaybackCommand::SetQuality(quality));
+        }
     }
 
     /// The user closed the notice; closing the file-token warning acknowledges it.
@@ -1341,7 +1350,7 @@ impl App {
             }
         });
         window.on_dismiss_notice(with(|app| app.dismiss_notice()));
-        window.on_undo_notice(with(|app| app.undo_notice()));
+        window.on_notice_action(with(|app| app.notice_action()));
         window.on_library_retry(with(|app| app.library.retry(app)));
         window.on_search_retry(with(|app| app.search.retry(app)));
         window.on_search_retry_more(with(|app| app.search.retry_more(app)));
@@ -1856,7 +1865,10 @@ fn hide_notice(window: &AppWindow) {
 fn is_persistent(message: Message) -> bool {
     matches!(
         message,
-        Message::SessionExpired | Message::FileTokenWarning | Message::StorageError
+        Message::SessionExpired
+            | Message::FileTokenWarning
+            | Message::StorageError
+            | Message::SlowStream
     )
 }
 

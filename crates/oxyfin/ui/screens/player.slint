@@ -23,6 +23,8 @@ export component PlayerScreen inherits Rectangle {
     in property <string> title;
     in property <string> subtitle;
     in property <bool> loading;
+    // The player waits for data while playing; the spinner shows after a short delay.
+    in property <bool> buffering;
     in property <bool> has-error;
     in property <Message> error;
     // Whether the video renderer drew a frame for the current session.
@@ -274,6 +276,21 @@ export component PlayerScreen inherits Rectangle {
         }
     }
 
+    property <bool> buffering-shown;
+    changed buffering => {
+        if !root.buffering {
+            root.buffering-shown = false;
+        }
+    }
+
+    buffering-timer := Timer {
+        interval: Theme.buffering-delay;
+        running: root.buffering && !root.buffering-shown;
+        triggered => {
+            root.buffering-shown = true;
+        }
+    }
+
     skip-notice-timer := Timer {
         interval: 5s;
         running: root.skip-notice-visible;
@@ -446,7 +463,7 @@ export component PlayerScreen inherits Rectangle {
                 accept
             }
 
-            if root.loading && !root.has-error: Spinner {
+            if (root.loading || (root.buffering && root.buffering-shown)) && !root.has-error: Spinner {
                 indeterminate: true;
                 width: 48px;
                 height: 48px;

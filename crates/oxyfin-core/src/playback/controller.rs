@@ -25,6 +25,7 @@ use super::quality::Quality;
 use super::refresh::{RefreshRequest, Refreshed, Wanted, added, in_language, remapped};
 use super::reporter::{ReportKind, Reported, Reporter};
 use super::segments::SkipMemory;
+use super::stalls::lower_quality;
 use super::track_memory::{
     AudioPick, SubtitlePick, TrackChoice, TrackMemory, best_audio, best_subtitle,
 };
@@ -140,6 +141,8 @@ pub struct PlaybackController {
     /// The item loading again and its streams before, for a `ReloadSubtitles`
     /// sent before it is ready.
     reloaded: Option<(ItemId, Vec<MediaStream>)>,
+    /// The item a lower quality was advised for: once per item.
+    advised: Option<ItemId>,
 }
 
 impl PlaybackController {
@@ -219,6 +222,7 @@ impl PlaybackController {
             refresh_serial: 0,
             wanted: None,
             reloaded: None,
+            advised: None,
         };
         tokio::spawn(controller.run(message_receiver, reported, loads, refreshed));
         (
@@ -245,6 +249,7 @@ impl PlaybackController {
                 .as_ref()
                 .and_then(|countdown| countdown.deadline);
             let grace = self.pending.as_ref().map(|(_, deadline)| *deadline);
+            let stall = self.stall_deadline();
             tokio::select! {
                 message = messages.recv() => match message {
                     Some(Message::Command(command)) => self.on_command(command),
@@ -278,6 +283,9 @@ impl PlaybackController {
                 () = sleep_until(grace.unwrap_or_else(Instant::now)), if grace.is_some() => {
                     self.awaiting_unload = false;
                     self.load_pending();
+                }
+                () = sleep_until(stall.unwrap_or_else(Instant::now)), if stall.is_some() => {
+                    self.on_stalled();
                 }
             }
         }
@@ -462,6 +470,7 @@ impl PlaybackController {
             self.report(ReportKind::Start);
             self.schedule_progress();
         }
+        self.update_buffering();
         true
     }
 
@@ -968,6 +977,7 @@ impl PlaybackController {
     /// keeps running meanwhile and loads it once fetched.
     fn play(&mut self, item: ItemId, mode: PlayMode) {
         self.converted = false;
+        self.advised = None;
         self.start_load(LoadRequest {
             item,
             mode,
@@ -1282,7 +1292,10 @@ impl PlaybackController {
             return;
         }
         match event {
-            PlayerEvent::FileLoaded { duration, tracks } => self.on_file_loaded(duration, tracks),
+            PlayerEvent::FileLoaded { duration, tracks } => {
+                self.on_file_loaded(duration, tracks);
+                self.update_buffering();
+            }
             PlayerEvent::Tracks(tracks) => self.on_tracks(&tracks),
             PlayerEvent::Position(position) => {
                 if let Some(current) = self.current.as_mut() {
@@ -1299,6 +1312,12 @@ impl PlaybackController {
             }
             PlayerEvent::Volume(volume) => self.emit(PlaybackEvent::Volume(volume)),
             PlayerEvent::Muted(muted) => self.emit(PlaybackEvent::Muted(muted)),
+            PlayerEvent::Buffering(waiting) => {
+                if let Some(current) = self.current.as_mut() {
+                    current.waiting = waiting;
+                    self.update_buffering();
+                }
+            }
             PlayerEvent::Seeking => {
                 if self.current.as_ref().is_some_and(|c| c.seek_pending) {
                     self.emit(PlaybackEvent::Seeking);
@@ -1307,6 +1326,7 @@ impl PlaybackController {
             PlayerEvent::Seeked => {
                 if let Some(current) = self.current.as_mut().filter(|c| c.seek_pending) {
                     current.seek_pending = false;
+                    self.update_buffering();
                     self.emit(PlaybackEvent::Seeked);
                     self.report(ReportKind::Progress);
                     self.schedule_progress();
@@ -1334,6 +1354,7 @@ impl PlaybackController {
         current.ended = true;
         let next = current.siblings.next.clone();
         self.next_progress = None;
+        self.update_buffering();
         self.show_segment();
         self.emit(PlaybackEvent::Ended);
         if let Some(next) = next {
@@ -1548,6 +1569,52 @@ impl PlaybackController {
         }
     }
 
+    /// Tells whether the player waits for data, while it plays; a wait after a seek of the user
+    /// is shown but not held against the stream.
+    fn update_buffering(&mut self) {
+        let now = Instant::now();
+        let Some(current) = self.current.as_mut() else {
+            return;
+        };
+        let buffering = current.waiting && current.loaded && !current.paused && !current.ended;
+        if buffering && !current.seek_pending {
+            current.stalls.start(now);
+        } else {
+            current.stalls.stop(now);
+        }
+        if current.buffering != buffering {
+            current.buffering = buffering;
+            self.emit(PlaybackEvent::Buffering(buffering));
+        }
+    }
+
+    /// When the waits for data of the current item reach the limit, unless already advised.
+    fn stall_deadline(&mut self) -> Option<Instant> {
+        let current = self.current.as_mut()?;
+        if self.advised.as_ref() == Some(&current.item) {
+            return None;
+        }
+        let (window, limit) = (self.timings.stall_window, self.timings.stall_limit);
+        current.stalls.deadline(Instant::now(), window, limit)
+    }
+
+    /// The player may have waited too long for data: a lower quality is advised, once per item.
+    fn on_stalled(&mut self) {
+        if self
+            .stall_deadline()
+            .is_none_or(|deadline| deadline > Instant::now())
+        {
+            return;
+        }
+        let Some(current) = self.current.as_ref() else {
+            return;
+        };
+        self.advised = Some(current.item.clone());
+        if let Some(quality) = lower_quality(self.quality, current.source.bitrate) {
+            self.emit(PlaybackEvent::LowerQualityAdvised(quality));
+        }
+    }
+
     fn on_paused(&mut self, paused: bool) {
         self.emit(PlaybackEvent::Paused(paused));
         if let Some(countdown) = self.countdown.as_mut() {
@@ -1564,7 +1631,9 @@ impl PlaybackController {
             return;
         }
         current.paused = paused;
-        if current.reporting() {
+        let reporting = current.reporting();
+        self.update_buffering();
+        if reporting {
             self.report(ReportKind::Progress);
             self.schedule_progress();
         }

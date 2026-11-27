@@ -4,23 +4,31 @@ import { BodyText } from "text.slint";
 import { IconButton } from "icon_button.slint";
 import { Button, ButtonStyle } from "button.slint";
 
+// What the button of the banner does.
+export enum NoticeAction {
+    none,
+    // Undoes what the message tells.
+    undo,
+    // Undoing it failed: it can be tried again.
+    retry-undo,
+    // Plays at the lower quality the player advised.
+    lower-quality,
+}
+
 // The message shown by the banner; `dismissible` ones stay until closed with the cross.
 export struct NoticeData {
     visible: bool,
     message: Message,
     detail: string,
     dismissible: bool,
-    // Offers to undo what the message tells.
-    undo: bool,
-    // Undoing it failed: it can be tried again.
-    undo-failed: bool,
+    action: NoticeAction,
 }
 
 // Discreet banner at the top of the content for errors that belong to no field or row.
 export component NoticeBanner inherits Rectangle {
     in property <NoticeData> notice;
     callback dismiss();
-    callback undo();
+    callback act();
 
     accessible-role: groupbox;
     accessible-label: @tr("Notice");
@@ -36,7 +44,7 @@ export component NoticeBanner inherits Rectangle {
 
     layout := HorizontalLayout {
         padding-left: Theme.space-lg;
-        padding-right: root.notice.dismissible || root.notice.undo ? Theme.space-sm : Theme.space-lg;
+        padding-right: root.notice.dismissible || root.notice.action != NoticeAction.none ? Theme.space-sm : Theme.space-lg;
         padding-top: Theme.space-sm;
         padding-bottom: Theme.space-sm;
         spacing: Theme.space-md;
@@ -49,14 +57,14 @@ export component NoticeBanner inherits Rectangle {
             wrap: word-wrap;
             vertical-alignment: center;
         }
-        if root.notice.undo: VerticalLayout {
+        if root.notice.action != NoticeAction.none: VerticalLayout {
             alignment: center;
             Button {
-                label: root.notice.undo-failed ? @tr("Retry") : @tr("Undo");
+                label: root.notice.action == NoticeAction.retry-undo ? @tr("Retry") : root.notice.action == NoticeAction.lower-quality ? @tr("Lower quality") : @tr("Undo");
                 style: ButtonStyle.ghost;
                 focus-on-click: false;
                 clicked => {
-                    root.undo();
+                    root.act();
                 }
             }
         }

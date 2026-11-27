@@ -18,7 +18,7 @@ import { PersonScreen, PersonData, PersonFilter } from "screens/person.slint";
 import { PersonCardData, PersonJob } from "components/person_card.slint";
 import { CollectionScreen, CollectionData } from "screens/collection.slint";
 import { TopBarPage } from "components/top_bar.slint";
-import { NoticeBanner, NoticeData } from "components/notice_banner.slint";
+import { NoticeBanner, NoticeData, NoticeAction } from "components/notice_banner.slint";
 import { HoverCard, HoverCardOverlay, HoverDetails, HoverKind } from "components/hover_card.slint";
 import { Pointed } from "components/pointed.slint";
 import { ContextMenu, ContextMenuOverlay, MenuAction, MenuEntry } from "components/context_menu.slint";
@@ -31,7 +31,7 @@ export { SubtitleResult, SubtitleRowState, SubtitleSearch } from "components/sub
 export { FoundServer, ServerState, ServerStatus }
 export { HomeBanner, HomeRow, HomeRowKind, HomeTitles }
 export { BannerKind } from "components/banner.slint";
-export { NoticeData }
+export { NoticeData, NoticeAction }
 export { HoverCard, HoverDetails, HoverKind }
 export { ContextMenu, MenuAction, MenuEntry }
 export { MouseBack }
@@ -201,6 +201,7 @@ export component AppWindow inherits Window {
     in property <string> player-title;
     in property <string> player-subtitle;
     in property <bool> player-loading;
+    in property <bool> player-buffering;
     in property <bool> player-has-error;
     in property <Message> player-error;
     in property <bool> player-video-active;
@@ -304,7 +305,7 @@ export component AppWindow inherits Window {
 
     in property <NoticeData> notice;
     callback dismiss-notice();
-    callback undo-notice();
+    callback notice-action();
 
     // True while the pointer rests on something that must not move, or a menu is open over it.
     out property <bool> content-held: Pointed.holder != 0 || ContextMenu.open;
@@ -705,6 +706,7 @@ export component AppWindow inherits Window {
             title: root.player-title;
             subtitle: root.player-subtitle;
             loading: root.player-loading;
+            buffering: root.player-buffering;
             has-error: root.player-has-error;
             error: root.player-error;
             video-active: root.player-video-active;
@@ -895,8 +897,8 @@ export component AppWindow inherits Window {
             dismiss => {
                 root.dismiss-notice();
             }
-            undo => {
-                root.undo-notice();
+            act => {
+                root.notice-action();
             }
         }
 

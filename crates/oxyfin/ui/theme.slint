@@ -91,6 +91,8 @@ export global Theme {
     // Bones shown while a page loads: the wait before they show, so a fast answer never flashes
     // them, the time their band of light takes to sweep across, and that band.
     out property <duration> skeleton-delay: 150ms;
+    // Wait for data before the player shows its spinner.
+    out property <duration> buffering-delay: 500ms;
     out property <duration> skeleton-sweep: 1800ms;
     out property <brush> skeleton-shimmer: @linear-gradient(105deg, #ffffff00 35%, #ffffff0d 50%, #ffffff00 65%);
     // Results of a previous search dim while the new ones load.
@@ -342,6 +344,7 @@ export enum Message {
     subtitle-not-added,
     removed-from-resume,
     converting,
+    slow-stream,
 }
 
 export global Messages {
@@ -446,6 +449,9 @@ export global Messages {
         }
         if m == Message.converting {
             return @tr("The original file cannot be played: the server now converts it.");
+        }
+        if m == Message.slow-stream {
+            return @tr("Playback keeps stopping to load. A lower quality may play smoothly.");
         }
         if m == Message.removed-from-resume {
             return @tr("Removed from Continue Watching");

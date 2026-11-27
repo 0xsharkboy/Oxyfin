@@ -4727,3 +4727,71 @@ async fn a_file_downloaded_again_in_the_language_replaces_its_track() {
     assert!(removed < added, "{calls:?}");
     assert_eq!(calls.last(), Some(&Call::SelectSubtitle(Some(TrackId(3)))));
 }
+
+fn waits(waiting: bool) -> impl Fn(&PlaybackEvent) -> bool {
+    move |event| *event == PlaybackEvent::Buffering(waiting)
+}
+
+#[tokio::test]
+async fn waiting_for_data_is_told_only_while_playing() {
+    let mut h = harness(quiet()).await;
+    h.start_item(MOVIE_ID, TEN_MINUTES).await;
+    h.sink.send(PlayerEvent::Buffering(true));
+    wait_event(&mut h.events, waits(true)).await;
+    h.sink.send(PlayerEvent::Paused(true));
+    let seen = events_until(&mut h.events, waits(false)).await;
+    assert!(seen.contains(&PlaybackEvent::Paused(true)), "{seen:?}");
+    h.sink.send(PlayerEvent::Paused(false));
+    wait_event(&mut h.events, waits(true)).await;
+    h.sink.send(PlayerEvent::Buffering(false));
+    wait_event(&mut h.events, waits(false)).await;
+
+    // Paused by the user, then waiting: nothing to tell until playback goes on.
+    h.sink.send(PlayerEvent::Paused(true));
+    h.sink.send(PlayerEvent::Buffering(true));
+    h.sink.send(PlayerEvent::Speed(1.25));
+    let seen = events_until(&mut h.events, |e| *e == PlaybackEvent::Speed(1.25)).await;
+    assert!(!seen.iter().any(waits(true)), "{seen:?}");
+    h.sink.send(PlayerEvent::Paused(false));
+    wait_event(&mut h.events, waits(true)).await;
+
+    // At the end, the player waits for nothing.
+    h.end_at(Duration::from_secs(595));
+    wait_event(&mut h.events, waits(false)).await;
+}
+
+#[tokio::test]
+async fn a_stream_that_keeps_waiting_offers_a_lower_quality() {
+    let mock = MockServer::start().await;
+    let mut info = fixture("playback_info");
+    info["MediaSources"][0]["Bitrate"] = json!(6_000_000);
+    Mock::given(method("POST"))
+        .and(path(PLAYBACK_INFO))
+        .respond_with(ResponseTemplate::new(200).set_body_json(info))
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    let mut h = harness_on(
+        mock,
+        PlaybackTimings {
+            stall_limit: Duration::from_millis(40),
+            ..quiet()
+        },
+    )
+    .await;
+    h.start().await;
+    let loads = h.loads().len();
+    h.sink.send(PlayerEvent::Buffering(true));
+    let seen = events_until(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::LowerQualityAdvised(_))
+    })
+    .await;
+    assert_eq!(
+        seen.last(),
+        Some(&PlaybackEvent::LowerQualityAdvised(QUALITIES[3])),
+        "the highest quality below the file's 6 Mb/s"
+    );
+    h.sink.send(PlayerEvent::Buffering(false));
+    wait_event(&mut h.events, waits(false)).await;
+    assert_eq!(h.loads().len(), loads, "the quality changes only on demand");
+}

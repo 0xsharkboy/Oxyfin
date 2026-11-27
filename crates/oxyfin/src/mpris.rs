@@ -260,6 +260,8 @@ impl PlayerState {
             | PlaybackEvent::Chapters(_)
             | PlaybackEvent::StopReported
             | PlaybackEvent::Converting
+            | PlaybackEvent::Buffering(_)
+            | PlaybackEvent::LowerQualityAdvised(_)
             | PlaybackEvent::Ended
             | PlaybackEvent::TracksChanged { .. }
             | PlaybackEvent::NextUpCountdown { .. }

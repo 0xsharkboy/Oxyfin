@@ -7,6 +7,7 @@ use oxyfin_player::{Track, TrackId, TrackKind};
 
 use super::loader::{LoadRequest, Resume};
 use super::segments::{SkippableSegment, active};
+use super::stalls::Stalls;
 use super::tracks::{Delivery, TrackMap};
 use super::{AudioOption, Chapter, SubtitleOption};
 use crate::models::Episode;
@@ -48,6 +49,11 @@ pub(super) struct Current {
     pub(super) start: Duration,
     pub(super) paused: bool,
     pub(super) seek_pending: bool,
+    /// mpv waits for data.
+    pub(super) waiting: bool,
+    /// The wait for data, as last emitted.
+    pub(super) buffering: bool,
+    pub(super) stalls: Stalls,
     pub(super) duration: Option<Duration>,
     /// The media reached its real end; reset by each load since a load makes a new `Current`.
     pub(super) ended: bool,
@@ -95,6 +101,9 @@ impl Current {
             start: position,
             paused: false,
             seek_pending: false,
+            waiting: false,
+            buffering: false,
+            stalls: Stalls::default(),
             duration: None,
             ended: false,
             siblings,

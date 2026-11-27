@@ -178,6 +178,9 @@ pub enum PlayerEvent {
     Speed(f64),
     /// The muted state changed.
     Muted(bool),
+    /// Playback stopped to wait for data, or plays on once it has enough. The paused state
+    /// is not changed by it.
+    Buffering(bool),
     /// A seek started.
     Seeking,
     /// A seek finished. mpv also reports it when playback first starts, so it
