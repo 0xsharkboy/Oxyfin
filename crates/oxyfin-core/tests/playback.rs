@@ -2797,6 +2797,21 @@ async fn a_stop_report_is_told_once_the_server_answered_it() {
 }
 
 #[tokio::test]
+async fn a_stop_without_a_report_is_settled_at_once() {
+    let mut h = harness(quiet()).await;
+    h.handle.send(PlaybackCommand::Stop);
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::StopReported)).await;
+    assert!(
+        matches!(
+            seen.as_slice(),
+            [.., PlaybackEvent::Stopped, PlaybackEvent::StopReported]
+        ),
+        "{seen:?}"
+    );
+    assert!(bodies(&h.mock, STOPPED).await.is_empty());
+}
+
+#[tokio::test]
 async fn direct_play_ends_no_transcode() {
     let mock = MockServer::start().await;
     mount_status(&mock, "DELETE", ENCODINGS, 204).await;

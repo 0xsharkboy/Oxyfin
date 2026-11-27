@@ -199,8 +199,11 @@ pub enum Effect {
     Show(Screen),
     /// A screen left the stack: release its controller.
     Discard(Screen),
-    /// A screen came back from the player or holds data a change made stale: reload it.
+    /// A screen holds data a change made stale: reload it.
     Refresh(Screen),
+    /// A screen came back from the player: reload it, unless the stop that closed the player
+    /// is still settling and reloads it once settled.
+    Revealed(Screen),
     /// Show a message.
     Notify(Notice),
     /// Exit the application.
@@ -345,7 +348,7 @@ impl AppState {
             Msg::ClosePlayer if on_player => {
                 self.stack.pop();
                 let top = self.top().clone();
-                vec![Effect::Show(top.clone()), Effect::Refresh(top)]
+                vec![Effect::Show(top.clone()), Effect::Revealed(top)]
             }
             Msg::OpenSettings if on_connected && !on_player && *self.top() != Screen::Settings => {
                 vec![self.push(Screen::Settings)]
@@ -638,7 +641,7 @@ mod tests {
         s.update(Msg::OpenPlayer);
         assert_eq!(
             s.update(Msg::ClosePlayer),
-            vec![Effect::Show(Screen::Home), Effect::Refresh(Screen::Home)]
+            vec![Effect::Show(Screen::Home), Effect::Revealed(Screen::Home)]
         );
     }
 
@@ -744,7 +747,7 @@ mod tests {
         );
         assert_eq!(
             s.update(Msg::ClosePlayer),
-            vec![Effect::Show(series("s")), Effect::Refresh(series("s"))]
+            vec![Effect::Show(series("s")), Effect::Revealed(series("s"))]
         );
         assert_eq!(s.stack(), [Screen::Home, series("s")]);
     }
@@ -860,7 +863,7 @@ mod tests {
         s.update(Msg::OpenPlayer);
         assert_eq!(
             s.update(Msg::ClosePlayer),
-            vec![Effect::Show(Screen::Home), Effect::Refresh(Screen::Home)]
+            vec![Effect::Show(Screen::Home), Effect::Revealed(Screen::Home)]
         );
     }
 

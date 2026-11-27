@@ -386,7 +386,8 @@ pub enum PlaybackEvent {
     LowerQualityAdvised(Quality),
     /// Playback stopped.
     Stopped,
-    /// The server answered the report of a stop: what it lists from now on takes it into account.
+    /// The server answered the report of a stop, or no report was needed: what it lists from now
+    /// on takes the stop into account. Follows every [`PlaybackEvent::Stopped`].
     StopReported,
     /// Playback or a command failed.
     Error(PlaybackError),

@@ -90,6 +90,9 @@ pub struct App {
     ending: RefCell<Vec<JoinHandle<()>>>,
     quitting: Cell<bool>,
     pending_stops: Cell<u32>,
+    /// A stop was asked for or told and its settled answer, which reloads the screen shown, has
+    /// not come yet.
+    stop_settling: Cell<bool>,
     notice_timer: Timer,
     volume_timer: Timer,
     /// A volume set but not saved yet.
@@ -153,6 +156,7 @@ impl App {
             ending: RefCell::new(Vec::new()),
             quitting: Cell::new(false),
             pending_stops: Cell::new(0),
+            stop_settling: Cell::new(false),
             notice_timer: Timer::default(),
             volume_timer: Timer::default(),
             pending_volume: Cell::new(None),
@@ -627,6 +631,7 @@ impl App {
                     handle.send(PlaybackCommand::SetQuality(self.manager.quality()));
                     handle.send(PlaybackCommand::SetPrefs(self.manager.playback_prefs()));
                     self.pending_stops.set(0);
+                    self.stop_settling.set(false);
                     self.relay(id, updates);
                     *self.video.borrow_mut() = Some((id, Arc::clone(&player)));
                     generation.playback = Some(Playback {
@@ -704,8 +709,8 @@ impl App {
         let stopped = event == PlaybackEvent::Stopped;
         let ended = event == PlaybackEvent::Ended;
         if stopped {
+            self.stop_settling.set(true);
             self.sheets.borrow_mut().clear();
-            self.forget_answers();
         }
         if let PlaybackEvent::NextUpCountdown { episode, .. }
         | PlaybackEvent::NextUpReady { episode } = &event
@@ -749,7 +754,6 @@ impl App {
             } else if on_player {
                 self.dispatch(Msg::ClosePlayer);
             }
-            // The answer to the stop report reloads the screen shown.
             self.progress_changed(false);
         } else if ended && on_player && !window.get_player_has_next() {
             self.send_playback(PlaybackCommand::Stop);
@@ -761,6 +765,7 @@ impl App {
     /// position, so nothing of it is kept and the screen shown is asked for again.
     #[cfg(feature = "mpv")]
     fn stop_reported(self: &Rc<Self>) {
+        self.stop_settling.set(false);
         self.forget_answers();
         self.progress_changed(true);
     }
@@ -935,6 +940,7 @@ impl App {
         {
             if command == PlaybackCommand::Stop {
                 self.pending_stops.set(self.pending_stops.get() + 1);
+                self.stop_settling.set(true);
             }
             playback.handle.send(command);
         }
@@ -1762,6 +1768,8 @@ impl App {
                 self.collection.discard(self, &screen);
             }
             Effect::Refresh(screen) => self.refresh(&screen),
+            Effect::Revealed(screen) if !self.stop_settling.get() => self.refresh(&screen),
+            Effect::Revealed(_) => {}
             Effect::Notify(notice) => self.notify(notice_message(notice)),
             Effect::Quit => {
                 self.save_volume();

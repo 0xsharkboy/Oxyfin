@@ -84,6 +84,8 @@ pub struct PlaybackController {
     player_open: bool,
     events: UnboundedSender<PlaybackEvent>,
     reporter: Reporter,
+    /// Stop reports sent whose answer was not told yet.
+    stop_reports: u32,
     timings: PlaybackTimings,
     current: Option<Current>,
     /// The player was told to stop a media and has not reported its unload:
@@ -189,6 +191,7 @@ impl PlaybackController {
         let (refreshes, refreshed) = unbounded_channel();
         let controller = Self {
             reporter: Reporter::spawn(session.clone(), reported_sender),
+            stop_reports: 0,
             session,
             player,
             player_events: events.0,
@@ -271,7 +274,10 @@ impl PlaybackController {
                 Some(refreshed) = refreshed.recv() => self.on_refreshed(refreshed),
                 Some(reported) = reported.recv() => match reported {
                     Reported::Expired => self.expire(),
-                    Reported::Stop => self.emit(PlaybackEvent::StopReported),
+                    Reported::Stop => {
+                        self.stop_reports = self.stop_reports.saturating_sub(1);
+                        self.emit(PlaybackEvent::StopReported);
+                    }
                 },
                 () = sleep_until(deadline.unwrap_or_else(Instant::now)), if deadline.is_some() => {
                     self.report(ReportKind::Progress);
@@ -307,6 +313,15 @@ impl PlaybackController {
 
     fn emit(&self, event: PlaybackEvent) {
         let _ = self.events.send(event);
+    }
+
+    /// Tells that playback stopped, and that the stop is settled when no report of it is on
+    /// its way.
+    fn stopped(&self) {
+        self.emit(PlaybackEvent::Stopped);
+        if self.stop_reports == 0 {
+            self.emit(PlaybackEvent::StopReported);
+        }
     }
 
     /// Handles the result of a player command; returns whether it succeeded.
@@ -366,6 +381,7 @@ impl PlaybackController {
         let _ = self.player.stop();
         self.awaiting_unload = true;
         if report && current.reporting() {
+            self.stop_reports += 1;
             self.reporter.send(ReportKind::Stopped, current.report());
         }
         if report {
@@ -559,7 +575,7 @@ impl PlaybackController {
                 self.cancel_countdown();
                 self.cancel_load();
                 self.release(true);
-                self.emit(PlaybackEvent::Stopped);
+                self.stopped();
             }
             PlaybackCommand::Previous | PlaybackCommand::Next if self.loading => {
                 self.navigation = Some(command);
@@ -1108,6 +1124,7 @@ impl PlaybackController {
         };
         self.next_progress = None;
         if current.reporting() {
+            self.stop_reports += 1;
             self.reporter.send(ReportKind::Stopped, current.report());
         }
         self.stop_transcoding(&current);
@@ -1348,8 +1365,9 @@ impl PlaybackController {
         if !current.at_real_end() {
             self.drop_wanted();
             self.release(true);
-            return self.emit(PlaybackEvent::Stopped);
+            return self.stopped();
         }
+        self.stop_reports += 1;
         self.reporter.send(ReportKind::Stopped, current.report());
         current.ended = true;
         let next = current.siblings.next.clone();
