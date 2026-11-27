@@ -136,7 +136,8 @@ pub enum Msg {
     /// The user opened a detail page: only `Screen::Movie`, `Screen::Series`, `Screen::Person`
     /// or `Screen::Collection`.
     OpenItem(Screen),
-    /// A watched or favorite change succeeded on a detail page: the screens below are stale.
+    /// A watched or favorite change succeeded, or playback moved a progress, while `Screen`
+    /// showed: the screens below it are stale.
     ItemChanged(Screen),
     /// The user went back to the previous screen.
     Back,

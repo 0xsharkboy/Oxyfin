@@ -28,7 +28,7 @@ pub(crate) struct ParkedRow {
 }
 
 /// Items similar to the item of a detail page, asked for once per page and again when the
-/// page is refreshed.
+/// page is refreshed, keeping the order shown.
 #[derive(Default)]
 pub(crate) struct SimilarRow {
     instance: Rc<Cell<u64>>,
@@ -90,7 +90,7 @@ impl SimilarRow {
         *self.cards.borrow_mut() = row.cards;
     }
 
-    /// Lets the next `request` ask again, keeping the posters already shown.
+    /// Lets the next `request` ask again, keeping the titles shown and their order.
     pub(crate) fn reload(&self) {
         self.requested.set(false);
     }
@@ -111,7 +111,7 @@ impl SimilarRow {
             .last_similar(&item, LIMIT)
             .filter(|_| !self.answered.get());
         // The server can list the same titles in another order each time.
-        let kept = last.is_some();
+        let kept = last.is_some() || self.answered.get();
         if let (Some(found), Some(window)) = (last, app.window()) {
             let (shown, missing) = cards_with_posters(&found, &[]);
             cards.set_vec(shown);
