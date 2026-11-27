@@ -44,6 +44,10 @@ async fn playback_info_decodes() {
         assert_eq!(info.media_sources.len(), 1, "{label}");
         let source = &info.media_sources[0];
         assert!(source.supports_direct_play, "{label}");
+        assert!(
+            source.bitrate.is_some_and(|bitrate| bitrate > 100_000),
+            "{label}"
+        );
         let audio: Vec<_> = source
             .media_streams
             .iter()
