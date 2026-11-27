@@ -149,8 +149,10 @@ pub enum UnloadReason {
     Stopped,
     /// Another media replaced it.
     Replaced,
-    /// Loading or playback failed.
+    /// The media could not be loaded or played.
     Error(String),
+    /// The audio or video output of the system failed, whatever the media.
+    Output(String),
 }
 
 /// An event emitted by the player.
