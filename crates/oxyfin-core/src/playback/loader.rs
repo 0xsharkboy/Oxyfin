@@ -218,6 +218,13 @@ async fn fetch(
         })
         .ok_or(LoadFailure::NoPlayableSource)?;
     let source = sources.swap_remove(chosen);
+    if options.transcode_only {
+        // A file the server cannot serve at all would fail the same way once converted.
+        session
+            .probe_stream(&item, &source.id)
+            .await
+            .map_err(request)?;
+    }
     let (stream, delivery) = stream(session, &item, &source, &options)?;
     let trickplay = Trickplay::from_dto(&dto, &source.id);
     let mut media =

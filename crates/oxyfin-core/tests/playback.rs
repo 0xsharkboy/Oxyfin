@@ -2491,6 +2491,7 @@ async fn trickplay_of_the_source_comes_just_before_ready() {
 
 const ENCODINGS: &str = "/Videos/ActiveEncodings";
 const PLAYBACK_INFO: &str = "/Items/76282b1c408f374beeee50519e9157a4/PlaybackInfo";
+const STREAM: &str = "/Videos/76282b1c408f374beeee50519e9157a4/stream";
 /// The 1.5 Mbps limit of [`QUALITIES`].
 const LOW: Quality = QUALITIES[4];
 
@@ -2891,8 +2892,14 @@ async fn a_quality_change_reloads_at_the_position_with_the_tracks() {
     wait_requests(&h.mock, ENCODINGS, 1).await;
 }
 
-/// Answers a playback info request that refuses the file itself with a transcode.
+/// Answers a playback info request that refuses the file itself with a transcode, and serves
+/// the file.
 async fn mount_conversion(mock: &MockServer) {
+    Mock::given(method("GET"))
+        .and(path(STREAM))
+        .respond_with(ResponseTemplate::new(206).set_body_bytes(vec![0]))
+        .mount(mock)
+        .await;
     Mock::given(method("POST"))
         .and(path(PLAYBACK_INFO))
         .and(body_partial_json(json!({
@@ -3020,6 +3027,47 @@ async fn an_error_a_conversion_cannot_fix_is_told() {
         PlaybackEvent::Error(PlaybackError::Server { status: 404 })
     );
     assert_eq!(h.loads().len(), 2);
+}
+
+#[tokio::test]
+async fn a_file_the_server_cannot_serve_is_not_converted() {
+    let mock = MockServer::start().await;
+    mount_conversion(&mock).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    for status in [410, 401] {
+        Mock::given(method("GET"))
+            .and(path(STREAM))
+            .respond_with(ResponseTemplate::new(status))
+            .up_to_n_times(1)
+            .with_priority(1)
+            .mount(&h.mock)
+            .await;
+        h.sink.send(load_error());
+        let seen = events_until(&mut h.events, |e| {
+            is_error(e) || *e == PlaybackEvent::SessionExpired
+        })
+        .await;
+        assert!(!seen.contains(&PlaybackEvent::Converting), "{seen:?}");
+        let expected = match status {
+            401 => PlaybackEvent::SessionExpired,
+            _ => PlaybackEvent::Error(PlaybackError::Server { status }),
+        };
+        assert_eq!(seen.last(), Some(&expected));
+        assert!(
+            h.loads()
+                .iter()
+                .all(|load| !load.location.contains("/master.m3u8?")),
+            "{:?}",
+            h.loads()
+        );
+        if status == 410 {
+            h.handle.send(PlaybackCommand::Retry);
+            let again = h.wait_load(2).await;
+            assert!(again.location.contains("/stream?static=true"));
+            h.file_loaded().await;
+        }
+    }
 }
 
 #[tokio::test]

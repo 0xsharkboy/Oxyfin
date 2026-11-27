@@ -272,6 +272,19 @@ impl Session {
         }
     }
 
+    /// Asks for the first byte of the direct stream of a media source: an error tells that the
+    /// server cannot serve the file at all, whatever its format.
+    pub async fn probe_stream(&self, id: &ItemId, media_source_id: &MediaSourceId) -> Result<()> {
+        let query = [
+            ("static", "true".to_owned()),
+            ("mediaSourceId", media_source_id.to_string()),
+        ];
+        self.server()
+            .http()
+            .probe(Some(self.token()), &format!("Videos/{id}/stream"), &query)
+            .await
+    }
+
     /// The transcoded stream of a media source, from its `TranscodingUrl`,
     /// with the header that authenticates it and every nested request of the
     /// HLS playlist. `None` when the URL is unusable.

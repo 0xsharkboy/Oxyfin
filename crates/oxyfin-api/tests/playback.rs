@@ -481,6 +481,45 @@ async fn reports_omit_unset_fields() {
 }
 
 #[tokio::test]
+async fn a_stream_is_probed_with_one_byte() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/Videos/abc/stream"))
+        .and(query_param("static", "true"))
+        .and(query_param("mediaSourceId", "def"))
+        .and(header("Range", "bytes=0-0"))
+        .and(authorization_is(Some(TEST_TOKEN)))
+        .respond_with(ResponseTemplate::new(206).set_body_bytes(vec![0]))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    session(&mock)
+        .probe_stream(&"abc".into(), &MediaSourceId::from("def"))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_stream_the_server_cannot_serve_fails_its_probe() {
+    for status in [401, 404, 410, 500] {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/Videos/abc/stream"))
+            .respond_with(ResponseTemplate::new(status))
+            .mount(&mock)
+            .await;
+        let error = session(&mock)
+            .probe_stream(&"abc".into(), &MediaSourceId::from("def"))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error, oxyfin_api::Error::Status { status: got, .. } if got == status),
+            "{error:?}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn stream_source_debug_redacts() {
     let mock = MockServer::start().await;
     let source = session(&mock).stream_source(&"abc".into(), &MediaSourceId::from("def"));
