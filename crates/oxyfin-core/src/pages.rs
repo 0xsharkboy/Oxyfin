@@ -20,8 +20,13 @@ use crate::models::{
 };
 use crate::{Paths, Result};
 
-/// Answers kept; the least recently used ones are forgotten first.
+/// Answers kept besides those of the next launch; the least recently used ones are forgotten
+/// first.
 pub(crate) const KEPT_ANSWERS: usize = 96;
+
+/// Answers the next launch may show kept, apart from the others: browsing many pages never
+/// pushes Home out.
+const KEPT_FOR_LAUNCH: usize = 96;
 
 /// Items a kept list holds; a longer list is not kept.
 const LONGEST_LIST: usize = 300;
@@ -415,11 +420,19 @@ impl State {
             used: self.clock,
             answered,
         };
+        let on_disk = key.on_disk();
         self.entries.insert(key, entry);
-        while self.entries.len() > KEPT_ANSWERS {
+        let budget = if on_disk {
+            KEPT_FOR_LAUNCH
+        } else {
+            KEPT_ANSWERS
+        };
+        let alike = |key: &PageKey| key.on_disk() == on_disk;
+        while self.entries.keys().filter(|key| alike(key)).count() > budget {
             let oldest = self
                 .entries
                 .iter()
+                .filter(|(key, _)| alike(key))
                 .min_by_key(|(_, entry)| entry.used)
                 .map(|(key, _)| key.clone());
             match oldest {
@@ -541,6 +554,20 @@ mod tests {
         assert!(kept(0));
         assert!(!kept(1));
         assert_eq!(cache.lock().entries.len(), KEPT_ANSWERS);
+    }
+
+    #[test]
+    fn the_pages_of_the_next_launch_outlive_the_others() {
+        let cache = Arc::new(PageCache::in_memory());
+        cache.store(cache.revision(), genres(), &names("home"));
+        for index in 0..=KEPT_ANSWERS {
+            let key = PageKey::Episodes(format!("{index}").as_str().into(), None);
+            cache.store(cache.revision(), key, &Vec::<Episode>::new());
+        }
+        assert_eq!(last(&cache), Some(names("home")));
+        let state = cache.lock();
+        let others = state.entries.keys().filter(|key| !key.on_disk()).count();
+        assert_eq!(others, KEPT_ANSWERS);
     }
 
     #[test]
