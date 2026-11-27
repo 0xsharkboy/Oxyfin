@@ -209,6 +209,8 @@ struct State {
     revision: u64,
     closed: bool,
     save_planned: bool,
+    /// Grows with each save serialized: an older one is not written after it.
+    saves: u64,
     /// What the file holds, not to write the same again.
     written: Vec<u8>,
 }
@@ -222,6 +224,8 @@ struct Disk {
 pub(crate) struct PageCache {
     state: Mutex<State>,
     disk: Option<Disk>,
+    /// Held while a file is written, so that saves land in the order they were made.
+    writing: Mutex<()>,
 }
 
 #[derive(Serialize)]
@@ -254,6 +258,7 @@ impl PageCache {
         Self {
             state: Mutex::default(),
             disk: None,
+            writing: Mutex::default(),
         }
     }
 
@@ -275,6 +280,7 @@ impl PageCache {
         Self {
             state: Mutex::new(state),
             disk: Some(disk),
+            writing: Mutex::default(),
         }
     }
 
@@ -372,41 +378,60 @@ impl PageCache {
         });
     }
 
-    /// Writes the answers the next launch may show.
+    /// Writes the answers the next launch may show: serialized under the lock, written outside
+    /// it, and put in place only if nothing was forgotten or saved since.
     pub(crate) fn save(&self) {
         let Some(disk) = &self.disk else { return };
-        let mut state = self.lock();
-        state.save_planned = false;
-        if state.closed || state.entries.is_empty() {
+        let (bytes, revision, number) = {
+            let mut state = self.lock();
+            state.save_planned = false;
+            if state.closed || state.entries.is_empty() {
+                return;
+            }
+            let mut answers: Vec<(&PageKey, &PageValue)> = state
+                .entries
+                .iter()
+                .filter(|(key, _)| key.on_disk())
+                .map(|(key, entry)| (key, &entry.value))
+                .collect();
+            answers.sort_by_cached_key(|(key, _)| format!("{key:?}"));
+            let saved = Saved {
+                version: VERSION,
+                account: &disk.account,
+                answers,
+            };
+            let bytes = match serde_json::to_vec(&saved) {
+                Ok(bytes) => bytes,
+                Err(error) => return log::warn!("cannot save the last pages: {error}"),
+            };
+            if bytes == state.written {
+                return;
+            }
+            state.saves += 1;
+            if bytes.len() as u64 > LARGEST_FILE {
+                state.written.clear();
+                return disk.remove();
+            }
+            (bytes, state.revision, state.saves)
+        };
+        let _writing = self.writing.lock().unwrap_or_else(PoisonError::into_inner);
+        if self.lock().saves != number {
             return;
         }
-        let mut answers: Vec<(&PageKey, &PageValue)> = state
-            .entries
-            .iter()
-            .filter(|(key, _)| key.on_disk())
-            .map(|(key, entry)| (key, &entry.value))
-            .collect();
-        answers.sort_by_cached_key(|(key, _)| format!("{key:?}"));
-        let saved = Saved {
-            version: VERSION,
-            account: &disk.account,
-            answers,
-        };
-        let bytes = match serde_json::to_vec(&saved) {
-            Ok(bytes) => bytes,
+        let tmp = match disk.write_tmp(&bytes) {
+            Ok(tmp) => tmp,
             Err(error) => return log::warn!("cannot save the last pages: {error}"),
         };
-        if bytes == state.written {
+        let mut state = self.lock();
+        if state.closed || state.revision != revision || state.saves != number {
+            let _ = fs::remove_file(&tmp);
             return;
         }
-        if bytes.len() as u64 > LARGEST_FILE {
-            return disk.remove();
-        }
-        match disk.write(&bytes) {
+        match fs::rename(&tmp, &disk.file) {
             Ok(()) => state.written = bytes,
             Err(error) => {
                 log::warn!("cannot save the last pages: {error}");
-                disk.remove();
+                let _ = fs::remove_file(&tmp);
             }
         }
     }
@@ -457,20 +482,25 @@ impl Disk {
         Some(saved.answers)
     }
 
-    fn write(&self, bytes: &[u8]) -> std::io::Result<()> {
+    /// Writes `bytes` to a file of this process beside the saved one, and returns its path.
+    fn write_tmp(&self, bytes: &[u8]) -> std::io::Result<PathBuf> {
         if let Some(dir) = self.file.parent() {
             fs::create_dir_all(dir)?;
         }
-        let tmp = self.file.with_extension("json.tmp");
+        let tmp = self.tmp();
         let _ = fs::remove_file(&tmp);
         let mut file = private(&tmp)?;
         file.write_all(bytes)?;
-        drop(file);
-        fs::rename(&tmp, &self.file)
+        Ok(tmp)
+    }
+
+    fn tmp(&self) -> PathBuf {
+        self.file
+            .with_extension(format!("json.{}.tmp", std::process::id()))
     }
 
     fn remove(&self) {
-        for file in [&self.file, &self.file.with_extension("json.tmp")] {
+        for file in [&self.file, &self.tmp()] {
             match fs::remove_file(file) {
                 Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
                     log::warn!("cannot remove the last pages: {error}");
@@ -670,5 +700,54 @@ mod tests {
             tokio::task::yield_now().await;
         }
         assert_eq!(last(&on_disk(&dir, ACCOUNT)), Some(names("Drama")));
+    }
+
+    /// Starts a save that waits for the file, and returns once its answers are serialized.
+    fn save_held(cache: &Arc<PageCache>) -> std::thread::JoinHandle<()> {
+        let serialized = cache.lock().saves + 1;
+        let saving = Arc::clone(cache);
+        let handle = std::thread::spawn(move || saving.save());
+        while cache.lock().saves < serialized {
+            std::thread::yield_now();
+        }
+        handle
+    }
+
+    #[test]
+    fn a_save_writes_outside_the_lock_and_never_brings_back_a_forgotten_file() {
+        let dir = TempDir::new().unwrap();
+        let cache = on_disk(&dir, ACCOUNT);
+        cache.store(cache.revision(), genres(), &names("Drama"));
+        let writing = cache.writing.lock().unwrap();
+        let saving = save_held(&cache);
+        assert_eq!(
+            last(&cache),
+            Some(names("Drama")),
+            "answers are read meanwhile"
+        );
+        cache.forget();
+        drop(writing);
+        saving.join().unwrap();
+        assert!(!file(&dir).exists());
+        let dir_left = file(&dir).parent().unwrap().to_owned();
+        assert!(
+            fs::read_dir(dir_left).unwrap().next().is_none(),
+            "no file is left"
+        );
+    }
+
+    #[test]
+    fn an_older_save_is_not_written_after_a_newer_one() {
+        let dir = TempDir::new().unwrap();
+        let cache = on_disk(&dir, ACCOUNT);
+        cache.store(cache.revision(), genres(), &names("old"));
+        let writing = cache.writing.lock().unwrap();
+        let older = save_held(&cache);
+        cache.store(cache.revision(), genres(), &names("new"));
+        let newer = save_held(&cache);
+        drop(writing);
+        older.join().unwrap();
+        newer.join().unwrap();
+        assert_eq!(last(&on_disk(&dir, ACCOUNT)), Some(names("new")));
     }
 }
