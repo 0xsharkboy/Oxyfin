@@ -4,3 +4,4 @@ docs/superpowers/
 result
 .direnv/
 .flatpak-builder/
+*~
