@@ -173,6 +173,7 @@ async fn playback_info_posts_the_bitrate_and_the_tracks() {
         audio_stream_index: Some(3),
         subtitle_stream_index: Some(-1),
         max_height: None,
+        ..PlaybackOptions::default()
     };
     session(&mock)
         .playback_info_with(&ItemId::from("abc"), &options)
@@ -229,6 +230,29 @@ async fn original_quality_sends_no_height_limit() {
         .await;
     let options = PlaybackOptions {
         max_height: None,
+        ..PlaybackOptions::default()
+    };
+    session(&mock)
+        .playback_info_with(&ItemId::from("abc"), &options)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_file_to_convert_is_asked_without_direct_play() {
+    let mock = MockServer::start().await;
+    let mut body = playback_info_body();
+    body["EnableDirectPlay"] = json!(false);
+    body["EnableDirectStream"] = json!(false);
+    Mock::given(method("POST"))
+        .and(path("/Items/abc/PlaybackInfo"))
+        .and(body_json(body))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"MediaSources": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let options = PlaybackOptions {
+        transcode_only: true,
         ..PlaybackOptions::default()
     };
     session(&mock)

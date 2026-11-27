@@ -1020,6 +1020,7 @@ impl PlaybackController {
                 audio_stream_index: resume.audio,
                 subtitle_stream_index: Some(text_subtitle(&current.source, resume.subtitle)),
                 max_height: self.quality.max_height(),
+                transcode_only: false,
             },
             resume: Some(resume),
         };

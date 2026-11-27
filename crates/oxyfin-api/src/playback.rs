@@ -55,6 +55,8 @@ pub struct PlaybackOptions {
     /// Highest picture height the player accepts, in lines: a transcode is
     /// scaled down to it. `None` accepts any height.
     pub max_height: Option<u32>,
+    /// Whether the server must convert the file, as it cannot be played as is.
+    pub transcode_only: bool,
 }
 
 /// Playback state sent to the server.
@@ -237,8 +239,8 @@ impl Session {
             media_source_id: options.media_source_id.as_ref(),
             audio_stream_index: options.audio_stream_index,
             subtitle_stream_index: options.subtitle_stream_index,
-            enable_direct_play: true,
-            enable_direct_stream: true,
+            enable_direct_play: !options.transcode_only,
+            enable_direct_stream: !options.transcode_only,
             enable_transcoding: true,
             allow_video_stream_copy: true,
             allow_audio_stream_copy: true,
