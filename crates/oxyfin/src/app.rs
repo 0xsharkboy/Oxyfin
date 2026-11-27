@@ -116,6 +116,8 @@ pub struct App {
     clipboard: RefCell<Rc<Clipboard>>,
     /// Hosts of the servers met, hidden from copied logs.
     known_hosts: RefCell<std::collections::BTreeSet<String>>,
+    /// Host of the address the user last typed at the sign-in, hidden from copied logs too.
+    typed_host: RefCell<Option<String>>,
     mpv_version: crate::logs::MpvVersion,
     pub(crate) sign_in: SignInController,
     pub(crate) home: HomeController,
@@ -179,6 +181,7 @@ impl App {
                 window.invoke_copy_to_clipboard(text.into())
             })),
             known_hosts: RefCell::default(),
+            typed_host: RefCell::default(),
             mpv_version: Default::default(),
             sign_in: SignInController::default(),
             home: HomeController::default(),
@@ -1059,6 +1062,17 @@ impl App {
         }
     }
 
+    /// Remembers the host of an address typed at the sign-in in place of the one typed before,
+    /// once it reads like an address rather than the start of a scheme.
+    pub(crate) fn tries_server(&self, address: &str) {
+        let typed = address.trim().to_ascii_lowercase();
+        let scheme = !typed.contains("://")
+            && ["http://", "https://"]
+                .iter()
+                .any(|scheme| scheme.starts_with(typed.as_str()));
+        *self.typed_host.borrow_mut() = crate::logs::host_of(&typed).filter(|_| !scheme);
+    }
+
     fn copy_logs(&self) {
         let last = self.manager.last_server_url();
         for address in last.into_iter().chain(
@@ -1069,7 +1083,8 @@ impl App {
         ) {
             self.knows_server(&address);
         }
-        let hosts: Vec<String> = self.known_hosts.borrow().iter().cloned().collect();
+        let mut hosts: Vec<String> = self.known_hosts.borrow().iter().cloned().collect();
+        hosts.extend(self.typed_host.borrow().clone());
         let dir = crate::logs::log_dir(&self.paths);
         let mpv = self.mpv_version.get();
         let report = async move {
