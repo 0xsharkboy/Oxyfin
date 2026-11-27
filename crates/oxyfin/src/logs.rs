@@ -30,6 +30,9 @@ const SERVER_SCHEMES: [&str; 4] = ["http", "https", "ws", "wss"];
 /// Domains of local networks, which complete the short name of a server.
 const LOCAL_SUFFIXES: [&str; 5] = [".local", ".lan", ".home", ".internal", ".arpa"];
 
+/// Extensions of source files, whose lines read like the ports of a server.
+const SOURCE_EXTENSIONS: [&str; 8] = ["rs", "c", "h", "cc", "cpp", "hpp", "py", "js"];
+
 /// Keys whose value never reaches the log file, compared without case.
 const SECRET_KEYS: [&str; 6] = [
     "api_key",
@@ -337,13 +340,21 @@ fn named_host_end(text: &str, start: usize, end: usize, host: &str) -> Option<us
         return None;
     }
     let has_port = |rest: &[u8]| matches!(rest, [b':', digit, ..] if digit.is_ascii_digit());
+    let in_url = before.ends_with(b"//") || before.ends_with(b"@");
+    // A file and its line, as in a panic message, read like a host and its port.
+    let in_path = !in_url && matches!(before.last(), Some(b'/' | b'\\'));
     let local_end = || {
         let labels = after
             .iter()
             .take_while(|byte| word(**byte) || **byte == b'.');
         let domain = text[end..end + labels.count()].trim_end_matches('.');
         let local = LOCAL_SUFFIXES.iter().any(|suffix| domain.ends_with(suffix));
-        (local || has_port(&after[domain.len()..])).then_some(end + domain.len())
+        let source = domain
+            .rsplit('.')
+            .next()
+            .is_some_and(|label| SOURCE_EXTENSIONS.contains(&label));
+        let port = has_port(&after[domain.len()..]) && (in_url || !(in_path || source));
+        (local || port).then_some(end + domain.len())
     };
     let whole_end = match after {
         // The short name of a server, completed with the domain of its network.
@@ -355,7 +366,6 @@ fn named_host_end(text: &str, start: usize, end: usize, host: &str) -> Option<us
     }?;
     // A server can be named like a word of the log, or like the module a line comes from.
     if host == env!("CARGO_PKG_NAME") {
-        let in_url = before.ends_with(b"//") || before.ends_with(b"@");
         return (in_url || has_port(after)).then_some(whole_end);
     }
     (!before.ends_with(b"::") && !after.starts_with(b"::")).then_some(whole_end)
@@ -860,6 +870,24 @@ mod tests {
             assert_eq!(redacted(text, &["nas"]), expected, "{text}");
         }
         assert_eq!(redacted("oxyfin.lan:8096", &["oxyfin"]), "<server>:8096");
+    }
+
+    #[test]
+    fn a_source_line_named_like_a_short_host_stays() {
+        for (text, expected) in [
+            (
+                "at nas.rs:42 and nas.rs:1370:5",
+                "at nas.rs:42 and nas.rs:1370:5",
+            ),
+            (
+                "panicked at src/nas.box:42:9",
+                "panicked at src/nas.box:42:9",
+            ),
+            ("in C:\\x\\nas.c:7", "in C:\\x\\nas.c:7"),
+            ("http://nas.box:80/x", "http://<server>:80/x"),
+        ] {
+            assert_eq!(redacted(text, &["nas"]), expected, "{text}");
+        }
     }
 
     #[test]
