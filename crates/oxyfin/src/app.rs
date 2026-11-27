@@ -730,6 +730,9 @@ impl App {
             PlaybackEvent::Chapters(chapters) => Some(chapters.clone()),
             _ => None,
         };
+        if matches!(event, PlaybackEvent::Loading { .. }) {
+            self.withdraw_advice();
+        }
         let advised = match &event {
             PlaybackEvent::LowerQualityAdvised(quality) => Some(*quality),
             _ => None,
@@ -913,6 +916,9 @@ impl App {
     /// Sends `command` to the current playback. The `Stopped` that answers a
     /// stop sent here is expected: the screen already left the player.
     fn send_playback(&self, command: PlaybackCommand) {
+        if matches!(command, PlaybackCommand::SetQuality(_)) {
+            self.withdraw_advice();
+        }
         if let PlaybackCommand::SetQuality(quality) = command
             && let Err(error) = self.manager.set_quality(quality)
         {
@@ -1183,6 +1189,17 @@ impl App {
                     hide_notice(&window);
                 }
             });
+    }
+
+    /// Drops the offer of a lower quality, which no longer applies, and its notice.
+    fn withdraw_advice(&self) {
+        self.advised.set(None);
+        let Some(window) = self.window() else { return };
+        let notice = window.get_notice();
+        if notice.visible && notice.action == NoticeAction::LowerQuality {
+            self.notice_timer.stop();
+            hide_notice(&window);
+        }
     }
 
     /// The button of the notice was clicked: only the notice still showing acts.
