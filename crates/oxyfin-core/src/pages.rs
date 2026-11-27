@@ -506,8 +506,22 @@ impl Disk {
             .with_extension(format!("json.{}.tmp", std::process::id()))
     }
 
+    /// Removes the saved file and the files of every process writing it, even one that ended
+    /// before it could rename its own.
     fn remove(&self) {
-        for file in [&self.file, &self.tmp()] {
+        let mut files = vec![self.file.clone()];
+        let name = self.file.file_name().and_then(|name| name.to_str());
+        if let (Some(dir), Some(name)) = (self.file.parent(), name)
+            && let Ok(entries) = fs::read_dir(dir)
+        {
+            let prefix = format!("{name}.");
+            files.extend(entries.flatten().map(|entry| entry.path()).filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with(&prefix) && name.ends_with(".tmp"))
+            }));
+        }
+        for file in &files {
             match fs::remove_file(file) {
                 Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
                     log::warn!("cannot remove the last pages: {error}");
@@ -765,5 +779,24 @@ mod tests {
         older.join().unwrap();
         newer.join().unwrap();
         assert_eq!(last(&on_disk(&dir, ACCOUNT)), Some(names("new")));
+    }
+
+    #[test]
+    fn removing_the_saved_pages_sweeps_the_files_of_every_process() {
+        let dir = TempDir::new().unwrap();
+        let cache_dir = file(&dir).parent().unwrap().to_owned();
+        fs::create_dir_all(&cache_dir).unwrap();
+        let swept = ["pages.json", "pages.json.1.tmp", "pages.json.424242.tmp"];
+        let kept = ["other.json.1.tmp", "pages.jsonl"];
+        for name in swept.iter().chain(&kept) {
+            fs::write(cache_dir.join(name), b"{}").unwrap();
+        }
+        remove_saved(&Paths::under(dir.path()));
+        for name in swept {
+            assert!(!cache_dir.join(name).exists(), "{name} is left");
+        }
+        for name in kept {
+            assert!(cache_dir.join(name).exists(), "{name} is removed");
+        }
     }
 }
