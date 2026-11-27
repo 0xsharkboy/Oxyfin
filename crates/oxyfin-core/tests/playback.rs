@@ -2876,6 +2876,155 @@ async fn a_quality_change_reloads_at_the_position_with_the_tracks() {
     wait_requests(&h.mock, ENCODINGS, 1).await;
 }
 
+/// Answers a playback info request that refuses the file itself with a transcode.
+async fn mount_conversion(mock: &MockServer) {
+    Mock::given(method("POST"))
+        .and(path(PLAYBACK_INFO))
+        .and(body_partial_json(json!({
+            "EnableDirectPlay": false,
+            "EnableDirectStream": false,
+            "MaxStreamingBitrate": 1_000_000_000,
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(transcode_info()))
+        .with_priority(1)
+        .mount(mock)
+        .await;
+    mount_status(mock, "DELETE", ENCODINGS, 204).await;
+}
+
+fn load_error() -> PlayerEvent {
+    PlayerEvent::Unloaded(UnloadReason::Error("loading failed".into()))
+}
+
+fn is_error(event: &PlaybackEvent) -> bool {
+    matches!(event, PlaybackEvent::Error(_))
+}
+
+#[tokio::test]
+async fn a_file_that_does_not_open_is_converted_once() {
+    let mock = MockServer::start().await;
+    mount_conversion(&mock).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.play(PlayMode::Auto).await;
+    h.sink.send(load_error());
+    let seen = events_until(&mut h.events, |e| *e == PlaybackEvent::Converting).await;
+    assert!(!seen.iter().any(is_error), "{seen:?}");
+    let load = h.wait_load(2).await;
+    assert!(load.location.contains("/master.m3u8?"), "{}", load.location);
+    assert_eq!(load.start, Some(RESUME));
+    let infos = bodies(&h.mock, PLAYBACK_INFO).await;
+    assert_eq!(infos.len(), 2);
+    assert!(
+        infos[1].get("SubtitleStreamIndex").is_none(),
+        "the default tracks are those of the server: {:?}",
+        infos[1]
+    );
+    h.loaded_with(transcode_tracks()).await;
+    let start = wait_requests(&h.mock, START, 1).await;
+    assert_eq!(start[0]["PlayMethod"], json!("Transcode"));
+
+    h.sink.send(load_error());
+    let seen = events_until(&mut h.events, is_error).await;
+    assert!(matches!(
+        seen.last(),
+        Some(PlaybackEvent::Error(PlaybackError::LoadFailed { .. }))
+    ));
+    wait_requests(&h.mock, ENCODINGS, 1).await;
+    assert_eq!(h.loads().len(), 2);
+
+    // A new choice of the user starts from the file again, once more.
+    h.handle.send(PlaybackCommand::Retry);
+    let again = h.wait_load(3).await;
+    assert!(again.location.contains("/stream?static=true"));
+    assert_eq!(again.start, Some(RESUME));
+    h.sink.send(load_error());
+    let converted = h.wait_load(4).await;
+    assert!(converted.location.contains("/master.m3u8?"));
+}
+
+#[tokio::test]
+async fn a_failure_while_paused_converts_at_the_same_place() {
+    let mock = MockServer::start().await;
+    mount_conversion(&mock).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.move_to(Duration::from_secs(5)).await;
+    h.sink.send(PlayerEvent::Paused(true));
+    wait_event(&mut h.events, |e| *e == PlaybackEvent::Paused(true)).await;
+    let started = h.player.calls().len();
+    h.sink.send(load_error());
+    let load = h.wait_load(2).await;
+    assert_eq!(load.start, Some(Duration::from_secs(5)));
+    let infos = wait_requests(&h.mock, PLAYBACK_INFO, 2).await;
+    assert_eq!(infos[1]["MediaSourceId"], json!(MOVIE_ID));
+    assert_eq!(infos[1]["AudioStreamIndex"], json!(2));
+    assert_eq!(infos[1]["SubtitleStreamIndex"], json!(0));
+    assert!(
+        !h.player.calls()[started..].contains(&Call::Stop),
+        "nothing is left to unload"
+    );
+    let stopped = wait_requests(&h.mock, STOPPED, 1).await;
+    assert_eq!(stopped[0]["PositionTicks"], json!(50_000_000));
+    h.loaded_with(transcode_tracks()).await;
+    let calls = h.player.calls()[started..].to_vec();
+    position_of(&calls, &Call::SetPaused(true));
+
+    // Another audio track stays with the conversion.
+    h.handle.send(PlaybackCommand::SelectAudio(3));
+    let reload = h.wait_load(3).await;
+    assert!(
+        reload.location.contains("/master.m3u8?"),
+        "{}",
+        reload.location
+    );
+    let infos = wait_requests(&h.mock, PLAYBACK_INFO, 3).await;
+    assert_eq!(infos[2]["AudioStreamIndex"], json!(3));
+}
+
+#[tokio::test]
+async fn an_error_a_conversion_cannot_fix_is_told() {
+    let mock = MockServer::start().await;
+    mount_conversion(&mock).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.sink.send(PlayerEvent::Unloaded(UnloadReason::Output(
+        "no sound".into(),
+    )));
+    wait_event(&mut h.events, is_error).await;
+    assert_eq!(bodies(&h.mock, PLAYBACK_INFO).await.len(), 1);
+
+    // The item is gone: the server says so before anything loads.
+    h.handle.send(PlaybackCommand::Retry);
+    h.wait_load(2).await;
+    h.file_loaded().await;
+    mount_status(&h.mock, "GET", &format!("/Items/{MOVIE_ID}"), 404).await;
+    h.sink.send(load_error());
+    let error = wait_event(&mut h.events, is_error).await;
+    assert_eq!(
+        error,
+        PlaybackEvent::Error(PlaybackError::Server { status: 404 })
+    );
+    assert_eq!(h.loads().len(), 2);
+}
+
+#[tokio::test]
+async fn a_chosen_quality_plays_what_failed_again() {
+    let mock = MockServer::start().await;
+    mount_conversion(&mock).await;
+    mount_transcode_for(&mock, 1_500_000).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.move_to(Duration::from_secs(5)).await;
+    h.sink.send(PlayerEvent::Unloaded(UnloadReason::Output(
+        "no sound".into(),
+    )));
+    wait_event(&mut h.events, is_error).await;
+    h.handle.send(PlaybackCommand::SetQuality(LOW));
+    let load = h.wait_load(2).await;
+    assert!(load.location.contains("/master.m3u8?"), "{}", load.location);
+    assert_eq!(load.start, Some(Duration::from_secs(5)));
+}
+
 #[tokio::test]
 async fn an_audio_change_during_a_transcode_reloads_with_that_audio() {
     let mock = MockServer::start().await;

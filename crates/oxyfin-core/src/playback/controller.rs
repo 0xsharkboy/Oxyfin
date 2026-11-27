@@ -107,6 +107,13 @@ pub struct PlaybackController {
     quality: Quality,
     /// The load in progress, while `loading`.
     request: Option<LoadRequest>,
+    /// The load that failed, for the user to ask for it again.
+    failed: Option<LoadRequest>,
+    /// The file could not be played and the server was asked to convert it: once per choice of
+    /// the user.
+    converted: bool,
+    /// Why the file could not be played, while the conversion asked instead loads.
+    unplayable: Option<String>,
     /// Playback speed, as the player last reported it.
     speed: f64,
     /// Subtitle delay of the current item, in milliseconds.
@@ -196,6 +203,9 @@ impl PlaybackController {
             subtitles: None,
             quality: Quality::Original,
             request: None,
+            failed: None,
+            converted: false,
+            unplayable: None,
             speed: 1.0,
             subtitle_delay: 0,
             audio_delay: 0,
@@ -512,10 +522,11 @@ impl PlaybackController {
                 if let Some(track) = track {
                     self.call(self.player.select_audio(Some(track)));
                 } else if self.transcoding() {
-                    self.reload(Some(index));
+                    self.reload(Some(index), self.converted);
                 }
             }
             PlaybackCommand::SetQuality(quality) => self.set_quality(quality),
+            PlaybackCommand::Retry => self.load_failed_again(),
             PlaybackCommand::SelectSubtitle(None) => {
                 self.forget_expected(TrackKind::Subtitle);
                 self.remember_subtitle(None);
@@ -653,6 +664,7 @@ impl PlaybackController {
                 max_streaming_bitrate: self.quality.max_bitrate(),
                 media_source_id: Some(current.source.id.clone()),
                 max_height: self.quality.max_height(),
+                transcode_only: self.converted,
                 ..PlaybackOptions::default()
             },
             source: current.source.id.clone(),
@@ -955,6 +967,7 @@ impl PlaybackController {
     /// Stops the current item and starts fetching `item`; the controller
     /// keeps running meanwhile and loads it once fetched.
     fn play(&mut self, item: ItemId, mode: PlayMode) {
+        self.converted = false;
         self.start_load(LoadRequest {
             item,
             mode,
@@ -987,6 +1000,8 @@ impl PlaybackController {
         self.navigation = None;
         self.loading = true;
         self.pending = None;
+        self.failed = None;
+        self.unplayable = None;
         self.request = Some(request.clone());
         self.loader.start(self.session.clone(), request);
     }
@@ -1000,10 +1015,32 @@ impl PlaybackController {
 
     /// Loads the current item again at its position, with its tracks, pause
     /// and speed; `audio` replaces its audio stream.
-    fn reload(&mut self, audio: Option<i32>) {
+    fn reload(&mut self, audio: Option<i32>, transcode_only: bool) {
         let Some(current) = self.current.as_ref() else {
             return;
         };
+        let request = self.request_again(current, audio, transcode_only);
+        self.reloaded = Some((current.item.clone(), current.source.media_streams.clone()));
+        self.start_load(request);
+    }
+
+    /// The request that loads `current` again as it is.
+    fn request_again(
+        &self,
+        current: &Current,
+        audio: Option<i32>,
+        transcode_only: bool,
+    ) -> LoadRequest {
+        if let Some(request) = current.request.as_ref().filter(|_| !current.loaded) {
+            // Nothing shows its tracks yet: they are still those of the request.
+            let mut request = request.clone();
+            if request.item != current.item {
+                request.item = current.item.clone();
+                request.mode = PlayMode::Auto;
+            }
+            request.options.transcode_only = transcode_only;
+            return request;
+        }
         let resume = Resume {
             position: current.position,
             audio: audio.or(current.audio),
@@ -1011,7 +1048,7 @@ impl PlaybackController {
             paused: current.paused,
             speed: self.speed,
         };
-        let request = LoadRequest {
+        LoadRequest {
             item: current.item.clone(),
             mode: PlayMode::FromStart,
             options: PlaybackOptions {
@@ -1020,29 +1057,84 @@ impl PlaybackController {
                 audio_stream_index: resume.audio,
                 subtitle_stream_index: Some(text_subtitle(&current.source, resume.subtitle)),
                 max_height: self.quality.max_height(),
-                transcode_only: false,
+                transcode_only,
             },
             resume: Some(resume),
-        };
-        self.reloaded = Some((current.item.clone(), current.source.media_streams.clone()));
+        }
+    }
+
+    /// Loads the item that failed again, as the user chose it.
+    fn load_failed_again(&mut self) {
+        if let Some(mut request) = self.failed.take() {
+            self.converted = false;
+            request.options.transcode_only = false;
+            request.options.max_streaming_bitrate = self.quality.max_bitrate();
+            request.options.max_height = self.quality.max_height();
+            self.start_load(request);
+        }
+    }
+
+    /// The request for a conversion of the item of `current`, a file that cannot be played;
+    /// one per choice of the user.
+    fn conversion(&self, current: &Current) -> Option<LoadRequest> {
+        let direct = matches!(current.delivery, Delivery::Direct);
+        (direct && !self.converted && !current.ended && !self.closing())
+            .then(|| self.request_again(current, None, true))
+    }
+
+    fn start_conversion(&mut self, request: LoadRequest, reason: String) {
+        let navigation = self.navigation.take();
         self.start_load(request);
+        self.navigation = navigation;
+        self.converted = true;
+        self.unplayable = Some(reason);
+    }
+
+    /// The player unloaded the current item on an error; `media` when the file itself is at
+    /// fault.
+    fn on_failed(&mut self, message: String, media: bool) {
+        let Some(current) = self.current.take() else {
+            return;
+        };
+        self.next_progress = None;
+        if current.reporting() {
+            self.reporter.send(ReportKind::Stopped, current.report());
+        }
+        self.stop_transcoding(&current);
+        if let Some(request) = self.conversion(&current).filter(|_| media) {
+            log::warn!("the file cannot be played, asking for a conversion: {message}");
+            if current.loaded {
+                self.reloaded = Some((current.item, current.source.media_streams));
+            }
+            return self.start_conversion(request, message);
+        }
+        let failed = self.request_again(&current, None, false);
+        self.navigation = None;
+        self.drop_wanted();
+        self.failed = Some(failed);
+        self.emit(PlaybackEvent::Error(PlaybackError::load(message)));
     }
 
     /// Applies a new quality: the item being loaded starts again, the item
-    /// playing loads again unless it reached its end.
+    /// playing loads again unless it reached its end, the item that failed is tried again.
     fn set_quality(&mut self, quality: Quality) {
-        if quality == self.quality {
+        if quality == self.quality && self.failed.is_none() {
             return;
         }
         self.quality = quality;
+        if self.failed.is_some() {
+            return self.load_failed_again();
+        }
+        self.converted = false;
         if self.loading {
             if let Some(mut request) = self.request.clone() {
                 request.options.max_streaming_bitrate = quality.max_bitrate();
                 request.options.max_height = quality.max_height();
+                request.options.transcode_only = false;
                 self.start_load(request);
             }
         } else if self.current.as_ref().is_some_and(|current| !current.ended) {
-            self.reload(None);
+            self.reload(None, false);
         }
     }
 
@@ -1052,6 +1144,7 @@ impl PlaybackController {
         self.pending = None;
         self.loading = false;
         self.request = None;
+        self.failed = None;
         self.navigation = None;
     }
 
@@ -1059,7 +1152,7 @@ impl PlaybackController {
     fn load_failed(&mut self) {
         self.drop_wanted();
         self.loading = false;
-        self.request = None;
+        self.failed = self.request.take();
         self.navigation = None;
     }
 
@@ -1095,8 +1188,12 @@ impl PlaybackController {
                     self.fail(error);
                 }
                 Err(LoadFailure::NoPlayableSource) => {
+                    let error = match self.unplayable.take() {
+                        Some(reason) => PlaybackError::load(reason),
+                        None => PlaybackError::NoPlayableSource,
+                    };
                     self.load_failed();
-                    self.emit(PlaybackEvent::Error(PlaybackError::NoPlayableSource));
+                    self.emit(PlaybackEvent::Error(error));
                 }
                 Err(LoadFailure::NothingToPlay) => {
                     self.load_failed();
@@ -1153,6 +1250,7 @@ impl PlaybackController {
             prepared.start.unwrap_or_default(),
             prepared.siblings,
         );
+        let transcoded = matches!(prepared.delivery, Delivery::Transcoded { .. });
         current.series = prepared.series;
         current.delivery = prepared.delivery;
         current.resume = prepared.resume;
@@ -1163,7 +1261,12 @@ impl PlaybackController {
         current.segments = prepared.segments;
         self.current = Some(current);
         self.loading = false;
-        self.request = None;
+        if let Some(current) = self.current.as_mut() {
+            current.request = self.request.take();
+        }
+        if self.unplayable.take().is_some() && transcoded {
+            self.emit(PlaybackEvent::Converting);
+        }
     }
 
     fn on_player_event(&mut self, event: PlayerEvent) {
@@ -1210,19 +1313,8 @@ impl PlaybackController {
                 }
             }
             PlayerEvent::Ended => self.on_ended(),
-            PlayerEvent::Unloaded(UnloadReason::Error(message)) => {
-                let Some(current) = self.current.take() else {
-                    return;
-                };
-                self.next_progress = None;
-                if current.reporting() {
-                    self.reporter.send(ReportKind::Stopped, current.report());
-                }
-                self.stop_transcoding(&current);
-                self.navigation = None;
-                self.drop_wanted();
-                self.emit(PlaybackEvent::Error(PlaybackError::load(message)));
-            }
+            PlayerEvent::Unloaded(UnloadReason::Error(message)) => self.on_failed(message, true),
+            PlayerEvent::Unloaded(UnloadReason::Output(message)) => self.on_failed(message, false),
             PlayerEvent::Unloaded(_) => {}
         }
     }

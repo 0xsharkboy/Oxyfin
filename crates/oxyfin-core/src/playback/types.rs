@@ -213,7 +213,10 @@ pub enum PlaybackCommand {
     /// and speed, as from a new [`PlaybackEvent::Loading`], and its
     /// [`PlaybackEvent::Ready`] and [`PlaybackEvent::Chapters`] are followed
     /// by its [`PlaybackEvent::Paused`] state. The quality stays for the next items.
+    /// An item that failed to load or to play is tried again.
     SetQuality(Quality),
+    /// Try the item that failed to load or to play again, at its position.
+    Retry,
     /// Change how subtitles look. Applies at once, even with nothing
     /// playing, and again before each item loads.
     SetSubtitleStyle(SubtitleStyle),
@@ -360,6 +363,10 @@ pub enum PlaybackEvent {
         /// Where the skip happened.
         from: Duration,
     },
+    /// The file itself could not be played: the server converts it instead,
+    /// at the same position. Sent after the second [`PlaybackEvent::Loading`]
+    /// of the item.
+    Converting,
     /// Playback stopped.
     Stopped,
     /// The server answered the report of a stop: what it lists from now on takes it into account.

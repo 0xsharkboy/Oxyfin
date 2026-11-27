@@ -341,6 +341,7 @@ export enum Message {
     playback-unavailable,
     subtitle-not-added,
     removed-from-resume,
+    converting,
 }
 
 export global Messages {
@@ -442,6 +443,9 @@ export global Messages {
         }
         if m == Message.subtitle-not-added {
             return @tr("The server did not add this subtitle. Try another one.");
+        }
+        if m == Message.converting {
+            return @tr("The original file cannot be played: the server now converts it.");
         }
         if m == Message.removed-from-resume {
             return @tr("Removed from Continue Watching");

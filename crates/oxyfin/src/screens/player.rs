@@ -51,6 +51,7 @@ pub fn bind(window: &AppWindow, send: Rc<dyn Fn(PlaybackCommand)>) {
         let send = Rc::clone(&send);
         move || send(command.clone())
     };
+    window.on_player_command_retry(command(PlaybackCommand::Retry));
     window.on_player_command_stop(command(PlaybackCommand::Stop));
     window.on_player_command_previous(command(PlaybackCommand::Previous));
     window.on_player_command_next(command(PlaybackCommand::Next));
@@ -346,6 +347,7 @@ pub fn apply(window: &AppWindow, event: PlaybackEvent) -> Option<Message> {
         PlaybackEvent::SubtitlesReloaded { added } => {
             crate::screens::subtitle_search::reloaded(window, added);
         }
+        PlaybackEvent::Converting => return Some(Message::Converting),
         PlaybackEvent::Ended | PlaybackEvent::SessionExpired => {}
         PlaybackEvent::Error(error @ PlaybackError::Command { .. }) => {
             log::warn!("playback command failed: {error}");

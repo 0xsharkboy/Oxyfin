@@ -246,6 +246,7 @@ export component AppWindow inherits Window {
     callback toggle-fullscreen();
     callback player-cursor-hidden(x: length, y: length);
     callback player-command-stop();
+    callback player-command-retry();
     callback player-command-set-paused(paused: bool);
     callback player-command-seek(seconds: float);
     callback player-command-skip(direction: int);
@@ -753,6 +754,9 @@ export component AppWindow inherits Window {
             }
             cursor-hidden(x, y) => {
                 root.player-cursor-hidden(x, y);
+            }
+            command-retry => {
+                root.player-command-retry();
             }
             command-set-paused(paused) => {
                 root.player-command-set-paused(paused);

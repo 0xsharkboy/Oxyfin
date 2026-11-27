@@ -73,6 +73,7 @@ export component PlayerScreen inherits Rectangle {
     // The cursor only changes on a pointer event: the window replays one where the pointer rests.
     callback cursor-hidden(x: length, y: length);
     callback command-set-paused(paused: bool);
+    callback command-retry();
     callback command-seek(seconds: float);
     callback command-skip(direction: int);
     callback command-previous();
@@ -457,20 +458,37 @@ export component PlayerScreen inherits Rectangle {
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
                 width: min(parent.width - 2 * Theme.space-3xl, 480px);
-                height: error-text.preferred-height + 2 * Theme.space-xl;
+                height: error-layout.preferred-height;
                 background: Theme.bg-elevated;
                 border-radius: Theme.radius-lg;
                 border-width: Theme.border-thin;
                 border-color: Theme.border-default;
 
-                error-text := BodyText {
-                    accessible-role: text;
-                    x: Theme.space-xl;
-                    width: parent.width - 2 * Theme.space-xl;
-                    text: Messages.message-text(root.error, "");
-                    wrap: word-wrap;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                error-layout := VerticalLayout {
+                    padding: Theme.space-xl;
+                    spacing: Theme.space-lg;
+
+                    BodyText {
+                        accessible-role: text;
+                        text: Messages.message-text(root.error, "");
+                        wrap: word-wrap;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    HorizontalLayout {
+                        alignment: center;
+
+                        Button {
+                            focus-on-click: false;
+                            style: ButtonStyle.secondary;
+                            label: @tr("Retry");
+                            clicked => {
+                                root.control-vanished();
+                                root.command-retry();
+                            }
+                        }
+                    }
                 }
             }
 

@@ -259,6 +259,7 @@ impl PlayerState {
             | PlaybackEvent::Trickplay(_)
             | PlaybackEvent::Chapters(_)
             | PlaybackEvent::StopReported
+            | PlaybackEvent::Converting
             | PlaybackEvent::Ended
             | PlaybackEvent::TracksChanged { .. }
             | PlaybackEvent::NextUpCountdown { .. }
