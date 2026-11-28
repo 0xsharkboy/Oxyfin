@@ -44,6 +44,10 @@ async fn playback_info_decodes() {
         assert_eq!(info.media_sources.len(), 1, "{label}");
         let source = &info.media_sources[0];
         assert!(source.supports_direct_play, "{label}");
+        assert!(
+            source.bitrate.is_some_and(|bitrate| bitrate > 100_000),
+            "{label}"
+        );
         let audio: Vec<_> = source
             .media_streams
             .iter()
@@ -68,8 +72,8 @@ async fn playback_info_decodes() {
     }
 }
 
-/// The `PlaybackInfo` body every request carries, before the options.
-fn playback_info_body() -> serde_json::Value {
+/// The `PlaybackInfo` body of a request with a bitrate or height limit, before the options.
+fn limited_info_body() -> serde_json::Value {
     json!({
         "UserId": TEST_USER_ID,
         "EnableDirectPlay": true,
@@ -102,6 +106,36 @@ fn playback_info_body() -> serde_json::Value {
     })
 }
 
+/// The `PlaybackInfo` body of a request without any limit.
+fn playback_info_body() -> serde_json::Value {
+    let mut body = limited_info_body();
+    body["MaxStreamingBitrate"] = json!(1_000_000_000);
+    body["DeviceProfile"]["MaxStreamingBitrate"] = json!(1_000_000_000);
+    if let Some(profiles) = body["DeviceProfile"]["SubtitleProfiles"].as_array_mut() {
+        for format in [
+            "srt",
+            "subrip",
+            "ass",
+            "ssa",
+            "vtt",
+            "webvtt",
+            "mov_text",
+            "text",
+            "pgssub",
+            "pgs",
+            "hdmv_pgs_subtitle",
+            "dvdsub",
+            "dvd_subtitle",
+            "dvbsub",
+            "dvb_subtitle",
+            "xsub",
+        ] {
+            profiles.push(json!({ "Format": format, "Method": "Embed" }));
+        }
+    }
+    body
+}
+
 #[tokio::test]
 async fn playback_info_posts_the_device_profile() {
     let mock = MockServer::start().await;
@@ -125,7 +159,7 @@ async fn playback_info_posts_the_device_profile() {
 #[tokio::test]
 async fn playback_info_posts_the_bitrate_and_the_tracks() {
     let mock = MockServer::start().await;
-    let mut body = playback_info_body();
+    let mut body = limited_info_body();
     body["MaxStreamingBitrate"] = json!(4_000_000);
     body["MediaSourceId"] = json!("def");
     body["AudioStreamIndex"] = json!(3);
@@ -143,6 +177,7 @@ async fn playback_info_posts_the_bitrate_and_the_tracks() {
         audio_stream_index: Some(3),
         subtitle_stream_index: Some(-1),
         max_height: None,
+        ..PlaybackOptions::default()
     };
     session(&mock)
         .playback_info_with(&ItemId::from("abc"), &options)
@@ -153,7 +188,7 @@ async fn playback_info_posts_the_bitrate_and_the_tracks() {
 #[tokio::test]
 async fn limited_quality_sends_a_height_condition() {
     let mock = MockServer::start().await;
-    let mut body = playback_info_body();
+    let mut body = limited_info_body();
     body["MaxStreamingBitrate"] = json!(1_500_000);
     body["DeviceProfile"]["CodecProfiles"] = json!([{
         "Type": "Video",
@@ -199,6 +234,29 @@ async fn original_quality_sends_no_height_limit() {
         .await;
     let options = PlaybackOptions {
         max_height: None,
+        ..PlaybackOptions::default()
+    };
+    session(&mock)
+        .playback_info_with(&ItemId::from("abc"), &options)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_file_to_convert_is_asked_without_direct_play() {
+    let mock = MockServer::start().await;
+    let mut body = playback_info_body();
+    body["EnableDirectPlay"] = json!(false);
+    body["EnableDirectStream"] = json!(false);
+    Mock::given(method("POST"))
+        .and(path("/Items/abc/PlaybackInfo"))
+        .and(body_json(body))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"MediaSources": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let options = PlaybackOptions {
+        transcode_only: true,
         ..PlaybackOptions::default()
     };
     session(&mock)
@@ -420,6 +478,45 @@ async fn reports_omit_unset_fields() {
         ..report()
     };
     session(&mock).report_playback_stopped(&bare).await.unwrap();
+}
+
+#[tokio::test]
+async fn a_stream_is_probed_with_one_byte() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/Videos/abc/stream"))
+        .and(query_param("static", "true"))
+        .and(query_param("mediaSourceId", "def"))
+        .and(header("Range", "bytes=0-0"))
+        .and(authorization_is(Some(TEST_TOKEN)))
+        .respond_with(ResponseTemplate::new(206).set_body_bytes(vec![0]))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    session(&mock)
+        .probe_stream(&"abc".into(), &MediaSourceId::from("def"))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_stream_the_server_cannot_serve_fails_its_probe() {
+    for status in [401, 404, 410, 500] {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/Videos/abc/stream"))
+            .respond_with(ResponseTemplate::new(status))
+            .mount(&mock)
+            .await;
+        let error = session(&mock)
+            .probe_stream(&"abc".into(), &MediaSourceId::from("def"))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error, oxyfin_api::Error::Status { status: got, .. } if got == status),
+            "{error:?}"
+        );
+    }
 }
 
 #[tokio::test]

@@ -1,9 +1,17 @@
-// Icons exported from the reference design, 24 px with a 2 px stroke, recolored with `colorize`.
+// Icons exported from the reference design, 24 px with a 2 px stroke, in the text-primary color or
+// in the color their name ends with. Never `colorize` one: it is drawn to a texture of its own
+// first, and icons with holes were only ever seen among those; the cause is unknown.
 
 export global Icons {
+    out property <image> activity: @image-url("icons/activity.svg");
     out property <image> arrow-left: @image-url("icons/arrow-left.svg");
     out property <image> check: @image-url("icons/check.svg");
+    out property <image> check-accent: @image-url("icons/check-accent.svg");
+    out property <image> check-on-accent: @image-url("icons/check-on-accent.svg");
+    out property <image> check-watched: @image-url("icons/check-watched.svg");
     out property <image> chevron-down: @image-url("icons/chevron-down.svg");
+    out property <image> chevron-down-secondary: @image-url("icons/chevron-down-secondary.svg");
+    out property <image> chevron-left: @image-url("icons/chevron-left.svg");
     out property <image> chevron-right: @image-url("icons/chevron-right.svg");
     out property <image> eye: @image-url("icons/eye.svg");
     out property <image> filter: @image-url("icons/filter.svg");
@@ -11,23 +19,32 @@ export global Icons {
     out property <image> fullscreen: @image-url("icons/fullscreen.svg");
     out property <image> heart: @image-url("icons/heart.svg");
     out property <image> heart-filled: @image-url("icons/heart-filled.svg");
+    out property <image> heart-filled-accent: @image-url("icons/heart-filled-accent.svg");
     out property <image> layers: @image-url("icons/layers.svg");
     out property <image> list: @image-url("icons/list.svg");
     out property <image> logo: @image-url("icons/logo.svg");
     out property <image> minus: @image-url("icons/minus.svg");
     out property <image> pause: @image-url("icons/pause.svg");
     out property <image> play: @image-url("icons/play.svg");
+    out property <image> play-on-accent: @image-url("icons/play-on-accent.svg");
     out property <image> plus: @image-url("icons/plus.svg");
     out property <image> rewind-10: @image-url("icons/rewind-10.svg");
+    out property <image> rotate-ccw: @image-url("icons/rotate-ccw.svg");
     out property <image> search: @image-url("icons/search.svg");
+    out property <image> search-secondary: @image-url("icons/search-secondary.svg");
     out property <image> server: @image-url("icons/server.svg");
     out property <image> settings: @image-url("icons/settings.svg");
     out property <image> skip-next: @image-url("icons/skip-next.svg");
     out property <image> skip-prev: @image-url("icons/skip-prev.svg");
     out property <image> star: @image-url("icons/star.svg");
+    out property <image> star-accent: @image-url("icons/star-accent.svg");
+    out property <image> star-secondary: @image-url("icons/star-secondary.svg");
     out property <image> subtitles: @image-url("icons/subtitles.svg");
     out property <image> user: @image-url("icons/user.svg");
     out property <image> volume: @image-url("icons/volume.svg");
+    out property <image> volume-muted: @image-url("icons/volume-muted.svg");
     out property <image> wifi: @image-url("icons/wifi.svg");
+    out property <image> wifi-muted: @image-url("icons/wifi-muted.svg");
     out property <image> x: @image-url("icons/x.svg");
+    out property <image> x-secondary: @image-url("icons/x-secondary.svg");
 }

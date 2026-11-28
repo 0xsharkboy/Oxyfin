@@ -8,10 +8,13 @@ use std::time::Duration;
 
 use oxyfin_api::{ItemId, Session};
 use oxyfin_core::{
-    Catalog, Config, CoreError, ImageCache, Paths, SessionManager, SignedIn, TokenVault,
+    Catalog, Config, CoreError, ImageCache, ImagePriority, Paths, SessionManager, SignedIn,
+    TokenVault,
 };
-use oxyfin_core::{PlayMode, PlaybackCommand};
-use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode};
+use oxyfin_core::{PlayMode, PlaybackCommand, Quality, UserState};
+use slint::{
+    CloseRequestResponse, ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel,
+};
 use tokio::runtime::Handle;
 use tokio::task::{AbortHandle, JoinHandle};
 
@@ -32,9 +35,11 @@ use crate::screens::series::SeriesController;
 use crate::screens::settings;
 use crate::screens::sign_in::SignInController;
 use crate::state::{
-    AppState, Effect, GenerationId, LibraryTab, Msg, Notice, Screen, SessionInfo, Tab,
+    AppState, Effect, GenerationId, LibraryTab, Msg, Notice, Screen, SessionEnd, SessionInfo, Tab,
 };
-use crate::{AppWindow, Message, NoticeData, TopBarPage};
+use crate::{
+    AppWindow, Message, MouseBack, NoticeAction, NoticeData, SettingsTitles, Shortcuts, TopBarPage,
+};
 
 /// Logical size of the next episode thumbnail, as laid out by the toast.
 #[cfg(feature = "mpv")]
@@ -52,8 +57,23 @@ const CHAPTER_THUMB_HEIGHT: f32 = 36.0;
 #[cfg(all(target_os = "linux", feature = "mpv"))]
 const MPRIS_ART_HEIGHT: u32 = 512;
 
+/// Opens a folder in the file manager.
+type FolderOpener = dyn Fn(&std::path::Path);
+
+/// Puts text on the clipboard of a window and tells whether it got there.
+type Clipboard = dyn Fn(&AppWindow, &str) -> bool;
+
+/// Changes of a list that wait until nothing points at it.
+type Waiting = Vec<Box<dyn FnOnce(&Rc<App>)>>;
+
 /// How long a notice that needs no action stays on screen.
 pub const NOTICE_DURATION: Duration = Duration::from_secs(5);
+
+/// How long the volume stays unchanged before it is saved.
+pub const VOLUME_SAVE_DELAY: Duration = Duration::from_secs(1);
+
+/// How long nothing on screen is pointed at before the changes that wait for it are shown.
+const RELEASE_DELAY: Duration = Duration::from_millis(250);
 
 /// The running application, living on the Slint thread.
 ///
@@ -67,14 +87,26 @@ pub struct App {
     manager: Arc<SessionManager>,
     state: RefCell<AppState>,
     shown: RefCell<Screen>,
+    /// Number of the page shown, growing with every page.
+    page: Cell<u64>,
     generation: RefCell<Option<Generation>>,
     incoming: RefCell<Option<Session>>,
     ending: RefCell<Vec<JoinHandle<()>>>,
     quitting: Cell<bool>,
     pending_stops: Cell<u32>,
+    /// A stop was asked for or told and its settled answer, which reloads the screen shown, has
+    /// not come yet.
+    stop_settling: Cell<bool>,
     notice_timer: Timer,
+    volume_timer: Timer,
+    /// A volume set but not saved yet.
+    pending_volume: Cell<Option<f64>>,
+    /// The lower quality the notice offers.
+    advised: Cell<Option<Quality>>,
     sheets: RefCell<crate::images::SheetCache>,
     back_cache: RefCell<BackCache<Parked>>,
+    waiting: RefCell<Waiting>,
+    release_timer: Timer,
     #[cfg(feature = "mpv")]
     video: crate::video::VideoSource,
     #[cfg(feature = "mpv")]
@@ -84,6 +116,15 @@ pub struct App {
     #[cfg(all(target_os = "linux", feature = "mpv"))]
     inhibitor: RefCell<Option<crate::inhibit::Inhibitor>>,
     discord: RefCell<Option<crate::discord::Discord>>,
+    folder_opener: RefCell<Rc<FolderOpener>>,
+    clipboard: RefCell<Rc<Clipboard>>,
+    /// Gives the language the system asks for.
+    system_language: RefCell<Rc<dyn Fn() -> Option<String>>>,
+    /// Hosts of the servers met, hidden from copied logs.
+    known_hosts: RefCell<std::collections::BTreeSet<String>>,
+    /// Host of the address the user last typed at the sign-in, hidden from copied logs too.
+    typed_host: RefCell<Option<String>>,
+    mpv_version: crate::logs::MpvVersion,
     pub(crate) sign_in: SignInController,
     pub(crate) home: HomeController,
     pub(crate) library: LibraryController,
@@ -92,6 +133,9 @@ pub struct App {
     pub(crate) person: PersonController,
     pub(crate) collection: CollectionController,
     pub(crate) series: SeriesController,
+    pub(crate) hover: crate::hover::HoverController,
+    pub(crate) menu: crate::menu::MenuController,
+    pub(crate) prefetch: crate::prefetch::Prefetcher,
 }
 
 impl App {
@@ -114,14 +158,21 @@ impl App {
             manager,
             state: RefCell::new(AppState::new()),
             shown: RefCell::new(Screen::Starting),
+            page: Cell::new(0),
             generation: RefCell::new(None),
             incoming: RefCell::new(None),
             ending: RefCell::new(Vec::new()),
             quitting: Cell::new(false),
             pending_stops: Cell::new(0),
+            stop_settling: Cell::new(false),
             notice_timer: Timer::default(),
+            volume_timer: Timer::default(),
+            pending_volume: Cell::new(None),
+            advised: Cell::new(None),
             sheets: RefCell::default(),
             back_cache: RefCell::default(),
+            waiting: RefCell::default(),
+            release_timer: Timer::default(),
             #[cfg(feature = "mpv")]
             video: Default::default(),
             #[cfg(feature = "mpv")]
@@ -131,6 +182,14 @@ impl App {
             #[cfg(all(target_os = "linux", feature = "mpv"))]
             inhibitor: RefCell::new(None),
             discord: RefCell::new(None),
+            folder_opener: RefCell::new(Rc::new(crate::logs::open_folder)),
+            clipboard: RefCell::new(Rc::new(|window: &AppWindow, text: &str| {
+                window.invoke_copy_to_clipboard(text.into())
+            })),
+            system_language: RefCell::new(Rc::new(crate::locale::system_language)),
+            known_hosts: RefCell::default(),
+            typed_host: RefCell::default(),
+            mpv_version: Default::default(),
             sign_in: SignInController::default(),
             home: HomeController::default(),
             library: LibraryController::default(),
@@ -139,6 +198,9 @@ impl App {
             person: PersonController::default(),
             collection: CollectionController::default(),
             series: SeriesController::default(),
+            hover: Default::default(),
+            menu: Default::default(),
+            prefetch: Default::default(),
         });
         app.bind(window);
         app.restore();
@@ -156,6 +218,11 @@ impl App {
         }
     }
 
+    /// Reads the libmpv version for bug reports and logs it, without waiting for it.
+    pub fn read_mpv_version(&self) {
+        self.mpv_version.read_in_background(mpv_version);
+    }
+
     /// Whether the window opens fullscreen, as the settings saved it.
     pub fn start_fullscreen(&self) -> bool {
         self.manager.start_fullscreen()
@@ -165,6 +232,27 @@ impl App {
     /// broadcast, for tests.
     pub fn set_discovery_targets(&self, targets: Vec<std::net::SocketAddr>) {
         self.manager.set_discovery_targets(targets);
+    }
+
+    /// Turns the background loading of what is likely to be opened next on or off, for tests.
+    #[doc(hidden)]
+    pub fn set_prefetch(&self, on: bool) {
+        self.prefetch.enable(on);
+    }
+
+    /// Sets how long a loaded page waits before anything is asked for in the background.
+    pub fn set_prefetch_delay(&self, delay: Duration) {
+        self.prefetch.set_delay(delay);
+    }
+
+    /// Whether something is asked for in the background.
+    pub fn prefetching(&self) -> bool {
+        self.prefetch.busy()
+    }
+
+    /// Whether a new answer waits for the pointer to leave what it would move.
+    pub fn holds_changes(&self) -> bool {
+        !self.waiting.borrow().is_empty()
     }
 
     /// Takes the generation shutdowns still running, for `main` to wait on before exiting.
@@ -178,6 +266,29 @@ impl App {
 
     pub(crate) fn manager(&self) -> Arc<SessionManager> {
         Arc::clone(&self.manager)
+    }
+
+    /// The current screen.
+    pub(crate) fn screen(&self) -> Screen {
+        self.state.borrow().screen()
+    }
+
+    /// The user state of item `id` changed to `user` on the current screen: a grid shows it on
+    /// its card, other screens reload, and the screens below reload when they show again.
+    pub(crate) fn item_changed(self: &Rc<Self>, id: &ItemId, user: &UserState) {
+        let screen = self.screen();
+        match &screen {
+            Screen::Library(_) => self.library.patch(self, id, user),
+            Screen::Search => self.search.patch(self, id, user),
+            Screen::Home => self.home.changed(self),
+            _ => self.refresh(&screen),
+        }
+        self.dispatch(Msg::ItemChanged(screen));
+    }
+
+    /// Priority of the images of the page shown: they go before those of the pages left.
+    pub(crate) fn image_priority(&self) -> ImagePriority {
+        ImagePriority::of_page(self.page.get())
     }
 
     /// Depth of the current screen in the stack, 0 for the root.
@@ -208,6 +319,49 @@ impl App {
         let (generation, ..) = self.services()?;
         let depth = self.top_depth();
         self.back_cache.borrow_mut().take(depth, screen, generation)
+    }
+
+    /// Runs `change`, which adds, removes or moves what is on screen, once the pointer rests on
+    /// nothing it could move and no menu is open; at the latest when another page shows.
+    pub(crate) fn when_free(self: &Rc<Self>, change: impl FnOnce(&Rc<App>) + 'static) {
+        if self
+            .window()
+            .is_some_and(|window| window.get_content_held())
+        {
+            self.waiting.borrow_mut().push(Box::new(change));
+        } else {
+            change(self);
+        }
+    }
+
+    /// Runs what [`App::when_free`] held back.
+    pub(crate) fn run_waiting(self: &Rc<Self>) {
+        let waiting = std::mem::take(&mut *self.waiting.borrow_mut());
+        for change in waiting {
+            change(self);
+        }
+    }
+
+    /// The pointer left what it rested on, perhaps only to reach what is beside it.
+    fn content_released(&self) {
+        let this = self.this.clone();
+        self.release_timer
+            .start(TimerMode::SingleShot, RELEASE_DELAY, move || {
+                let Some(app) = this.upgrade() else { return };
+                if app
+                    .window()
+                    .is_some_and(|window| !window.get_content_held())
+                {
+                    app.run_waiting();
+                }
+            });
+    }
+
+    /// Forgets the answers kept for the pages: what the user did made them wrong.
+    fn forget_answers(&self) {
+        if let Some((_, catalog, _)) = self.services() {
+            catalog.forget_answers();
+        }
     }
 
     /// Identifier, catalog and image cache of the current generation.
@@ -366,6 +520,8 @@ impl App {
             player::reset(&window);
             player::show_quality(&window, self.manager.quality());
         }
+        // The position of what plays changes from now on.
+        self.forget_answers();
         self.check_subtitle_permission();
         handle.send(PlaybackCommand::Play { item, mode });
         self.dispatch(Msg::OpenPlayer);
@@ -410,12 +566,16 @@ impl App {
 
         self.creating_player.set(Some(id));
         let runtime = self.runtime.clone();
+        let options = PlayerOptions {
+            volume: Some(self.manager.volume()),
+            ..PlayerOptions::default()
+        };
         self.spawn(
             async move {
                 runtime
                     .spawn_blocking(move || {
                         let (sink, events) = player_events();
-                        Player::new(PlayerOptions::default(), move |event| sink.send(event))
+                        Player::new(options, move |event| sink.send(event))
                             .map(|player| (Arc::new(player), events))
                             .map_err(|error| error.to_string())
                     })
@@ -481,6 +641,7 @@ impl App {
                     handle.send(PlaybackCommand::SetQuality(self.manager.quality()));
                     handle.send(PlaybackCommand::SetPrefs(self.manager.playback_prefs()));
                     self.pending_stops.set(0);
+                    self.stop_settling.set(false);
                     self.relay(id, updates);
                     *self.video.borrow_mut() = Some((id, Arc::clone(&player)));
                     generation.playback = Some(Playback {
@@ -548,13 +709,17 @@ impl App {
 
     /// Shows an event of the current playback, then leaves the player when playback is over.
     #[cfg(feature = "mpv")]
-    fn show_playback(self: &Rc<Self>, event: oxyfin_core::PlaybackEvent) {
+    pub fn show_playback(self: &Rc<Self>, event: oxyfin_core::PlaybackEvent) {
         use oxyfin_core::PlaybackEvent;
 
         let Some(window) = self.window() else { return };
+        if event == PlaybackEvent::StopReported {
+            return self.stop_reported();
+        }
         let stopped = event == PlaybackEvent::Stopped;
         let ended = event == PlaybackEvent::Ended;
         if stopped {
+            self.stop_settling.set(true);
             self.sheets.borrow_mut().clear();
         }
         if let PlaybackEvent::NextUpCountdown { episode, .. }
@@ -575,8 +740,20 @@ impl App {
             PlaybackEvent::Chapters(chapters) => Some(chapters.clone()),
             _ => None,
         };
-        if let Some(message) = player::apply(&window, event) {
-            self.notify(message);
+        if matches!(event, PlaybackEvent::Loading { .. }) {
+            self.withdraw_advice();
+        }
+        let advised = match &event {
+            PlaybackEvent::LowerQualityAdvised(quality) => Some(*quality),
+            _ => None,
+        };
+        match player::apply(&window, event) {
+            Some(message) if advised.is_some() => {
+                self.advised.set(advised);
+                self.show_notice(message, NoticeAction::LowerQuality);
+            }
+            Some(message) => self.notify(message),
+            None => {}
         }
         if let Some(chapters) = chapters {
             self.load_chapter_images(&window, &chapters);
@@ -585,22 +762,43 @@ impl App {
         let on_player = self.state.borrow().screen() == Screen::Player;
         if stopped {
             let expected = self.pending_stops.get();
-            let mut closed = false;
             if expected > 0 {
                 self.pending_stops.set(expected - 1);
             } else if on_player {
                 self.dispatch(Msg::ClosePlayer);
-                closed = true;
             }
-            // The stop report is queued before this event: Continue Watching catches up.
-            let stacked = self.state.borrow().stack().to_vec();
-            for screen in stale_after_stop(&stacked, closed) {
-                self.refresh(screen);
-            }
+            self.progress_changed(false);
         } else if ended && on_player && !window.get_player_has_next() {
             self.send_playback(PlaybackCommand::Stop);
             self.dispatch(Msg::ClosePlayer);
         }
+    }
+
+    /// The server knows where playback stopped: what was asked for before may hold the old
+    /// position, so nothing of it is kept and the screen shown is asked for again.
+    #[cfg(feature = "mpv")]
+    fn stop_reported(self: &Rc<Self>) {
+        self.stop_settling.set(false);
+        self.forget_answers();
+        self.progress_changed(true);
+    }
+
+    /// Playback moved the progress of an item: the screens below the one shown reload when
+    /// they show again, and `refresh` reloads the one shown unless the player covers it.
+    #[cfg(feature = "mpv")]
+    fn progress_changed(self: &Rc<Self>, refresh: bool) {
+        let stacked = self.state.borrow().stack().to_vec();
+        let Some(top) = stacked
+            .iter()
+            .rev()
+            .find(|screen| **screen != Screen::Player)
+        else {
+            return;
+        };
+        if refresh && stacked.last() == Some(top) {
+            self.refresh(top);
+        }
+        self.dispatch(Msg::ItemChanged(top.clone()));
     }
 
     /// Forwards a playback event to MPRIS, with the artwork of a new item.
@@ -728,10 +926,27 @@ impl App {
     /// Sends `command` to the current playback. The `Stopped` that answers a
     /// stop sent here is expected: the screen already left the player.
     fn send_playback(&self, command: PlaybackCommand) {
+        if matches!(command, PlaybackCommand::SetQuality(_)) {
+            self.withdraw_advice();
+        }
         if let PlaybackCommand::SetQuality(quality) = command
             && let Err(error) = self.manager.set_quality(quality)
         {
             log::warn!("cannot save the streaming quality: {error}");
+        }
+        if let PlaybackCommand::SetVolume(volume) = command {
+            // Saved once the volume rests, not on each step of a drag or of the wheel.
+            self.pending_volume.set(Some(volume));
+            let this = self.this.clone();
+            self.volume_timer
+                .start(TimerMode::SingleShot, VOLUME_SAVE_DELAY, move || {
+                    if let Some(app) = this.upgrade() {
+                        app.save_volume();
+                    }
+                });
+        }
+        if command == PlaybackCommand::Stop {
+            self.save_volume();
         }
         if let Some(playback) = self
             .generation
@@ -741,8 +956,19 @@ impl App {
         {
             if command == PlaybackCommand::Stop {
                 self.pending_stops.set(self.pending_stops.get() + 1);
+                self.stop_settling.set(true);
             }
             playback.handle.send(command);
+        }
+    }
+
+    /// Saves the volume set last, if it is not saved yet.
+    fn save_volume(&self) {
+        self.volume_timer.stop();
+        if let Some(volume) = self.pending_volume.take()
+            && let Err(error) = self.manager.set_volume(volume)
+        {
+            log::warn!("cannot save the volume: {error}");
         }
     }
 
@@ -774,6 +1000,74 @@ impl App {
         }
     }
 
+    /// Shows the interface in the language saved, or else in the system one.
+    ///
+    /// Must be called after the first window is created.
+    pub fn apply_language(&self) {
+        let system = (self.system_language.borrow())();
+        let language = crate::locale::resolve(
+            self.manager.language().as_deref(),
+            system.as_deref(),
+            &crate::locale::bundled_languages(),
+        );
+        crate::locale::select_language(&language);
+    }
+
+    /// Drops the pages built in the previous language, parked ones included.
+    fn forget_pages(&self) {
+        self.back_cache.borrow_mut().clear();
+        self.home.forget(self);
+        self.library.forget(self);
+        self.movie.forget(self);
+        self.series.forget(self);
+        self.person.forget(self);
+        self.collection.forget(self);
+    }
+
+    /// Replaces what tells the language the system asks for, for tests.
+    #[doc(hidden)]
+    pub fn set_system_language(&self, language: impl Fn() -> Option<String> + 'static) {
+        *self.system_language.borrow_mut() = Rc::new(language);
+    }
+
+    /// Fills the language list of the settings, in the language the interface shows.
+    fn show_languages(&self, window: &AppWindow) {
+        let bundled = crate::locale::bundled_languages();
+        let system = (self.system_language.borrow())();
+        let system = crate::locale::resolve(None, system.as_deref(), &bundled);
+        let titles = window.global::<SettingsTitles>();
+        let mut options =
+            vec![titles.invoke_system_language(crate::locale::language_name(&system).into())];
+        options.extend(
+            bundled
+                .iter()
+                .map(|code| SharedString::from(crate::locale::language_name(code))),
+        );
+        window.set_settings_languages(ModelRc::new(VecModel::from(options)));
+        window.set_settings_language(settings::language_index(
+            self.manager.language().as_deref(),
+            &bundled,
+        ));
+    }
+
+    /// Saves the language picked at `index` of the settings list and shows the interface in it
+    /// at once; the pages below the settings load again when they show.
+    fn set_language(&self, index: i32) {
+        let choice = settings::language_choice(index, &crate::locale::bundled_languages());
+        if let Err(error) = self.manager.set_language(choice.as_deref()) {
+            log::error!("cannot save the interface language: {error}");
+            self.notify(Message::StorageError);
+        }
+        let before = crate::locale::interface_language();
+        self.apply_language();
+        if crate::locale::interface_language() != before {
+            self.forget_pages();
+        }
+        if let Some(window) = self.window() {
+            self.show_languages(&window);
+        }
+    }
+
     /// Saves whether Discord shows what plays and applies it at once; the
     /// settings then show what is saved.
     fn set_discord(&self, on: bool) {
@@ -802,6 +1096,110 @@ impl App {
         if let Some(window) = self.window() {
             window.set_settings_playback(settings::playback_choice(self.manager.playback_prefs()));
         }
+    }
+
+    /// Measures the image cache for the Diagnostics section of the settings.
+    fn measure_image_cache(&self) {
+        let Some((_, catalog, images)) = self.services() else {
+            return;
+        };
+        let saved = catalog.saved_bytes();
+        self.spawn(
+            async move { images.disk_usage().await + saved },
+            |app, bytes| {
+                if let Some(window) = app.window() {
+                    window.set_settings_image_cache_kb(settings::cache_kb(bytes));
+                }
+            },
+        );
+    }
+
+    fn clear_image_cache(&self) {
+        let Some((_, _, images)) = self.services() else {
+            return;
+        };
+        self.forget_answers();
+        if let Some(window) = self.window() {
+            window.set_settings_image_cache_kb(-1);
+        }
+        self.spawn(async move { images.clear().await }, |app, result| {
+            if let Err(error) = result {
+                log::warn!("{error}");
+            }
+            app.measure_image_cache();
+        });
+    }
+
+    /// Remembers the host of a server, which copied logs never show.
+    pub(crate) fn knows_server(&self, address: &str) {
+        if let Some(host) = crate::logs::host_of(address) {
+            self.known_hosts.borrow_mut().insert(host);
+        }
+    }
+
+    /// Remembers the host of an address typed at the sign-in in place of the one typed before,
+    /// once it reads like an address rather than the start of a scheme.
+    pub(crate) fn tries_server(&self, address: &str) {
+        let typed = address.trim().to_ascii_lowercase();
+        let scheme = !typed.contains("://")
+            && ["http://", "https://"]
+                .iter()
+                .any(|scheme| scheme.starts_with(typed.as_str()));
+        *self.typed_host.borrow_mut() = crate::logs::host_of(&typed).filter(|_| !scheme);
+    }
+
+    fn copy_logs(&self) {
+        let last = self.manager.last_server_url();
+        for address in last.into_iter().chain(
+            self.state
+                .borrow()
+                .session()
+                .map(|info| info.server_url.clone()),
+        ) {
+            self.knows_server(&address);
+        }
+        let mut hosts: Vec<String> = self.known_hosts.borrow().iter().cloned().collect();
+        hosts.extend(self.typed_host.borrow().clone());
+        let dir = crate::logs::log_dir(&self.paths);
+        let mpv = self.mpv_version.get();
+        let report = async move {
+            tokio::task::spawn_blocking(move || {
+                crate::logs::report(&dir, &crate::logs::header(&mpv), &hosts)
+            })
+            .await
+        };
+        self.spawn(report, |app, report| match report {
+            Ok(text) => app.put_on_clipboard(&text),
+            Err(error) => log::error!("cannot gather the logs: {error}"),
+        });
+    }
+
+    fn put_on_clipboard(&self, text: &str) {
+        let Some(window) = self.window() else { return };
+        let clipboard = Rc::clone(&*self.clipboard.borrow());
+        let copied = clipboard(&window, text);
+        if !copied {
+            log::warn!("the logs could not be copied to the clipboard");
+        }
+        window.set_settings_logs_copied(copied);
+        window.set_settings_logs_copy_failed(!copied);
+    }
+
+    /// Replaces what puts text on the clipboard and tells whether it got there, for tests.
+    #[doc(hidden)]
+    pub fn set_clipboard(&self, clipboard: impl Fn(&AppWindow, &str) -> bool + 'static) {
+        *self.clipboard.borrow_mut() = Rc::new(clipboard);
+    }
+
+    fn open_logs(&self) {
+        let opener = Rc::clone(&*self.folder_opener.borrow());
+        opener(&crate::logs::log_dir(&self.paths));
+    }
+
+    /// Replaces what opens the log folder, for tests that must not start a file manager.
+    #[doc(hidden)]
+    pub fn set_folder_opener(&self, opener: impl Fn(&std::path::Path) + 'static) {
+        *self.folder_opener.borrow_mut() = Rc::new(opener);
     }
 
     /// Signs another device in with the Quick Connect `code` it shows, then
@@ -847,6 +1245,20 @@ impl App {
     /// that need no action leave after [`NOTICE_DURATION`]; the others stay
     /// until the user closes them.
     pub(crate) fn notify(&self, message: Message) {
+        self.show_notice(message, NoticeAction::None);
+    }
+
+    /// Shows `message` with an Undo button, which calls [`crate::menu::MenuController::undo`].
+    pub(crate) fn notify_undo(&self, message: Message) {
+        self.show_notice(message, NoticeAction::Undo);
+    }
+
+    /// Shows `message`, the failure of an undo, with a Retry button that undoes again.
+    pub(crate) fn notify_undo_failed(&self, message: Message) {
+        self.show_notice(message, NoticeAction::RetryUndo);
+    }
+
+    fn show_notice(&self, message: Message, action: NoticeAction) {
         let Some(window) = self.window() else { return };
         let dismissible = is_persistent(message);
         window.set_notice(NoticeData {
@@ -854,6 +1266,7 @@ impl App {
             message,
             detail: Default::default(),
             dismissible,
+            action,
         });
         if dismissible {
             self.notice_timer.stop();
@@ -866,6 +1279,35 @@ impl App {
                     hide_notice(&window);
                 }
             });
+    }
+
+    /// Drops the offer of a lower quality, which no longer applies, and its notice.
+    fn withdraw_advice(&self) {
+        self.advised.set(None);
+        let Some(window) = self.window() else { return };
+        let notice = window.get_notice();
+        if notice.visible && notice.action == NoticeAction::LowerQuality {
+            self.notice_timer.stop();
+            hide_notice(&window);
+        }
+    }
+
+    /// The button of the notice was clicked: only the notice still showing acts.
+    fn notice_action(self: &Rc<Self>) {
+        let Some(window) = self.window() else { return };
+        let notice = window.get_notice();
+        if !notice.visible || notice.action == NoticeAction::None {
+            return;
+        }
+        self.notice_timer.stop();
+        hide_notice(&window);
+        if notice.action != NoticeAction::LowerQuality {
+            return self.menu.undo(self);
+        }
+        if let Some(quality) = self.advised.take() {
+            player::show_quality(&window, quality);
+            self.send_playback(PlaybackCommand::SetQuality(quality));
+        }
     }
 
     /// The user closed the notice; closing the file-token warning acknowledges it.
@@ -998,6 +1440,7 @@ impl App {
                 }
             }
         };
+        window.on_content_released(with(|app| app.content_released()));
         window.on_open_quick_connect(with(|app| app.sign_in.open_quick_connect(app)));
         window.on_cancel_quick_connect(with(|app| app.dispatch(Msg::CloseQuickConnect)));
         window.on_retry_quick_connect(with(|app| app.sign_in.start_quick_connect(app)));
@@ -1016,10 +1459,25 @@ impl App {
                 app.set_start_fullscreen(on);
             }
         });
+        window.set_player_time_remaining(self.manager.time_remaining());
+        let this = self.this.clone();
+        window.on_player_time_remaining_changed(move |on| {
+            if let Some(app) = this.upgrade()
+                && let Err(error) = app.manager.set_time_remaining(on)
+            {
+                log::warn!("cannot save the time display: {error}");
+            }
+        });
         let this = self.this.clone();
         window.on_settings_discord_changed(move |on| {
             if let Some(app) = this.upgrade() {
                 app.set_discord(on);
+            }
+        });
+        let this = self.this.clone();
+        window.on_settings_language_changed(move |index| {
+            if let Some(app) = this.upgrade() {
+                app.set_language(index);
             }
         });
         let this = self.this.clone();
@@ -1028,6 +1486,9 @@ impl App {
                 app.set_playback_prefs(&choice);
             }
         });
+        window.on_settings_clear_image_cache(with(|app| app.clear_image_cache()));
+        window.on_settings_copy_logs(with(|app| app.copy_logs()));
+        window.on_settings_open_logs(with(|app| app.open_logs()));
         window.on_settings_code_ready(|code| settings::code_ready(&code));
         let this = self.this.clone();
         window.on_settings_authorize(move |code| {
@@ -1036,11 +1497,21 @@ impl App {
             }
         });
         window.on_dismiss_notice(with(|app| app.dismiss_notice()));
+        window.on_notice_action(with(|app| app.notice_action()));
         window.on_library_retry(with(|app| app.library.retry(app)));
         window.on_search_retry(with(|app| app.search.retry(app)));
         window.on_search_retry_more(with(|app| app.search.retry_more(app)));
         window.on_search_near_end(with(|app| app.search.near_end(app)));
         window.on_back(with(|app| app.dispatch(Msg::Back)));
+        window.global::<MouseBack>().on_pressed(with(|app| {
+            // The shortcuts dialog covers the page.
+            let covered = app
+                .window()
+                .is_some_and(|window| window.global::<Shortcuts>().get_open());
+            if !covered {
+                app.dispatch(Msg::Back);
+            }
+        }));
         window.on_movie_toggle_watched(with(|app| app.movie.toggle_watched(app)));
         window.on_movie_toggle_favorite(with(|app| app.movie.toggle_favorite(app)));
         window.on_movie_retry(with(|app| app.movie.retry(app)));
@@ -1125,6 +1596,37 @@ impl App {
                 };
                 app.movie.play(&app, mode);
             }
+        });
+        let this = self.this.clone();
+        window
+            .global::<crate::HoverCard>()
+            .on_requested(move |id, progress| {
+                if let Some(app) = this.upgrade() {
+                    app.hover.request(&app, &id, progress);
+                }
+            });
+        let this = self.this.clone();
+        let menu = window.global::<crate::ContextMenu>();
+        menu.on_requested(move |serial, id, from_resume| {
+            if let Some(app) = this.upgrade() {
+                app.menu.request(&app, serial, &id, from_resume);
+            }
+        });
+        let this = self.this.clone();
+        menu.on_chosen(move |serial, action| {
+            if let Some(app) = this.upgrade() {
+                app.menu.chosen(&app, serial, action);
+            }
+        });
+        let weak = window.as_weak();
+        menu.on_right_pressed_outside(move |x, y| {
+            let weak = weak.clone();
+            // Once the overlay is gone, the card under the pointer gets the press and opens its menu.
+            Timer::single_shot(Duration::ZERO, move || {
+                if let Some(window) = weak.upgrade() {
+                    crate::menu::press_right(&window, x, y);
+                }
+            });
         });
         let this = self.this.clone();
         window.on_open_item(move |id| {
@@ -1222,7 +1724,7 @@ impl App {
         crate::screens::subtitle_search::bind(
             window,
             self.runtime.clone(),
-            &crate::locale::interface_language(),
+            Rc::new(crate::locale::interface_language),
             Rc::new(move || {
                 catalog
                     .upgrade()
@@ -1290,6 +1792,8 @@ impl App {
             }
             Effect::EndGeneration { id, end } => {
                 self.back_cache.borrow_mut().clear();
+                self.waiting.borrow_mut().clear();
+                self.prefetch.stop();
                 self.library.end_generation();
                 let generation = {
                     let mut current = self.generation.borrow_mut();
@@ -1302,6 +1806,10 @@ impl App {
                     log::error!("generation {id:?} is not the current one");
                     return;
                 };
+                match end {
+                    SessionEnd::Close => generation.catalog.save_answers(),
+                    SessionEnd::SignOut | SessionEnd::Expire => generation.catalog.close(),
+                }
                 let manager = self.manager();
                 let (done, ended) = tokio::sync::oneshot::channel();
                 let task = self.runtime.spawn(async move {
@@ -1319,7 +1827,10 @@ impl App {
                 });
             }
             Effect::Show(screen) => {
+                self.run_waiting();
+                self.prefetch.stop();
                 let previous = self.shown.replace(screen.clone());
+                self.page.set(self.page.get() + 1);
                 self.back_cache
                     .borrow_mut()
                     .prune(self.state.borrow().stack());
@@ -1339,6 +1850,7 @@ impl App {
                     window.set_top_bar_page(top_bar_page(root.as_ref()));
                     if screen == Screen::Settings {
                         settings::show(&window, self.state.borrow().session());
+                        self.measure_image_cache();
                         window.set_settings_subtitles(settings::subtitle_choice(
                             self.manager.subtitle_style(),
                         ));
@@ -1347,7 +1859,10 @@ impl App {
                         window.set_settings_playback(settings::playback_choice(
                             self.manager.playback_prefs(),
                         ));
+                        self.show_languages(&window);
                     }
+                    // A page of the same kind keeps the screen, not the card pointed at.
+                    window.global::<crate::Pointed>().invoke_reset();
                     window.set_screen(slint_screen(&screen));
                 }
                 self.sign_in.shown(self, &screen, &previous);
@@ -1369,8 +1884,11 @@ impl App {
                 self.collection.discard(self, &screen);
             }
             Effect::Refresh(screen) => self.refresh(&screen),
+            Effect::Revealed(screen) if !self.stop_settling.get() => self.refresh(&screen),
+            Effect::Revealed(_) => {}
             Effect::Notify(notice) => self.notify(notice_message(notice)),
             Effect::Quit => {
+                self.save_volume();
                 self.quitting.set(true);
                 if let Err(error) = slint::quit_event_loop() {
                     log::warn!("cannot quit the event loop: {error}");
@@ -1417,6 +1935,18 @@ fn show_chapter_tiles(
         if let Some(image) = crate::images::crop(&pixels, tile.x, tile.y, tile.width, tile.height) {
             show_chapter_image(weak, rows, *index, image);
         }
+    }
+}
+
+/// The libmpv version for bug reports.
+fn mpv_version() -> String {
+    #[cfg(feature = "mpv")]
+    {
+        oxyfin_player::mpv_version().unwrap_or_else(|error| format!("unknown ({error})"))
+    }
+    #[cfg(not(feature = "mpv"))]
+    {
+        "not built in".to_owned()
     }
 }
 
@@ -1487,18 +2017,11 @@ fn hide_notice(window: &AppWindow) {
 fn is_persistent(message: Message) -> bool {
     matches!(
         message,
-        Message::SessionExpired | Message::FileTokenWarning | Message::StorageError
+        Message::SessionExpired
+            | Message::FileTokenWarning
+            | Message::StorageError
+            | Message::SlowStream
     )
-}
-
-/// The stacked screens to reload when a stop is reported. Closing the player
-/// already reloads the screen it reveals, so a stop that closed it skips that one.
-#[cfg(feature = "mpv")]
-fn stale_after_stop(stack: &[Screen], closed_player: bool) -> &[Screen] {
-    match stack.split_last() {
-        Some((_, below)) if closed_player => below,
-        _ => stack,
-    }
 }
 
 /// Whether a notice showing `message` stays when `screen` is shown.
@@ -1515,15 +2038,6 @@ fn keeps_notice(message: Message, screen: &Screen) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[cfg(feature = "mpv")]
-    #[test]
-    fn a_stop_that_closed_the_player_reloads_the_screens_below_the_one_revealed() {
-        let stack = [Screen::Home, Screen::Series("s".into())];
-        assert_eq!(stale_after_stop(&stack, true), [Screen::Home]);
-        assert_eq!(stale_after_stop(&stack, false), stack);
-        assert!(stale_after_stop(&[], true).is_empty());
-    }
 
     #[test]
     fn only_messages_that_need_the_user_persist() {

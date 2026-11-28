@@ -76,12 +76,10 @@ impl Screen {
         )
     }
 
-    /// Whether playback can start from the screen: the home screen and the detail pages.
+    /// Whether playback can start from the screen: the screens that browse the library, where
+    /// the play buttons and the context menus are.
     pub fn can_play(&self) -> bool {
-        matches!(
-            self,
-            Screen::Home | Screen::Movie(_) | Screen::Series(_) | Screen::Collection(_)
-        )
+        self.has_controller()
     }
 
     fn has_controller(&self) -> bool {
@@ -138,7 +136,8 @@ pub enum Msg {
     /// The user opened a detail page: only `Screen::Movie`, `Screen::Series`, `Screen::Person`
     /// or `Screen::Collection`.
     OpenItem(Screen),
-    /// A watched or favorite change succeeded on a detail page: the screens below are stale.
+    /// A watched or favorite change succeeded, or playback moved a progress, while `Screen`
+    /// showed: the screens below it are stale.
     ItemChanged(Screen),
     /// The user went back to the previous screen.
     Back,
@@ -200,8 +199,11 @@ pub enum Effect {
     Show(Screen),
     /// A screen left the stack: release its controller.
     Discard(Screen),
-    /// A screen came back from the player or holds data a change made stale: reload it.
+    /// A screen holds data a change made stale: reload it.
     Refresh(Screen),
+    /// A screen came back from the player: reload it, unless the stop that closed the player
+    /// is still settling and reloads it once settled.
+    Revealed(Screen),
     /// Show a message.
     Notify(Notice),
     /// Exit the application.
@@ -346,7 +348,7 @@ impl AppState {
             Msg::ClosePlayer if on_player => {
                 self.stack.pop();
                 let top = self.top().clone();
-                vec![Effect::Show(top.clone()), Effect::Refresh(top)]
+                vec![Effect::Show(top.clone()), Effect::Revealed(top)]
             }
             Msg::OpenSettings if on_connected && !on_player && *self.top() != Screen::Settings => {
                 vec![self.push(Screen::Settings)]
@@ -639,7 +641,7 @@ mod tests {
         s.update(Msg::OpenPlayer);
         assert_eq!(
             s.update(Msg::ClosePlayer),
-            vec![Effect::Show(Screen::Home), Effect::Refresh(Screen::Home)]
+            vec![Effect::Show(Screen::Home), Effect::Revealed(Screen::Home)]
         );
     }
 
@@ -745,7 +747,7 @@ mod tests {
         );
         assert_eq!(
             s.update(Msg::ClosePlayer),
-            vec![Effect::Show(series("s")), Effect::Refresh(series("s"))]
+            vec![Effect::Show(series("s")), Effect::Revealed(series("s"))]
         );
         assert_eq!(s.stack(), [Screen::Home, series("s")]);
     }
@@ -771,6 +773,30 @@ mod tests {
             s.update(Msg::Back),
             vec![Effect::Discard(person), Effect::Show(movie("m"))]
         );
+    }
+
+    #[test]
+    fn every_browsing_screen_can_play() {
+        for screen in [
+            Screen::Home,
+            Screen::Library(LibraryTab::Movies),
+            Screen::Search,
+            movie("m"),
+            Screen::Series("s".into()),
+            Screen::Person("p".into()),
+            Screen::Collection("c".into()),
+        ] {
+            assert!(screen.can_play(), "{screen:?}");
+        }
+        for screen in [
+            Screen::Starting,
+            Screen::SignIn,
+            Screen::QuickConnect,
+            Screen::Player,
+            Screen::Settings,
+        ] {
+            assert!(!screen.can_play(), "{screen:?}");
+        }
     }
 
     #[test]
@@ -837,7 +863,7 @@ mod tests {
         s.update(Msg::OpenPlayer);
         assert_eq!(
             s.update(Msg::ClosePlayer),
-            vec![Effect::Show(Screen::Home), Effect::Refresh(Screen::Home)]
+            vec![Effect::Show(Screen::Home), Effect::Revealed(Screen::Home)]
         );
     }
 

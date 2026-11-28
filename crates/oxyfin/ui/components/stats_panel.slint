@@ -166,15 +166,17 @@ export global StatsTitles {
     }
 }
 
-// Playback statistics over the video, top left: sections of label and value rows.
+// Playback statistics menu of the player, above its button: sections of label and value rows.
 export component StatsPanel inherits Rectangle {
     in property <[StatSection]> sections;
+    // Height past which the rows scroll.
+    in property <length> limit: 400px;
 
     accessible-role: groupbox;
     accessible-label: @tr("Playback statistics");
 
     width: Theme.stats-panel-width;
-    height: content.preferred-height;
+    height: min(content.preferred-height, root.limit);
     background: Theme.bg-elevated;
     border-radius: Theme.radius-lg;
     border-width: Theme.border-thin;
@@ -186,62 +188,71 @@ export component StatsPanel inherits Rectangle {
     // Clicks on the panel must not reach the player behind it.
     TouchArea { }
 
-    content := VerticalLayout {
-        padding-top: Theme.space-sm;
-        padding-bottom: Theme.space-sm;
+    Flickable {
+        mouse-drag-pan-enabled: false;
+        width: parent.width;
+        height: parent.height;
+        content-width: self.width;
+        content-height: content.preferred-height;
 
-        HorizontalLayout {
-            padding-left: Theme.space-lg;
-            padding-right: Theme.space-lg;
+        content := VerticalLayout {
+            width: root.width;
             padding-top: Theme.space-sm;
-            padding-bottom: Theme.space-xs;
-            spacing: Theme.space-md;
+            padding-bottom: Theme.space-sm;
 
-            BodyStrongText {
-                text: @tr("Playback statistics");
-                horizontal-stretch: 1;
-                overflow: elide;
-            }
-
-            CaptionText {
-                text: @tr("I to close");
-                vertical-alignment: center;
-            }
-        }
-
-        for section in root.sections: VerticalLayout {
             HorizontalLayout {
                 padding-left: Theme.space-lg;
                 padding-right: Theme.space-lg;
                 padding-top: Theme.space-sm;
                 padding-bottom: Theme.space-xs;
-
-                LabelText {
-                    text: section.title.to-uppercase();
-                    color: Theme.text-muted;
-                }
-            }
-
-            for row in section.rows: HorizontalLayout {
-                padding-left: Theme.space-lg;
-                padding-right: Theme.space-lg;
-                padding-top: Theme.stats-row-padding-y;
-                padding-bottom: Theme.stats-row-padding-y;
                 spacing: Theme.space-md;
 
-                CaptionText {
-                    width: Theme.stats-label-width;
-                    text: row.label;
-                    color: Theme.text-secondary;
+                BodyStrongText {
+                    text: @tr("Playback statistics");
+                    horizontal-stretch: 1;
                     overflow: elide;
                 }
 
-                // A fixed width, so that the height of a wrapped value counts in the panel height.
                 CaptionText {
-                    width: root.width - 2 * Theme.space-lg - Theme.stats-label-width - Theme.space-md;
-                    text: row.value;
-                    color: row.warn ? Theme.warning : row.good ? Theme.watched : Theme.text-primary;
-                    wrap: word-wrap;
+                    text: @tr("I to close");
+                    vertical-alignment: center;
+                }
+            }
+
+            for section in root.sections: VerticalLayout {
+                HorizontalLayout {
+                    padding-left: Theme.space-lg;
+                    padding-right: Theme.space-lg;
+                    padding-top: Theme.space-sm;
+                    padding-bottom: Theme.space-xs;
+
+                    LabelText {
+                        text: section.title.to-uppercase();
+                        color: Theme.text-muted;
+                    }
+                }
+
+                for row in section.rows: HorizontalLayout {
+                    padding-left: Theme.space-lg;
+                    padding-right: Theme.space-lg;
+                    padding-top: Theme.stats-row-padding-y;
+                    padding-bottom: Theme.stats-row-padding-y;
+                    spacing: Theme.space-md;
+
+                    CaptionText {
+                        width: Theme.stats-label-width;
+                        text: row.label;
+                        color: Theme.text-secondary;
+                        overflow: elide;
+                    }
+
+                    // A fixed width, so that the height of a wrapped value counts in the panel height.
+                    CaptionText {
+                        width: root.width - 2 * Theme.space-lg - Theme.stats-label-width - Theme.space-md;
+                        text: row.value;
+                        color: row.warn ? Theme.warning : row.good ? Theme.watched : Theme.text-primary;
+                        wrap: word-wrap;
+                    }
                 }
             }
         }

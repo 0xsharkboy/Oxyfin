@@ -1,4 +1,6 @@
 import { Theme } from "../theme.slint";
+import { MouseBack } from "mouse_back.slint";
+import { ContextMenu } from "context_menu.slint";
 import { Icons } from "../icons.slint";
 import { LabelText } from "text.slint";
 import { MenuPanel, MenuOption } from "track_menu.slint";
@@ -10,10 +12,13 @@ export component Dropdown inherits Rectangle {
     in property <string> label;
     in property <[string]> options;
     in property <int> selected: -1;
+    // Whether the pill writes the label before the option; off where the label stands beside it.
+    in property <bool> label-shown: true;
     callback chosen(index: int);
 
     property <bool> open;
-    property <string> text: root.selected >= 0 && root.selected < root.options.length ? root.label + ": " + root.options[root.selected] : root.label;
+    property <string> option: root.selected >= 0 && root.selected < root.options.length ? root.options[root.selected] : "";
+    property <string> text: root.option != "" ? root.label + ": " + root.option : root.label;
 
     accessible-role: button;
     accessible-label: root.text;
@@ -35,6 +40,9 @@ export component Dropdown inherits Rectangle {
 
     touch := TouchArea {
         mouse-cursor: pointer;
+        pointer-event(event) => {
+            MouseBack.handle(event);
+        }
         clicked => {
             focus.focus();
             root.open = !root.open;
@@ -44,6 +52,9 @@ export component Dropdown inherits Rectangle {
     focus := FocusScope {
         // Clicks go to the TouchArea: a focusing FocusScope on top would swallow the first one.
         focus-on-click: false;
+        focus-gained => {
+            ContextMenu.focus-taken();
+        }
         key-pressed(event) => {
             if event.text == Key.Escape && root.open {
                 root.open = false;
@@ -66,17 +77,16 @@ export component Dropdown inherits Rectangle {
 
         LabelText {
             accessible-role: none;
-            text: root.text;
+            text: root.label-shown || root.option == "" ? root.text : root.option;
             color: Theme.text-secondary;
             vertical-alignment: center;
         }
         VerticalLayout {
             alignment: center;
             Image {
-                source: Icons.chevron-down;
+                source: Icons.chevron-down-secondary;
                 width: 14px;
                 height: 14px;
-                colorize: Theme.text-secondary;
             }
         }
     }
@@ -94,7 +104,8 @@ export component Dropdown inherits Rectangle {
     if root.open: MenuPanel {
         x: 0;
         y: root.height + Theme.space-xs;
-        width: max(root.width, 200px);
+        // At least as wide as the pill, and wider up to the menu width so options are not cut.
+        width: max(root.width, 200px, min(self.content-width, self.widest));
         accessible-role: list;
         accessible-label: root.label;
 

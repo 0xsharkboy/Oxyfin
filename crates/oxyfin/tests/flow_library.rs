@@ -168,8 +168,8 @@ fn library_filters_pages_and_recovers() {
 
         press(&window, "Favorites", AccessibleRole::Tab).await?;
         wait_visible(&window, "Nothing here yet").await?;
-        if exists(&window, "Loading") {
-            return Err("a loading indicator is left over an empty library".into());
+        if !common::bones(&window).is_empty() {
+            return Err("loading bones are left over an empty library".into());
         }
         if !has_param(&last(&log), "isFavorite", "true") {
             return Err(format!("no isFavorite=true in {}", last(&log)));
@@ -177,10 +177,21 @@ fn library_filters_pages_and_recovers() {
         press(&window, "Unwatched", AccessibleRole::Button).await?;
         wait_visible(&window, "No titles match these filters").await?;
 
+        let before = queries(&log).len();
         press(&window, "Movies", AccessibleRole::Tab).await?;
         wait_visible(&window, "Comedy Movie").await?;
-        if !has_param(&last(&log), "genres", "Comedy") {
-            return Err(format!("the genre was not kept: {}", last(&log)));
+        // The grid shows its last answer at once and asks the server for it anew behind it.
+        let movies = || -> Vec<String> {
+            let mut asked = queries(&log).split_off(before);
+            asked.retain(|query| !has_param(query, "isFavorite", "true"));
+            asked
+        };
+        wait_until("the Movies request", || !movies().is_empty()).await?;
+        if let Some(query) = movies()
+            .iter()
+            .find(|query| !has_param(query, "genres", "Comedy"))
+        {
+            return Err(format!("the genre was not kept: {query}"));
         }
         if selected(&window, "All", AccessibleRole::Button) != Some(true) {
             return Err("the All filter was not kept".into());

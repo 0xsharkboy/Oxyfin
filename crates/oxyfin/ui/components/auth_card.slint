@@ -39,6 +39,7 @@ export component AuthPage inherits Rectangle {
     }
 
     flick := Flickable {
+        mouse-drag-pan-enabled: false;
         content-width: self.width;
         content-height: max(column.preferred-height, self.height);
 

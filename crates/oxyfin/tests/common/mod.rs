@@ -1,8 +1,11 @@
 //! Helpers shared by the flow tests: a simulated Jellyfin 12.4 server and the app setup.
 #![allow(dead_code)]
 
+pub mod answers;
 pub mod collection;
 pub mod discovery;
+pub mod home_banner;
+pub mod menu;
 pub mod person;
 pub mod playback_settings;
 
@@ -183,6 +186,8 @@ where
         .unwrap_or_else(|err| panic!("cannot create the app: {err}"));
     // Flows never broadcast on the network of the machine running them.
     app.set_discovery_targets(Vec::new());
+    // Flows count the requests of the pages they show; prefetching has its own.
+    app.set_prefetch(false);
     window
         .show()
         .unwrap_or_else(|err| panic!("cannot show the window: {err}"));
@@ -274,7 +279,14 @@ pub fn click(window: &impl ComponentHandle, element: &ElementHandle) {
     window.window().dispatch_event(WindowEvent::PointerMoved {
         position: center(element),
     });
-    let position = center(element);
+    click_at(window, center(element));
+}
+
+/// Presses and releases the left button at `position`, with real pointer events.
+pub fn click_at(window: &impl ComponentHandle, position: LogicalPosition) {
+    window
+        .window()
+        .dispatch_event(WindowEvent::PointerMoved { position });
     for event in [
         WindowEvent::PointerPressed {
             position,
@@ -386,4 +398,16 @@ pub fn has_param(query: &str, key: &str, value: &str) -> bool {
 pub fn manifest_dir() -> PathBuf {
     std::env::var_os("CARGO_MANIFEST_DIR")
         .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)
+}
+
+/// Bones of the skeletons in the window, shown or still waiting.
+pub fn bones(window: &impl ComponentHandle) -> Vec<ElementHandle> {
+    ElementHandle::find_by_element_type_name(window, "Bone").collect()
+}
+
+/// Whether a skeleton in the window shows its bones.
+pub fn skeleton_shown(window: &impl ComponentHandle) -> bool {
+    bones(window)
+        .iter()
+        .any(|bone| bone.computed_opacity() > 0. && bone.size().width > 0.)
 }

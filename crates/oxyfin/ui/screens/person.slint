@@ -1,3 +1,6 @@
+import { HoverCard } from "../components/hover_card.slint";
+import { MouseBack } from "../components/mouse_back.slint";
+import { ContextMenu } from "../components/context_menu.slint";
 import { Theme, CardData } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { TopBar, TopBarPage } from "../components/top_bar.slint";
@@ -7,6 +10,7 @@ import { Chip } from "../components/chip.slint";
 import { CardStatus } from "../components/card.slint";
 import { PosterCard } from "../components/poster_card.slint";
 import { PersonPhoto } from "../components/person_card.slint";
+import { Skeleton, PersonBones } from "../components/skeleton.slint";
 import { BodyText, DisplayText, LabelText } from "../components/text.slint";
 
 // Kind of titles the person page lists.
@@ -121,6 +125,11 @@ export component PersonScreen inherits Rectangle {
 
     background: Theme.bg-base;
     forward-focus: keys;
+    // The element given the focus back after a menu row is gone: the page takes the keys.
+    property <int> focus-lost: ContextMenu.focus-lost;
+    changed focus-lost => {
+        keys.focus();
+    }
 
     // Wraps the content so Escape reaches it from any focused control.
     keys := FocusScope {
@@ -133,18 +142,20 @@ export component PersonScreen inherits Rectangle {
         }
 
         flick := Flickable {
+            mouse-drag-pan-enabled: false;
             height: parent.height;
             content-width: self.width;
             content-height: max(content.preferred-height, self.height);
+            changed viewport-y => {
+                HoverCard.scrolled();
+            }
 
             // The mouse back button, on whatever lies behind the content.
             TouchArea {
                 width: flick.content-width;
                 height: flick.content-height;
                 pointer-event(event) => {
-                    if event.button == PointerEventButton.back && event.kind == PointerEventKind.up {
-                        root.back();
-                    }
+                    MouseBack.handle(event);
                 }
             }
 
@@ -224,6 +235,9 @@ export component PersonScreen inherits Rectangle {
 
                                     TouchArea {
                                         mouse-cursor: pointer;
+                                        pointer-event(event) => {
+                                            MouseBack.handle(event);
+                                        }
                                         clicked => {
                                             root.expanded = !root.expanded;
                                         }
@@ -278,6 +292,8 @@ export component PersonScreen inherits Rectangle {
                     }
 
                     for card[index] in root.titles: PosterCard {
+                        hover-id: card.id;
+                        no-menu: card.no-menu;
                         x: mod(index, grid.columns) * (Theme.poster-width + root.grid-gap-x);
                         y: Theme.space-lg + floor(index / grid.columns) * (grid.row-height + root.grid-gap-y);
                         height: grid.row-height;
@@ -292,9 +308,8 @@ export component PersonScreen inherits Rectangle {
                     }
                 }
 
-                if root.loading: BodyText {
-                    text: @tr("Loading");
-                    color: Theme.text-secondary;
+                if root.loading: Skeleton {
+                    PersonBones { }
                 }
                 if root.error != "": BodyText {
                     text: root.error;

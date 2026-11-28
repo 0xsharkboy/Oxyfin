@@ -1,4 +1,7 @@
 import { Theme } from "../theme.slint";
+import { MouseBack } from "mouse_back.slint";
+import { ContextMenu } from "context_menu.slint";
+import { Pointed } from "pointed.slint";
 import { BodyStrongText } from "text.slint";
 
 export enum ButtonStyle { primary, secondary, ghost }
@@ -11,6 +14,8 @@ export component Button inherits Rectangle {
     in property <bool> enabled: true;
     // False where a click must leave the keyboard focus where it is.
     in property <bool> focus-on-click: true;
+    // Whether the focus ring shows.
+    out property <bool> ring: focus.has-focus && root.enabled;
     callback clicked();
 
     property <color> foreground: style == ButtonStyle.primary ? Theme.text-on-accent : Theme.text-primary;
@@ -23,10 +28,20 @@ export component Button inherits Rectangle {
     }
     forward-focus: focus;
 
+    property <int> pointing;
+    property <bool> hovered: touch.has-hover;
+    changed hovered => {
+        if root.hovered {
+            root.pointing = Pointed.enter();
+        } else {
+            Pointed.leave(root.pointing);
+        }
+    }
+
     border-radius: Theme.radius-md;
     background: style == ButtonStyle.primary ? Theme.accent : style == ButtonStyle.secondary ? Theme.bg-hover : (touch.has-hover && enabled ? Theme.bg-hover : transparent);
-    border-width: focus.has-focus ? Theme.border-focus : style == ButtonStyle.ghost ? Theme.border-thin : 0;
-    border-color: focus.has-focus ? (style == ButtonStyle.primary ? Theme.text-primary : Theme.accent) : Theme.border-default;
+    border-width: root.ring ? Theme.border-focus : style == ButtonStyle.ghost ? Theme.border-thin : 0;
+    border-color: root.ring ? (style == ButtonStyle.primary ? Theme.text-primary : Theme.accent) : Theme.border-default;
     opacity: enabled ? 1 : Theme.disabled-opacity;
 
     function activate() {
@@ -38,6 +53,9 @@ export component Button inherits Rectangle {
     touch := TouchArea {
         enabled: root.enabled;
         mouse-cursor: pointer;
+        pointer-event(event) => {
+            MouseBack.handle(event);
+        }
         clicked => {
             if root.focus-on-click {
                 focus.focus();
@@ -50,6 +68,9 @@ export component Button inherits Rectangle {
         enabled: root.enabled;
         // Clicks go to the TouchArea: a focusing FocusScope on top would swallow the first one.
         focus-on-click: false;
+        focus-gained => {
+            ContextMenu.focus-taken();
+        }
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " {
                 root.activate();
@@ -71,7 +92,6 @@ export component Button inherits Rectangle {
             source: root.icon;
             width: 24px;
             height: 24px;
-            colorize: root.foreground;
         }
         label-text := BodyStrongText {
             accessible-role: none;

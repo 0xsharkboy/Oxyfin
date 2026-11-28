@@ -125,16 +125,18 @@ fn escape_closes_a_menu_and_the_stats_before_the_fullscreen_of_the_player() {
     let gear = find(&window, "Playback settings", AccessibleRole::Button)
         .unwrap_or_else(|| panic!("no settings button"));
     click(&window, &gear);
-    assert!(find(&window, "Playback statistics", AccessibleRole::ListItem).is_some());
+    assert!(find(&window, "Normal", AccessibleRole::ListItem).is_some());
+    assert!(!shows_stats(&window), "the menu replaces the stats");
 
     press(&window, Key::Escape);
     assert!(
-        find(&window, "Playback statistics", AccessibleRole::ListItem).is_none(),
+        find(&window, "Normal", AccessibleRole::ListItem).is_none(),
         "the menu closes first"
     );
-    assert!(shows_stats(&window));
     assert!(window.window().is_fullscreen());
 
+    press(&window, "i");
+    assert!(shows_stats(&window));
     press(&window, Key::Escape);
     assert!(!shows_stats(&window));
     assert!(window.window().is_fullscreen());

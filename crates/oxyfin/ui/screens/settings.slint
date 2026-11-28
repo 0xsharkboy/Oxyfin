@@ -1,9 +1,19 @@
 import { Theme } from "../theme.slint";
+import { MouseBack } from "../components/mouse_back.slint";
 import { Button, ButtonStyle } from "../components/button.slint";
 import { TopBar, TopBarPage } from "../components/top_bar.slint";
 import { BodyText, CaptionText, DisplayText, HeadingText, LabelText } from "../components/text.slint";
 import { Chip } from "../components/chip.slint";
 import { TextField } from "../components/text_field.slint";
+import { Shortcuts } from "../components/shortcuts_overlay.slint";
+import { Dropdown } from "../components/dropdown.slint";
+
+// Texts of the settings that Rust puts together, translated here.
+export global SettingsTitles {
+    public pure function system-language(language: string) -> string {
+        @tr("System default ({})", language)
+    }
+}
 
 // Where the sign-in token is kept; mirrors the core `TokenStorage`.
 export enum TokenStore { keyring, file, memory }
@@ -131,6 +141,51 @@ component SubtitlePreview inherits Rectangle {
     }
 }
 
+// A setting with a value and the buttons that act on it, aligned to the right.
+component ActionRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value;
+
+    property <length> label-width: 160px;
+    // The buttons keep their whole labels; with too little room left beside them, the value
+    // goes under the label as a caption, like the caption of a choice row.
+    property <bool> stacked: root.width - root.label-width - 2 * root.spacing - buttons.preferred-width < Theme.action-value-min-width;
+
+    spacing: Theme.space-lg;
+
+    VerticalLayout {
+        width: root.label-width;
+        alignment: center;
+        spacing: Theme.space-2xs;
+
+        LabelText {
+            text: root.label;
+            wrap: word-wrap;
+        }
+        if root.stacked: CaptionText {
+            text: root.value;
+            wrap: word-wrap;
+        }
+    }
+    BodyText {
+        horizontal-stretch: 1;
+        text: root.stacked ? "" : root.value;
+        vertical-alignment: center;
+        wrap: word-wrap;
+    }
+    VerticalLayout {
+        alignment: center;
+        min-width: buttons.preferred-width;
+
+        buttons := HorizontalLayout {
+            alignment: end;
+            spacing: Theme.space-sm;
+
+            @children
+        }
+    }
+}
+
 component SettingSection inherits Rectangle {
     in property <string> title;
 
@@ -151,8 +206,8 @@ component SettingSection inherits Rectangle {
     }
 }
 
-// Settings: the signed-in account, playback, the subtitle style, the Quick Connect code entry, the
-// application version and the sign-out action.
+// Settings: the signed-in account, the interface language, playback, the subtitle style, the
+// Quick Connect code entry, diagnostics, the application version and the sign-out action.
 export component SettingsScreen inherits Rectangle {
     in property <string> server-name;
     in property <string> server-address;
@@ -178,6 +233,27 @@ export component SettingsScreen inherits Rectangle {
     // Whether `code` holds at least one digit.
     pure callback code-ready(code: string) -> bool;
     callback authorize(code: string);
+    // Size of the image cache on disk, in kibibytes; negative while unknown.
+    in property <int> image-cache-kb: -1;
+    callback clear-image-cache();
+    // Whether the logs were copied since the settings opened.
+    in property <bool> logs-copied;
+    // Whether the last copy could not reach the clipboard.
+    in property <bool> logs-copy-failed;
+    callback copy-logs();
+    callback open-logs();
+    // The interface languages offered: the system one first, then each bundled one by its own name.
+    in property <[string]> languages;
+    // Index in `languages` of the one chosen.
+    in property <int> language;
+    callback language-changed(index: int);
+
+    property <length> copy-width;
+    // Another language starts from its own width.
+    property <string> copy-label: @tr("Copy logs");
+    changed copy-label => {
+        root.copy-width = 0;
+    }
 
     property <bool> can-authorize: root.authorize-state != AuthorizeState.busy && root.code-ready(root.authorize-code);
 
@@ -204,6 +280,7 @@ export component SettingsScreen inherits Rectangle {
         }
 
         flick := Flickable {
+            mouse-drag-pan-enabled: false;
             y: top-bar.height;
             height: parent.height - self.y;
             content-width: self.width;
@@ -214,9 +291,7 @@ export component SettingsScreen inherits Rectangle {
                 width: flick.content-width;
                 height: flick.content-height;
                 pointer-event(event) => {
-                    if event.button == PointerEventButton.back && event.kind == PointerEventKind.up {
-                        root.back();
-                    }
+                    MouseBack.handle(event);
                 }
             }
 
@@ -261,6 +336,37 @@ export component SettingsScreen inherits Rectangle {
                                 style: ButtonStyle.secondary;
                                 clicked => {
                                     root.sign-out();
+                                }
+                            }
+                        }
+                    }
+
+                    SettingSection {
+                        title: @tr("Interface");
+                        // Above the sections below it, which the open language list covers.
+                        z: 1;
+
+                        HorizontalLayout {
+                            spacing: Theme.space-lg;
+
+                            LabelText {
+                                width: 160px;
+                                text: @tr("Language");
+                                vertical-alignment: center;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                horizontal-stretch: 1;
+                                alignment: start;
+
+                                Dropdown {
+                                    label: @tr("Language");
+                                    label-shown: false;
+                                    options: root.languages;
+                                    selected: root.language;
+                                    chosen(index) => {
+                                        root.language-changed(index);
+                                    }
                                 }
                             }
                         }
@@ -472,6 +578,64 @@ export component SettingsScreen inherits Rectangle {
                                 : @tr("The device could not be authorized.");
                             color: root.authorize-state == AuthorizeState.done ? Theme.watched : Theme.danger;
                             wrap: word-wrap;
+                        }
+                    }
+
+                    SettingSection {
+                        title: @tr("Diagnostics");
+
+                        ActionRow {
+                            label: @tr("Image cache");
+                            value: root.image-cache-kb < 0 ? "" : root.image-cache-kb < 1024 ? @tr("{} KB", root.image-cache-kb) : @tr("{} MB", round(root.image-cache-kb / 1024));
+
+                            Button {
+                                label: @tr("Clear cache");
+                                style: ButtonStyle.secondary;
+                                enabled: root.image-cache-kb > 0;
+                                clicked => {
+                                    root.clear-image-cache();
+                                }
+                            }
+                        }
+                        ActionRow {
+                            label: @tr("Logs");
+                            value: @tr("For bug reports");
+
+                            Button {
+                                label: root.logs-copied ? @tr("Copied") : root.copy-label;
+                                style: ButtonStyle.secondary;
+                                // The shorter "Copied" must not move the row.
+                                min-width: max(self.preferred-width, root.copy-width);
+                                clicked => {
+                                    root.copy-width = self.width;
+                                    root.copy-logs();
+                                }
+                            }
+                            Button {
+                                label: @tr("Open folder");
+                                style: root.logs-copy-failed ? ButtonStyle.primary : ButtonStyle.secondary;
+                                clicked => {
+                                    root.open-logs();
+                                }
+                            }
+                        }
+                        if root.logs-copy-failed: LabelText {
+                            accessible-role: text;
+                            text: @tr("The clipboard cannot be reached. Open the folder and attach oxyfin.log to the report.");
+                            color: Theme.danger;
+                            wrap: word-wrap;
+                        }
+                        ActionRow {
+                            label: @tr("Keyboard shortcuts");
+                            value: @tr("Also with the ? key");
+
+                            Button {
+                                label: @tr("Show");
+                                style: ButtonStyle.secondary;
+                                clicked => {
+                                    Shortcuts.show();
+                                }
+                            }
                         }
                     }
 

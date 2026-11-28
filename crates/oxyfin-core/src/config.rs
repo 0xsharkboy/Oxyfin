@@ -59,6 +59,17 @@ pub struct Config {
     /// Whether Discord shows what plays.
     #[serde(default)]
     pub discord: bool,
+    /// Whether the player shows the time left rather than the total duration.
+    #[serde(default)]
+    pub time_remaining: bool,
+    /// Player volume the user last set, in percent; `None` before any change. Unreadable
+    /// content counts as no change.
+    #[serde(default, deserialize_with = "lenient")]
+    pub volume: Option<u8>,
+    /// Code of the interface language the user picked, such as `fr`; `None` follows the
+    /// system. Unreadable content follows the system.
+    #[serde(default, deserialize_with = "lenient")]
+    pub language: Option<String>,
 }
 
 fn storage<E: std::fmt::Display>(error: E) -> CoreError {
@@ -77,6 +88,9 @@ impl Config {
             start_fullscreen: false,
             playback: PlaybackPrefs::default(),
             discord: false,
+            time_remaining: false,
+            volume: None,
+            language: None,
         }
     }
 
@@ -235,6 +249,42 @@ mod tests {
     }
 
     #[test]
+    fn time_remaining_round_trips_and_defaults_to_off() {
+        let (_dir, paths) = temp();
+        let mut config = Config::load_or_create(&paths).unwrap();
+        assert!(!config.time_remaining);
+        config.time_remaining = true;
+        config.save(&paths).unwrap();
+        assert!(Config::load_or_create(&paths).unwrap().time_remaining);
+
+        fs::write(
+            paths.config_dir.join("config.json"),
+            r#"{"device_id":"abc"}"#,
+        )
+        .unwrap();
+        assert!(!Config::load_or_create(&paths).unwrap().time_remaining);
+    }
+
+    #[test]
+    fn volume_round_trips_and_falls_back_to_none() {
+        let (_dir, paths) = temp();
+        let mut config = Config::load_or_create(&paths).unwrap();
+        assert_eq!(config.volume, None);
+        config.volume = Some(40);
+        config.save(&paths).unwrap();
+        assert_eq!(Config::load_or_create(&paths).unwrap().volume, Some(40));
+
+        fs::write(
+            paths.config_dir.join("config.json"),
+            r#"{"device_id":"abc","volume":"loud"}"#,
+        )
+        .unwrap();
+        let config = Config::load_or_create(&paths).unwrap();
+        assert_eq!(config.device_id, "abc", "the rest of the file still loads");
+        assert_eq!(config.volume, None);
+    }
+
+    #[test]
     fn start_fullscreen_round_trips_and_defaults_to_off() {
         let (_dir, paths) = temp();
         let mut config = Config::load_or_create(&paths).unwrap();
@@ -249,6 +299,29 @@ mod tests {
         )
         .unwrap();
         assert!(!Config::load_or_create(&paths).unwrap().start_fullscreen);
+    }
+
+    #[test]
+    fn language_round_trips_and_defaults_to_the_system_one() {
+        let (_dir, paths) = temp();
+        let mut config = Config::load_or_create(&paths).unwrap();
+        assert_eq!(config.language, None);
+        config.language = Some("fr".into());
+        config.save(&paths).unwrap();
+        assert_eq!(
+            Config::load_or_create(&paths).unwrap().language.as_deref(),
+            Some("fr")
+        );
+
+        for older in [
+            r#"{"device_id":"abc"}"#,
+            r#"{"device_id":"abc","language":7}"#,
+        ] {
+            fs::write(paths.config_dir.join("config.json"), older).unwrap();
+            let config = Config::load_or_create(&paths).unwrap();
+            assert_eq!(config.device_id, "abc", "with {older}");
+            assert_eq!(config.language, None, "with {older}");
+        }
     }
 
     #[test]

@@ -16,13 +16,15 @@ import { SubtitleSearch, SubtitleSearchDialog } from "../components/subtitle_sea
 
 export enum PlayerMenu { none, tracks, speed, chapters, subtitles }
 
-enum DelayKind { none, audio, subtitle }
+enum OsdKind { none, audio-delay, subtitle-delay, volume }
 
 // Video player. The window is transparent here so the video drawn under the interface shows.
 export component PlayerScreen inherits Rectangle {
     in property <string> title;
     in property <string> subtitle;
     in property <bool> loading;
+    // The player waits for data while playing; the spinner shows after a short delay.
+    in property <bool> buffering;
     in property <bool> has-error;
     in property <Message> error;
     // Whether the video renderer drew a frame for the current session.
@@ -31,6 +33,9 @@ export component PlayerScreen inherits Rectangle {
     in property <float> duration;
     in property <string> elapsed;
     in property <string> total;
+    in property <string> remaining;
+    // Whether the time shows what is left rather than the total; a click on it switches.
+    in-out property <bool> time-remaining;
     in property <bool> paused;
     in property <float> volume;
     in property <bool> muted;
@@ -63,13 +68,14 @@ export component PlayerScreen inherits Rectangle {
     in property <[StatSection]> stats;
     // Whether the playback statistics show; they are asked for every second while they do.
     in-out property <bool> stats-visible;
-    out property <bool> controls-visible: root.awake || root.paused || root.menu != PlayerMenu.none || root.scrubbing || root.loading || root.has-error;
+    out property <bool> controls-visible: root.awake || root.paused || root.menu-open || root.scrubbing || root.loading || root.has-error;
 
     callback back();
     callback toggle-fullscreen();
     // The cursor only changes on a pointer event: the window replays one where the pointer rests.
     callback cursor-hidden(x: length, y: length);
     callback command-set-paused(paused: bool);
+    callback command-retry();
     callback command-seek(seconds: float);
     callback command-skip(direction: int);
     callback command-previous();
@@ -95,10 +101,35 @@ export component PlayerScreen inherits Rectangle {
     callback command-stats();
     // The pointer hovers or drags the seek bar at `seconds`: the preview should show that time.
     callback preview-requested(seconds: float);
+    callback time-remaining-changed(remaining: bool);
 
     property <PlayerMenu> menu: PlayerMenu.none;
-    // The delay a shortcut changed, shown for a moment over the video.
-    property <DelayKind> osd: DelayKind.none;
+    // A menu or the statistics show above the bar; one at a time.
+    property <bool> menu-open: root.menu != PlayerMenu.none || root.stats-visible;
+    // The menus cover the skip column, unlike the statistics, which leave room for it.
+    property <bool> popup-open: root.menu != PlayerMenu.none;
+    // The delay a shortcut or the volume the wheel changed, shown for a moment over the video.
+    property <OsdKind> osd: OsdKind.none;
+    // Speaker of the volume feedback.
+    out property <image> osd-image: controls.volume-icon;
+    // Wheel scrolling not yet turned into volume steps.
+    property <length> wheel-delta;
+    // What one notch of a mouse wheel scrolls: one volume step.
+    property <length> wheel-notch: 60px;
+    // Whether the last click and the one before it landed on the video, and the pause state
+    // before each: a double click puts back the state from before its first click.
+    property <bool> last-click-video;
+    property <bool> previous-click-video;
+    property <bool> paused-before-last-click;
+    property <bool> paused-before-previous-click;
+    // When and where the pointer last pressed a control that went away with that click.
+    property <duration> vanished-tick: -3600s;
+    property <length> vanished-x;
+    property <length> vanished-y;
+    // The pause indicator: whether it shows pause, whether it shows at all, and whether it fades.
+    property <bool> indicator-paused;
+    property <bool> indicator-active;
+    property <bool> indicator-fading;
     // False once the pointer rested for the hide delay while playing.
     property <bool> awake: true;
     // The controls stay up while the pointer rests on them, such as on the seek bar preview.
@@ -106,6 +137,13 @@ export component PlayerScreen inherits Rectangle {
     property <length> button-size: 24px + 2 * Theme.space-sm;
     property <length> menu-bottom: controls.y + Theme.space-3xl - Theme.space-xl;
     property <length> menu-max-height: root.menu-bottom - top-bar.height;
+    // The skip column and the next episode toast, one at a time, go left of the statistics, or
+    // above them, under the top bar, where the window is too narrow.
+    property <length> stack-width: max(skip-column.preferred-width, toast.preferred-width);
+    property <length> stack-height: max(skip-column.preferred-height, toast.preferred-height);
+    property <bool> stack-above: root.stats-visible && root.width - 2 * Theme.space-2xl - Theme.stats-panel-width - Theme.space-sm < max(root.stack-width, Theme.skip-room-width);
+    property <length> stack-right: root.width - Theme.space-2xl - (root.stats-visible && !root.stack-above ? Theme.stats-panel-width + Theme.space-sm : 0);
+    property <length> stack-bottom: root.stack-above ? top-bar.height + root.stack-height : root.controls-visible ? root.menu-bottom : root.height - Theme.space-2xl;
 
     function reveal() {
         root.awake = true;
@@ -114,8 +152,8 @@ export component PlayerScreen inherits Rectangle {
         }
     }
 
-    function step-delay(kind: DelayKind, direction: int) {
-        if kind == DelayKind.audio {
+    function step-delay(kind: OsdKind, direction: int) {
+        if kind == OsdKind.audio-delay {
             root.command-step-audio-delay(direction);
         } else {
             root.command-step-subtitle-delay(direction);
@@ -124,22 +162,51 @@ export component PlayerScreen inherits Rectangle {
         osd-timer.restart();
     }
 
+    function on-video(y: length) -> bool {
+        !root.controls-visible || (y >= top-bar.height && y < controls.y)
+    }
+
+    // The control under the pointer goes away: the second click of a double click on it is not
+    // one on the video.
+    function control-vanished() {
+        root.vanished-tick = animation-tick();
+        root.vanished-x = surface.mouse-x;
+        root.vanished-y = surface.mouse-y;
+    }
+
+    function on-vanished-control() -> bool {
+        animation-tick() - root.vanished-tick < Theme.double-click-interval && abs(surface.mouse-x - root.vanished-x) < Theme.double-click-distance && abs(surface.mouse-y - root.vanished-y) < Theme.double-click-distance
+    }
+
+    function pause-from-click() {
+        root.indicator-paused = !root.paused;
+        root.command-set-paused(root.indicator-paused);
+        root.indicator-fading = false;
+        root.indicator-active = true;
+        indicator-hold.restart();
+    }
+
     function toggle-stats() {
+        root.menu = PlayerMenu.none;
         root.stats-visible = !root.stats-visible;
         if root.stats-visible {
             root.command-stats();
         }
     }
 
+    function close-menus() {
+        root.menu = PlayerMenu.none;
+        root.stats-visible = false;
+    }
+
     function toggle-menu(menu: PlayerMenu) {
+        root.stats-visible = false;
         root.menu = root.menu == menu ? PlayerMenu.none : menu;
     }
 
     function escape() {
-        if root.menu != PlayerMenu.none {
-            root.menu = PlayerMenu.none;
-        } else if root.stats-visible {
-            root.stats-visible = false;
+        if root.menu-open {
+            root.close-menus();
         } else if root.fullscreen && root.fullscreen-own {
             // The fullscreen of a fullscreen launch stays: Escape goes back instead.
             root.toggle-fullscreen();
@@ -173,7 +240,7 @@ export component PlayerScreen inherits Rectangle {
         }
     }
     // Stays up while the controls hide, like the skip buttons of common players.
-    property <bool> skip-visible: root.skip-kind != SkipKind.none && !root.toast-visible && root.menu == PlayerMenu.none && !root.loading && !root.has-error;
+    property <bool> skip-visible: root.skip-kind != SkipKind.none && !root.toast-visible && !root.popup-open && !root.loading && !root.has-error;
     changed skip-visible => {
         if !self.skip-visible {
             keys.focus();
@@ -182,7 +249,7 @@ export component PlayerScreen inherits Rectangle {
 
     // Serial of the last skip whose notice timed out or was answered.
     property <int> skip-notice-done: 0;
-    property <bool> skip-notice-visible: root.skipped.kind != SkipKind.none && root.skipped.serial != root.skip-notice-done && !root.toast-visible && root.menu == PlayerMenu.none && !root.loading && !root.has-error;
+    property <bool> skip-notice-visible: root.skipped.kind != SkipKind.none && root.skipped.serial != root.skip-notice-done && !root.toast-visible && !root.popup-open && !root.loading && !root.has-error;
     changed skipped => {
         if skip-notice-timer.running {
             skip-notice-timer.restart();
@@ -209,6 +276,21 @@ export component PlayerScreen inherits Rectangle {
         }
     }
 
+    property <bool> buffering-shown;
+    changed buffering => {
+        if !root.buffering {
+            root.buffering-shown = false;
+        }
+    }
+
+    buffering-timer := Timer {
+        interval: Theme.buffering-delay;
+        running: root.buffering && !root.buffering-shown;
+        triggered => {
+            root.buffering-shown = true;
+        }
+    }
+
     skip-notice-timer := Timer {
         interval: 5s;
         running: root.skip-notice-visible;
@@ -219,15 +301,32 @@ export component PlayerScreen inherits Rectangle {
 
     osd-timer := Timer {
         interval: 1.5s;
-        running: root.osd != DelayKind.none;
+        running: root.osd != OsdKind.none;
         triggered => {
-            root.osd = DelayKind.none;
+            root.osd = OsdKind.none;
+        }
+    }
+
+    indicator-hold := Timer {
+        interval: Theme.pause-indicator-hold;
+        running: root.indicator-active && !root.indicator-fading;
+        triggered => {
+            root.indicator-fading = true;
+        }
+    }
+
+    indicator-end := Timer {
+        interval: Theme.pause-indicator-fade;
+        running: root.indicator-fading;
+        triggered => {
+            root.indicator-active = false;
+            root.indicator-fading = false;
         }
     }
 
     hide-timer := Timer {
         interval: 3s;
-        running: root.awake && !root.paused && root.menu == PlayerMenu.none && !root.scrubbing && !root.loading && !root.has-error && !root.pointer-on-controls;
+        running: root.awake && !root.paused && !root.menu-open && !root.scrubbing && !root.loading && !root.has-error && !root.pointer-on-controls;
         triggered => {
             root.awake = false;
             keys.focus();
@@ -247,10 +346,46 @@ export component PlayerScreen inherits Rectangle {
             root.reveal();
         }
         clicked => {
-            root.menu = PlayerMenu.none;
+            root.previous-click-video = root.last-click-video;
+            root.last-click-video = false;
+            if root.menu-open {
+                root.close-menus();
+            } else if root.on-video(self.mouse-y) && !root.on-vanished-control() {
+                root.last-click-video = true;
+                root.paused-before-previous-click = root.paused-before-last-click;
+                root.paused-before-last-click = root.paused;
+                if !root.loading && !root.has-error {
+                    root.pause-from-click();
+                }
+            }
             keys.focus();
         }
+        scroll-event(event) => {
+            if root.menu-open || !root.on-video(self.mouse-y) || event.delta-y == 0 {
+                return reject;
+            }
+            if (root.wheel-delta > 0 && event.delta-y < 0) || (root.wheel-delta < 0 && event.delta-y > 0) {
+                root.wheel-delta = 0;
+            }
+            root.wheel-delta += event.delta-y;
+            if abs(root.wheel-delta) >= root.wheel-notch {
+                root.command-step-volume(root.wheel-delta > 0 ? 1 : -1);
+                root.wheel-delta = 0;
+                root.osd = OsdKind.volume;
+                osd-timer.restart();
+            }
+            accept
+        }
+        // Slint calls `clicked` for both clicks first, so each toggled pause: undo them.
         double-clicked => {
+            if !root.previous-click-video || !root.last-click-video {
+                return;
+            }
+            root.last-click-video = false;
+            if !root.loading && !root.has-error {
+                root.indicator-active = false;
+                root.command-set-paused(root.paused-before-previous-click);
+            }
             root.toggle-fullscreen();
         }
 
@@ -271,9 +406,9 @@ export component PlayerScreen inherits Rectangle {
                 // mpv default bindings: Ctrl with plus or minus for the audio delay.
                 if event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta {
                     if event.text == "+" || event.text == "=" {
-                        root.step-delay(DelayKind.audio, 1);
+                        root.step-delay(OsdKind.audio-delay, 1);
                     } else if event.text == "-" {
-                        root.step-delay(DelayKind.audio, -1);
+                        root.step-delay(OsdKind.audio-delay, -1);
                     } else {
                         return reject;
                     }
@@ -316,9 +451,9 @@ export component PlayerScreen inherits Rectangle {
                 } else if event.text == Key.PageDown {
                     root.command-step-chapter(1);
                 } else if event.text == "z" {
-                    root.step-delay(DelayKind.subtitle, -1);
+                    root.step-delay(OsdKind.subtitle-delay, -1);
                 } else if event.text == "Z" || event.text == "x" || event.text == "X" {
-                    root.step-delay(DelayKind.subtitle, 1);
+                    root.step-delay(OsdKind.subtitle-delay, 1);
                 } else if event.text == Key.Escape {
                     root.escape();
                 } else {
@@ -328,7 +463,7 @@ export component PlayerScreen inherits Rectangle {
                 accept
             }
 
-            if root.loading && !root.has-error: Spinner {
+            if (root.loading || (root.buffering && root.buffering-shown)) && !root.has-error: Spinner {
                 indeterminate: true;
                 width: 48px;
                 height: 48px;
@@ -340,20 +475,37 @@ export component PlayerScreen inherits Rectangle {
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
                 width: min(parent.width - 2 * Theme.space-3xl, 480px);
-                height: error-text.preferred-height + 2 * Theme.space-xl;
+                height: error-layout.preferred-height;
                 background: Theme.bg-elevated;
                 border-radius: Theme.radius-lg;
                 border-width: Theme.border-thin;
                 border-color: Theme.border-default;
 
-                error-text := BodyText {
-                    accessible-role: text;
-                    x: Theme.space-xl;
-                    width: parent.width - 2 * Theme.space-xl;
-                    text: Messages.message-text(root.error, "");
-                    wrap: word-wrap;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                error-layout := VerticalLayout {
+                    padding: Theme.space-xl;
+                    spacing: Theme.space-lg;
+
+                    BodyText {
+                        accessible-role: text;
+                        text: Messages.message-text(root.error, "");
+                        wrap: word-wrap;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    HorizontalLayout {
+                        alignment: center;
+
+                        Button {
+                            focus-on-click: false;
+                            style: ButtonStyle.secondary;
+                            label: @tr("Retry");
+                            clicked => {
+                                root.control-vanished();
+                                root.command-retry();
+                            }
+                        }
+                    }
                 }
             }
 
@@ -400,12 +552,6 @@ export component PlayerScreen inherits Rectangle {
                 }
             }
 
-            if root.stats-visible: StatsPanel {
-                x: Theme.space-2xl;
-                y: 2 * Theme.space-3xl;
-                sections: root.stats;
-            }
-
             controls := PlayerControls {
                 y: parent.height - self.height;
                 width: parent.width;
@@ -414,6 +560,8 @@ export component PlayerScreen inherits Rectangle {
                 duration: root.duration;
                 elapsed: root.elapsed;
                 total: root.total;
+                remaining: root.remaining;
+                time-remaining: root.time-remaining;
                 paused: root.paused;
                 has-next: root.has-next;
                 volume: root.volume;
@@ -423,6 +571,7 @@ export component PlayerScreen inherits Rectangle {
                 chapters-open: root.menu == PlayerMenu.chapters;
                 chapter-marks: root.chapter-marks;
                 speed-open: root.menu == PlayerMenu.speed;
+                stats-open: root.stats-visible;
                 fullscreen: root.fullscreen;
                 scrubbing <=> root.scrubbing;
                 toggle-pause => {
@@ -458,6 +607,13 @@ export component PlayerScreen inherits Rectangle {
                 toggle-speed => {
                     root.toggle-menu(PlayerMenu.speed);
                 }
+                toggle-stats => {
+                    root.toggle-stats();
+                }
+                toggle-time => {
+                    root.time-remaining = !root.time-remaining;
+                    root.time-remaining-changed(root.time-remaining);
+                }
                 toggle-fullscreen => {
                     root.toggle-fullscreen();
                 }
@@ -467,7 +623,7 @@ export component PlayerScreen inherits Rectangle {
             }
 
             if root.menu == PlayerMenu.tracks: TrackMenu {
-                x: parent.width - self.width - Theme.space-2xl - 2 * (root.button-size + Theme.space-sm);
+                x: parent.width - self.width - Theme.space-2xl - 3 * (root.button-size + Theme.space-sm);
                 y: root.menu-bottom - self.height;
                 limit: root.menu-max-height;
                 audio: root.audio;
@@ -506,9 +662,18 @@ export component PlayerScreen inherits Rectangle {
                 chapters: root.chapters;
                 current: root.current-chapter;
                 chosen(start) => {
+                    root.control-vanished();
                     root.command-seek(start);
                     root.menu = PlayerMenu.none;
                 }
+            }
+
+            if root.stats-visible: StatsPanel {
+                x: parent.width - self.width - Theme.space-2xl;
+                y: root.menu-bottom - self.height;
+                // Where the skip button and the notice go above, their room is kept: the panel never jumps.
+                limit: root.menu-max-height - (root.stack-above ? max(root.stack-height, Theme.skip-stack-height) + Theme.space-sm : 0px);
+                sections: root.stats;
             }
 
             if root.menu == PlayerMenu.speed: SpeedMenu {
@@ -518,28 +683,25 @@ export component PlayerScreen inherits Rectangle {
                 speeds: root.speeds;
                 speed: root.speed;
                 select(speed) => {
+                    root.control-vanished();
                     root.command-set-speed(speed);
                     root.menu = PlayerMenu.none;
                 }
                 qualities: root.qualities;
                 quality: root.quality;
                 select-quality(index) => {
+                    root.control-vanished();
                     root.command-set-quality(index);
-                    root.menu = PlayerMenu.none;
-                }
-                stats-visible: root.stats-visible;
-                toggle-stats => {
-                    root.toggle-stats();
                     root.menu = PlayerMenu.none;
                 }
             }
 
             // The notice of a skip stacks above the skip button of the next segment.
-            VerticalLayout {
+            skip-column := VerticalLayout {
                 width: self.preferred-width;
                 height: self.preferred-height;
-                x: parent.width - self.width - Theme.space-2xl;
-                y: (root.controls-visible ? root.menu-bottom : parent.height - Theme.space-2xl) - self.height;
+                x: root.stack-right - self.width;
+                y: root.stack-bottom - self.height;
                 spacing: Theme.space-sm;
 
                 if root.skip-notice-visible: HorizontalLayout {
@@ -548,6 +710,7 @@ export component PlayerScreen inherits Rectangle {
                     SkipNotice {
                         kind: root.skipped.kind;
                         undo => {
+                            root.control-vanished();
                             root.skip-notice-done = root.skipped.serial;
                             root.command-undo-skip();
                         }
@@ -566,30 +729,38 @@ export component PlayerScreen inherits Rectangle {
                         drop-shadow-blur: 12px;
                         drop-shadow-color: Theme.menu-shadow;
                         clicked => {
+                            root.control-vanished();
                             root.skip-segment();
                         }
                     }
                 }
             }
 
-            if root.next-up.visible: NextEpisodeToast {
-                x: parent.width - self.width - Theme.space-2xl;
-                y: (root.controls-visible ? root.menu-bottom : parent.height - Theme.space-2xl) - self.height;
-                next-up: root.next-up;
-                play-now => {
-                    root.command-play-next-now();
-                }
-                cancel => {
-                    root.command-cancel-next-up();
+            toast := VerticalLayout {
+                width: self.preferred-width;
+                height: self.preferred-height;
+                x: root.stack-right - self.width;
+                y: root.stack-bottom - self.height;
+
+                if root.next-up.visible: NextEpisodeToast {
+                    next-up: root.next-up;
+                    play-now => {
+                        root.control-vanished();
+                        root.command-play-next-now();
+                    }
+                    cancel => {
+                        root.control-vanished();
+                        root.command-cancel-next-up();
+                    }
                 }
             }
 
-            if root.osd != DelayKind.none: osd-pill := Rectangle {
-                property <int> value: root.osd == DelayKind.audio ? root.audio-delay : root.subtitle-delay;
-                property <string> name: root.osd == DelayKind.audio ? @tr("Audio delay") : @tr("Subtitle delay");
+            if root.osd != OsdKind.none: osd-pill := Rectangle {
+                property <string> name: root.osd == OsdKind.volume ? @tr("Volume") : root.osd == OsdKind.audio-delay ? @tr("Audio delay") : @tr("Subtitle delay");
+                property <string> value: root.osd == OsdKind.volume ? @tr("{}%", round(root.volume)) : Messages.delay-text(root.osd == OsdKind.audio-delay ? root.audio-delay : root.subtitle-delay);
 
                 accessible-role: text;
-                accessible-label: @tr("{}: {}", self.name, Messages.delay-text(self.value));
+                accessible-label: @tr("{}: {}", self.name, self.value);
                 x: (parent.width - self.width) / 2;
                 y: 2 * Theme.space-3xl;
                 width: osd-row.preferred-width;
@@ -606,6 +777,16 @@ export component PlayerScreen inherits Rectangle {
                     padding-bottom: Theme.space-pill-y;
                     spacing: Theme.space-sm;
 
+                    if root.osd == OsdKind.volume: VerticalLayout {
+                        alignment: center;
+
+                        osd-icon := Image {
+                            accessible-role: none;
+                            source: root.osd-image;
+                            width: Theme.link-icon-size;
+                            height: Theme.link-icon-size;
+                        }
+                    }
                     BodyText {
                         accessible-role: none;
                         text: osd-pill.name;
@@ -614,9 +795,30 @@ export component PlayerScreen inherits Rectangle {
                     }
                     BodyStrongText {
                         accessible-role: none;
-                        text: Messages.delay-text(osd-pill.value);
+                        text: osd-pill.value;
                         vertical-alignment: center;
                     }
+                }
+            }
+
+            if root.indicator-active: Rectangle {
+                accessible-role: image;
+                accessible-label: root.indicator-paused ? @tr("Paused") : @tr("Playing");
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: Theme.pause-indicator-size;
+                height: self.width;
+                border-radius: self.width / 2;
+                background: Theme.pause-indicator-background;
+                opacity: root.indicator-fading ? 0 : 1;
+                animate opacity { duration: Theme.pause-indicator-fade; }
+
+                Image {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: Theme.pause-indicator-icon;
+                    height: self.width;
+                    source: root.indicator-paused ? Icons.pause : Icons.play;
                 }
             }
 
@@ -634,6 +836,7 @@ export component PlayerScreen inherits Rectangle {
                 // Clicks on the scrim close the dialog and never reach the player.
                 TouchArea {
                     clicked => {
+                        root.control-vanished();
                         root.menu = PlayerMenu.none;
                         keys.focus();
                     }

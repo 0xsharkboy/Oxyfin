@@ -25,11 +25,15 @@ export global Theme {
     out property <brush> landscape-placeholder: @linear-gradient(157deg, #59384d 14%, #1a1424 86%);
     out property <brush> sign-in-glow: @radial-gradient(circle, #12404f99 0%, #0b0d1200 70%);
     out property <color> card-shadow: #00000066;
+    // Fades the edges of a row under its scroll arrows.
+    out property <brush> row-scrim-left: @linear-gradient(90deg, #0b0d12f2 0%, #0b0d1200 100%);
+    out property <brush> row-scrim-right: @linear-gradient(90deg, #0b0d1200 0%, #0b0d12f2 100%);
     // Behind the video until its first frame.
     out property <color> video-backdrop: #000000;
     // Player overlays, readable over any video.
     out property <brush> player-scrim-top: @linear-gradient(180deg, #000000bf 0%, #00000000 100%);
     out property <brush> player-scrim-bottom: @linear-gradient(180deg, #00000000 0%, #000000d9 100%);
+    out property <color> pause-indicator-background: #0000008c;
     out property <brush> next-up-placeholder: @linear-gradient(157deg, #335966 14%, #0f1a1f 86%);
     out property <color> menu-shadow: #00000080;
     // Covers the player behind a dialog.
@@ -51,8 +55,66 @@ export global Theme {
     out property <length> space-2xl: 32px;
     out property <length> space-3xl: 48px;
 
+    // Scroll arrows of a row: the button, and the faded edge it sits on.
+    out property <length> row-arrow-size: 44px;
+    out property <length> row-arrow-zone: 96px;
+    out property <duration> row-scroll-duration: 300ms;
+    // Card of details beside a hovered poster: the wait before it shows, its size and spacing.
+    out property <duration> hover-delay: 400ms;
+    out property <length> hover-card-width: 300px;
+    out property <length> hover-card-padding-y: 14px;
+    out property <length> hover-card-shadow-offset-y: 12px;
+    out property <length> hover-card-shadow-blur: 24px;
+    out property <length> hover-tag-gap: 6px;
+    out property <length> hover-progress-width: 120px;
+    out property <int> hover-overview-lines: 3;
+    // Menu opened on an item with a right click or the menu keys: its width, the padding above
+    // and below its rows, and the gap between the icon and the label of a row.
+    out property <length> context-menu-width: 290px;
+    out property <length> context-menu-padding-y: 6px;
+    out property <length> context-menu-icon-gap: 10px;
+    // How often the window checks that the element given the focus back after a menu row still shows.
+    out property <duration> focus-check-interval: 250ms;
+    // How many times it does: a row is rebuilt by then, or it never is.
+    out property <int> focus-check-limit: 40;
+    // Keyboard shortcuts dialog: its width, side padding, the gap under its title and between
+    // its columns, and the keycaps (radius, padding inside the border, gap between keys).
+    out property <length> shortcuts-width: 760px;
+    out property <length> shortcuts-padding-x: 28px;
+    out property <length> shortcuts-title-gap: 18px;
+    out property <length> shortcuts-column-gap: 40px;
+    out property <length> keycap-radius: 5px;
+    out property <length> keycap-padding-x: 7px;
+    out property <length> keycap-padding-top: 2px;
+    out property <length> keycap-padding-bottom: 3px;
+    out property <length> keycap-gap: 6px;
+    // Bones shown while a page loads: the wait before they show, so a fast answer never flashes
+    // them, the time their band of light takes to sweep across, and that band.
+    out property <duration> skeleton-delay: 150ms;
+    // Wait for data before the player shows its spinner.
+    out property <duration> buffering-delay: 500ms;
+    out property <duration> skeleton-sweep: 1800ms;
+    out property <brush> skeleton-shimmer: @linear-gradient(105deg, #ffffff00 35%, #ffffff0d 50%, #ffffff00 65%);
+    // Results of a previous search dim while the new ones load.
+    out property <float> stale-opacity: 0.5;
+    out property <duration> stale-fade: 200ms;
+    // Narrowest room for the value of a settings row beside its buttons, else it goes under the
+    // label.
+    out property <length> action-value-min-width: 120px;
+    // Thickness of a bone standing for one line of text, by text style.
+    out property <length> bone-display: 40px;
+    out property <length> bone-heading: 20px;
+    out property <length> bone-text: 14px;
+    out property <length> bone-caption: 12px;
+    // A button: its 24 px icon and its padding.
+    out property <length> button-height: 24px + 2 * space-md;
+    // Featured banner of the home screen.
+    out property <length> banner-height: 520px;
+    out property <int> banner-overview-lines: 2;
     out property <length> poster-width: 160px;
     out property <length> poster-height: 240px;
+    out property <length> landscape-width: 288px;
+    out property <length> landscape-height: 162px;
     out property <length> episode-thumb-width: 224px;
     out property <length> episode-thumb-height: 126px;
     out property <length> episode-text-gap: 6px;
@@ -65,6 +127,9 @@ export global Theme {
     out property <length> found-server-icon-size: 20px;
     out property <length> found-server-chevron-size: 18px;
     out property <int> found-servers-visible: 3;
+    // Card of a person and its round photo.
+    out property <length> person-card-width: 128px;
+    out property <length> person-photo-size: 112px;
     // Widest line of the summary of a detail page.
     out property <length> detail-text-width: 640px;
     // Widest a button naming a title grows before its label is cut.
@@ -87,6 +152,11 @@ export global Theme {
     // Playback statistics panel, its label column and the top and bottom padding of a row.
     out property <length> stats-panel-width: 380px;
     out property <length> stats-label-width: 120px;
+    // Room a skip button needs beside the panel, whatever its language.
+    out property <length> skip-room-width: 280px;
+    // Height of the notice of a skip, and of that notice stacked on a skip button.
+    out property <length> skip-notice-height: 2 * space-pill-y + body-line-height;
+    out property <length> skip-stack-height: skip-notice-height + space-sm + button-height;
     out property <length> stats-row-padding-y: 3px;
     out property <length> chapter-thumb-width: 64px;
     out property <length> chapter-thumb-height: 36px;
@@ -94,6 +164,14 @@ export global Theme {
     out property <length> chapter-gap-width: 3px;
     out property <length> chapter-gap-height: 8px;
     // Tick on the seek bar at the hovered time.
+    // The round pause indicator over the video, and how long it stays before fading out.
+    out property <length> pause-indicator-size: 88px;
+    out property <length> pause-indicator-icon: 40px;
+    out property <duration> pause-indicator-hold: 200ms;
+    out property <duration> pause-indicator-fade: 500ms;
+    // Two clicks closer than this in time and place make a double click.
+    out property <duration> double-click-interval: 500ms;
+    out property <length> double-click-distance: 10px;
     out property <length> seek-marker-width: 2px;
     out property <length> seek-marker-height: 12px;
     // Side padding of the seek preview label.
@@ -151,6 +229,8 @@ export struct CardData {
     watched: bool,
     image: image,
     has-image: bool,
+    // True for an item without a context menu, such as a collection.
+    no-menu: bool,
 }
 
 export struct TrackRow {
@@ -262,9 +342,33 @@ export enum Message {
     command-failed,
     playback-unavailable,
     subtitle-not-added,
+    removed-from-resume,
+    converting,
+    slow-stream,
 }
 
 export global Messages {
+    // A length in minutes such as "1 h 40 min" or "24 min"; empty when unknown.
+    public pure function duration(minutes: int) -> string {
+        if minutes <= 0 {
+            return "";
+        }
+        minutes >= 60 ? @tr("{} h {} min", floor(minutes / 60), mod(minutes, 60)) : @tr("{} min", minutes)
+    }
+
+    // The time left to watch, such as "12 min left".
+    public pure function time-left(minutes: int) -> string {
+        @tr("{} left", Messages.duration(minutes))
+    }
+
+    // Two parts of a line joined with a middle dot, leaving out an empty one.
+    public pure function joined(first: string, second: string) -> string {
+        if first == "" {
+            return second;
+        }
+        second == "" ? first : "\{first} \u{b7} \{second}"
+    }
+
     // The kind named on the cards of the series of a person page.
     public pure function series-kind() -> string {
         @tr("Series")
@@ -342,6 +446,15 @@ export global Messages {
         }
         if m == Message.subtitle-not-added {
             return @tr("The server did not add this subtitle. Try another one.");
+        }
+        if m == Message.converting {
+            return @tr("The original file cannot be played: the server now converts it.");
+        }
+        if m == Message.slow-stream {
+            return @tr("Playback keeps stopping to load. A lower quality may play smoothly.");
+        }
+        if m == Message.removed-from-resume {
+            return @tr("Removed from Continue Watching");
         }
         ""
     }

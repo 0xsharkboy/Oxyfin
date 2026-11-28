@@ -210,7 +210,7 @@ async fn fetch(
     let mut sources = info.media_sources;
     let chosen = sources
         .iter()
-        .position(|source| source.supports_direct_play)
+        .position(|source| source.supports_direct_play && !options.transcode_only)
         .or_else(|| {
             sources
                 .iter()
@@ -218,6 +218,13 @@ async fn fetch(
         })
         .ok_or(LoadFailure::NoPlayableSource)?;
     let source = sources.swap_remove(chosen);
+    if options.transcode_only {
+        // A file the server cannot serve at all would fail the same way once converted.
+        session
+            .probe_stream(&item, &source.id)
+            .await
+            .map_err(request)?;
+    }
     let (stream, delivery) = stream(session, &item, &source, &options)?;
     let trickplay = Trickplay::from_dto(&dto, &source.id);
     let mut media =
@@ -247,15 +254,15 @@ async fn fetch(
     })
 }
 
-/// The stream of `source`: the file itself when the server allows it,
-/// otherwise the server's transcode.
+/// The stream of `source`: the file itself when the server allows it and the
+/// options do not refuse it, otherwise the server's transcode.
 fn stream(
     session: &Session,
     item: &ItemId,
     source: &MediaSourceInfo,
     options: &PlaybackOptions,
 ) -> Result<(StreamSource, Delivery), LoadFailure> {
-    if source.supports_direct_play {
+    if source.supports_direct_play && !options.transcode_only {
         return Ok((session.stream_source(item, &source.id), Delivery::Direct));
     }
     let stream = source

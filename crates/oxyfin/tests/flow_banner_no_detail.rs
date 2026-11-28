@@ -54,7 +54,7 @@ fn the_banner_hides_more_info_without_a_detail_page() {
         let window = window.upgrade().ok_or("window dropped")?;
         wait_until("the home screen", || window.get_screen() == Screen::Home).await?;
         wait_visible(&window, "Loose Episode").await?;
-        wait_role(&window, "Play", AccessibleRole::Button).await?;
+        wait_role(&window, "Resume S01E02", AccessibleRole::Button).await?;
         if exists(&window, "More info") {
             return Err("More info is offered for an item without a detail page".into());
         }

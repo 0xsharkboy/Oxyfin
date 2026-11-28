@@ -7,7 +7,7 @@ use std::time::Duration;
 use libmpv2::events::{Event, PropertyData};
 use libmpv2::{Format, Mpv, mpv_end_file_reason, mpv_format};
 
-use crate::error::describe;
+use crate::error::{describe, is_output};
 use crate::{PlayerEvent, UnloadReason, tracks};
 
 /// Name of the observed property that signals the end of the media.
@@ -17,6 +17,7 @@ const PAUSE: &str = "pause";
 const VOLUME: &str = "volume";
 const SPEED: &str = "speed";
 const MUTE: &str = "mute";
+const PAUSED_FOR_CACHE: &str = "paused-for-cache";
 const TRACK_COUNT: &str = "track-list/count";
 const AID: &str = "aid";
 const SID: &str = "sid";
@@ -72,6 +73,7 @@ pub(crate) fn observe(mpv: &Mpv) -> libmpv2::Result<()> {
     mpv.observe_property(VOLUME, Format::Double, 0)?;
     mpv.observe_property(SPEED, Format::Double, 0)?;
     mpv.observe_property(MUTE, Format::Flag, 0)?;
+    mpv.observe_property(PAUSED_FOR_CACHE, Format::Flag, 0)?;
     observe_changes(mpv, TRACK_COUNT)?;
     observe_changes(mpv, AID)?;
     observe_changes(mpv, SID)
@@ -160,6 +162,11 @@ pub(crate) fn run(mpv: &Mpv, shared: &Shared, on_event: &(impl Fn(PlayerEvent) +
                 ..
             }) => on_event(PlayerEvent::Muted(muted)),
             Ok(Event::PropertyChange {
+                name: PAUSED_FOR_CACHE,
+                change: PropertyData::Flag(waiting),
+                ..
+            }) => on_event(PlayerEvent::Buffering(waiting)),
+            Ok(Event::PropertyChange {
                 name: TRACK_COUNT | AID | SID,
                 ..
             }) => {
@@ -185,7 +192,12 @@ pub(crate) fn run(mpv: &Mpv, shared: &Shared, on_event: &(impl Fn(PlayerEvent) +
             Err(error) => {
                 shared.loaded.store(false, Ordering::SeqCst);
                 shared.stopping.store(false, Ordering::SeqCst);
-                on_event(PlayerEvent::Unloaded(UnloadReason::Error(describe(&error))));
+                let message = describe(&error);
+                on_event(PlayerEvent::Unloaded(if is_output(&error) {
+                    UnloadReason::Output(message)
+                } else {
+                    UnloadReason::Error(message)
+                }));
             }
             Ok(_) => {}
         }

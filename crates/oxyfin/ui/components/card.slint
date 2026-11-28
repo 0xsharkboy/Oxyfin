@@ -1,7 +1,11 @@
 import { Theme } from "../theme.slint";
+import { MouseBack } from "mouse_back.slint";
 import { Icons } from "../icons.slint";
 import { ProgressBar } from "progress_bar.slint";
 import { BodyStrongText, CaptionText } from "text.slint";
+import { HoverCard } from "hover_card.slint";
+import { Pointed } from "pointed.slint";
+import { ContextMenu, MenuKeys } from "context_menu.slint";
 
 export enum CardStatus { default, in-progress, watched }
 
@@ -42,8 +46,7 @@ component CardArtwork inherits Rectangle {
         Image {
             width: 16px;
             height: 16px;
-            source: Icons.check;
-            colorize: Theme.text-on-accent;
+            source: Icons.check-on-accent;
         }
     }
 
@@ -65,7 +68,74 @@ export component MediaCard {
     in property <length> artwork-height;
     in property <brush> placeholder;
     in property <color> subtitle-color: Theme.text-muted;
+    // Item the hover card and the context menu tell about; empty for a card without them.
+    in property <string> hover-id;
+    // True for a card of Continue Watching, whose menu can take it out of that row.
+    in property <bool> from-resume;
+    // Key of the row of cards this one is in, where the same item can show in several.
+    in property <string> row-key;
+    // True for an item without a context menu.
+    in property <bool> no-menu;
+    // Becoming true gives the card the keyboard focus.
+    in property <bool> focus-wanted;
     callback clicked();
+    callback focused();
+
+    // Number of the hover card showing for this card, 0 before the first one.
+    property <int> hover-showing;
+    property <bool> hover-shown: root.hover-showing > 0 && HoverCard.owner == root.hover-showing;
+    // Set by a click, until the pointer leaves.
+    property <bool> hover-dismissed;
+    property <bool> hovered: touch.has-hover;
+    property <int> scrolls: root.hovered ? HoverCard.scrolls : 0;
+    // Takes the focus back after a row of its menu chosen from the keyboard, also once rebuilt.
+    property <bool> focus-return: root.hover-id != "" && ContextMenu.focus-id == root.hover-id && ContextMenu.focus-row == root.row-key;
+    // Answers the window while it holds that focus.
+    property <int> focus-check: focus.has-focus && root.focus-return ? ContextMenu.focus-check : -1;
+
+    changed focus-check => {
+        if root.focus-check >= 0 {
+            ContextMenu.focus-answer = root.focus-check;
+        }
+    }
+    init => {
+        if root.focus-return {
+            focus.focus();
+        }
+    }
+
+    property <int> pointing;
+
+    changed hovered => {
+        if root.hovered {
+            root.pointing = Pointed.enter();
+            HoverCard.hide();
+        } else {
+            Pointed.leave(root.pointing);
+            root.hover-dismissed = false;
+            HoverCard.hide-for(root.hover-showing);
+        }
+    }
+    // The delay starts again at every scroll, so nothing shows while the content moves.
+    changed scrolls => {
+        if hover-timer.running {
+            hover-timer.restart();
+        }
+    }
+
+    hover-timer := Timer {
+        interval: Theme.hover-delay;
+        running: root.hover-id != "" && root.enabled && root.hovered && !root.hover-dismissed && !root.hover-shown && !HoverCard.suppressed && !HoverCard.held;
+        triggered => {
+            root.hover-showing = HoverCard.show(root.hover-id, root.status == CardStatus.in-progress ? root.progress : 0, root.absolute-position.x, root.absolute-position.y, root.width);
+        }
+    }
+
+    changed focus-wanted => {
+        if root.focus-wanted {
+            focus.focus();
+        }
+    }
 
     accessible-role: button;
     accessible-label: title;
@@ -82,11 +152,27 @@ export component MediaCard {
         }
     }
 
+    function open-menu(x: length, y: length, by-keyboard: bool) {
+        ContextMenu.show(root.hover-id, root.from-resume, x, y, by-keyboard, root.title, root.subtitle);
+        ContextMenu.opener-row = root.row-key;
+    }
+
     touch := TouchArea {
         enabled: root.enabled;
         mouse-cursor: root.enabled ? pointer : default;
+        pointer-event(event) => {
+            MouseBack.handle(event);
+            if event.kind == PointerEventKind.move && HoverCard.held {
+                HoverCard.pointer-moved(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+            }
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down && root.enabled && root.hover-id != "" && !root.no-menu {
+                root.open-menu(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y, false);
+            }
+        }
         clicked => {
             focus.focus();
+            root.hover-dismissed = true;
+            HoverCard.hide-for(root.hover-showing);
             root.activate();
         }
     }
@@ -95,9 +181,24 @@ export component MediaCard {
         enabled: root.enabled;
         // Clicks go to the TouchArea: a focusing FocusScope on top would swallow the first one.
         focus-on-click: false;
+        focus-gained => {
+            if !root.focus-return {
+                ContextMenu.focus-id = "";
+            }
+            root.focused();
+        }
+        focus-lost => {
+            if root.focus-return {
+                ContextMenu.focus-id = "";
+            }
+        }
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " {
                 root.activate();
+                return accept;
+            }
+            if MenuKeys.opens(event) && root.hover-id != "" && !root.no-menu {
+                root.open-menu(root.absolute-position.x + Theme.space-lg, root.absolute-position.y + Theme.space-lg, true);
                 return accept;
             }
             reject

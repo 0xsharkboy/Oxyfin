@@ -8,7 +8,8 @@ use std::time::{Duration, SystemTime};
 
 use oxyfin_api::{ImageRequest, Session};
 
-use crate::{ImageRef, Paths, Result, TrickplaySheet};
+use crate::fetch_queue::{FetchQueue, Slots};
+use crate::{CoreError, ImagePriority, ImageRef, Paths, Result, TrickplaySheet};
 
 /// Bounding box requested for an image, in pixels.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -23,7 +24,13 @@ pub struct ImageSize {
 pub const DEFAULT_MEMORY_BUDGET: u64 = 64 * 1024 * 1024;
 
 /// Image downloads an [`ImageCache`] runs at the same time; the others wait for a slot.
-pub const IMAGE_FETCHES: usize = 6;
+pub const IMAGE_FETCHES: usize = 16;
+
+/// Among them, the downloads kept for the main artwork of a page.
+pub const ARTWORK_FETCHES: usize = 2;
+
+/// Among them, the downloads of images nothing shows yet.
+pub const BACKGROUND_FETCHES: usize = 4;
 
 /// Default disk budget of the image cache: 500 MB.
 pub const DEFAULT_DISK_BUDGET: u64 = 500 * 1024 * 1024;
@@ -57,6 +64,12 @@ struct Memory {
 }
 
 impl Memory {
+    fn clear(&mut self) {
+        self.entries.clear();
+        self.order.clear();
+        self.used = 0;
+    }
+
     fn get(&mut self, key: &str) -> Option<Arc<[u8]>> {
         let bytes = self.entries.get(key)?.clone();
         self.order.retain(|other| other != key);
@@ -198,7 +211,7 @@ impl Trimmer {
             let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
             let name = entry.file_name();
             let name = name.to_string_lossy();
-            if name.starts_with('.') && name.ends_with(".tmp") {
+            if is_tmp(&name) {
                 let age = now.duration_since(modified).unwrap_or_default();
                 if age >= STALE_TMP_AGE {
                     let _ = tokio::fs::remove_file(entry.path()).await;
@@ -243,7 +256,7 @@ pub struct ImageCache {
     budget: usize,
     memory: Mutex<Memory>,
     trimmer: Arc<Trimmer>,
-    fetches: tokio::sync::Semaphore,
+    fetches: Arc<FetchQueue>,
 }
 
 impl ImageCache {
@@ -270,7 +283,11 @@ impl ImageCache {
             budget: usize::try_from(budgets.memory_bytes).unwrap_or(usize::MAX),
             memory: Mutex::new(Memory::default()),
             trimmer,
-            fetches: tokio::sync::Semaphore::new(IMAGE_FETCHES),
+            fetches: FetchQueue::new(Slots {
+                all: IMAGE_FETCHES,
+                artwork: ARTWORK_FETCHES,
+                background: BACKGROUND_FETCHES,
+            }),
         }
     }
 
@@ -286,18 +303,65 @@ impl ImageCache {
         self.trimmer.requests.load(Ordering::SeqCst)
     }
 
+    /// Bytes the stored images take on disk, leaving out writes in progress.
+    pub async fn disk_usage(&self) -> u64 {
+        let _guard = self.trimmer.pass.lock().await;
+        let Ok(mut entries) = tokio::fs::read_dir(&self.dir).await else {
+            return 0;
+        };
+        let mut total = 0u64;
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let Ok(meta) = entry.metadata().await else {
+                continue;
+            };
+            if meta.is_file() && !is_tmp(&entry.file_name().to_string_lossy()) {
+                total += meta.len();
+            }
+        }
+        total
+    }
+
+    /// Removes every stored image from disk and memory; later requests fetch them again.
+    pub async fn clear(&self) -> Result<()> {
+        let _guard = self.trimmer.pass.lock().await;
+        self.lock().clear();
+        let mut entries = match tokio::fs::read_dir(&self.dir).await {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(storage(&error)),
+        };
+        let mut failed = None;
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|error| storage(&error))?
+        {
+            let is_file = entry.metadata().await.is_ok_and(|meta| meta.is_file());
+            if is_file && let Err(error) = tokio::fs::remove_file(entry.path()).await {
+                failed = Some(error);
+            }
+        }
+        self.trimmer.total.store(0, Ordering::SeqCst);
+        failed.map_or(Ok(()), |error| Err(storage(&error)))
+    }
+
     /// Returns the bytes of `image` scaled to fit `size`, from memory, disk or the server.
     ///
-    /// At most [`IMAGE_FETCHES`] images are downloaded at a time; memory and disk hits never wait.
-    pub async fn get(&self, image: &ImageRef, size: ImageSize) -> Result<Arc<[u8]>> {
+    /// At most [`IMAGE_FETCHES`] images are downloaded at a time, the greatest `priority` first;
+    /// memory and disk hits never wait.
+    pub async fn get(
+        &self,
+        image: &ImageRef,
+        size: ImageSize,
+        priority: ImagePriority,
+    ) -> Result<Arc<[u8]>> {
         self.cached(file_name(image, size), async {
             let mut request = ImageRequest::new(image.item_id.clone(), image.image_type.clone());
             request.tag = Some(image.tag.clone());
             request.index = image.index;
             request.max_width = Some(size.max_width);
             request.max_height = Some(size.max_height);
-            // The semaphore is never closed, so a failed acquire cannot happen.
-            let _slot = self.fetches.acquire().await.ok();
+            let _slot = self.fetches.slot(priority).await;
             self.session.fetch_image(&request).await
         })
         .await
@@ -367,6 +431,14 @@ impl ImageCache {
         }
         result
     }
+}
+
+fn is_tmp(name: &str) -> bool {
+    name.starts_with('.') && name.ends_with(".tmp")
+}
+
+fn storage(error: &std::io::Error) -> CoreError {
+    CoreError::Storage(format!("cannot clear the image cache: {error}"))
 }
 
 fn file_name(image: &ImageRef, size: ImageSize) -> String {

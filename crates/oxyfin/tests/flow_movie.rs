@@ -99,7 +99,7 @@ fn a_movie_opens_with_its_details_and_actions() {
         click(&window, &card);
 
         wait_until("the movie", || window.get_screen() == Screen::Movie).await?;
-        for label in ["Drama", "Comedy", "2020", "1h 40m", "8.4", "TV-14"] {
+        for label in ["Drama", "Comedy", "2020", "1 h 40 min", "8.4", "TV-14"] {
             wait_visible(&window, label).await?;
         }
         wait_visible(&window, "A generated test movie.").await?;

@@ -163,6 +163,7 @@ async fn real_player_reports_start() {
     let player = Player::new(
         PlayerOptions {
             video_output: VideoOutput::None,
+            ..PlayerOptions::default()
         },
         move |event| sink.send(event),
     )

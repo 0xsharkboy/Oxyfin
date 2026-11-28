@@ -6,10 +6,13 @@ use std::io::Cursor;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use common::{fixture, json, mount_me, run, save_session, start_with, wait_until};
+use common::{
+    fixture, json, mount_me, run, save_session, start_with, wait_role, wait_until, wait_visible,
+};
+use i_slint_backend_testing::AccessibleRole;
 use image::{ImageFormat, Rgba, RgbaImage};
 use oxyfin::state::Msg;
-use oxyfin::{AppWindow, HomeRow, HomeRowKind, Screen};
+use oxyfin::{AppWindow, BannerKind, HomeRow, HomeRowKind, Screen};
 use slint::{ComponentHandle, Model};
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
@@ -134,15 +137,26 @@ fn home_shows_every_row_that_loads() {
         })
         .await?;
         let movies = row(&window, "Recently Added in Movies").ok_or("no Movies row")?;
+        let keys: std::collections::HashSet<_> =
+            rows(&window).into_iter().map(|row| row.key).collect();
+        if keys.len() != 3 || keys.contains("") {
+            return Err(format!("the rows share keys: {keys:?}"));
+        }
         if movies.kind != HomeRowKind::Poster || !movies.error.is_empty() {
             return Err("unexpected Movies row".into());
         }
 
         wait_until("the banner", || window.get_home_banner().has).await?;
         let banner = window.get_home_banner();
-        if banner.title != "Test Movie (2020)" || banner.year != 2020 {
+        if banner.title != "Test Movie (2020)"
+            || banner.year != 2020
+            || !banner.resuming
+            || banner.kind != BannerKind::Movie
+        {
             return Err(format!("unexpected banner: {}", banner.title));
         }
+        wait_role(&window, "Resume", AccessibleRole::Button).await?;
+        wait_visible(&window, "CONTINUE WATCHING").await?;
         #[cfg(not(feature = "mpv"))]
         window.invoke_play(banner.card.id.clone());
 

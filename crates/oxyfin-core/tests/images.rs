@@ -5,12 +5,16 @@ mod common;
 use common::session;
 use oxyfin_api::{ImageType, ItemId, MediaSourceId};
 use oxyfin_core::{
-    CacheBudgets, DEFAULT_DISK_BUDGET, DEFAULT_MEMORY_BUDGET, ImageCache, ImageRef, ImageSize,
-    Paths, TrickplaySheet,
+    ARTWORK_FETCHES, CacheBudgets, DEFAULT_DISK_BUDGET, DEFAULT_MEMORY_BUDGET, IMAGE_FETCHES,
+    ImageCache, ImagePriority, ImageRef, ImageSize, Paths, TrickplaySheet,
 };
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tempfile::TempDir;
 use wiremock::matchers::{method, path, query_param};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
+
+const PAGE: ImagePriority = ImagePriority::of_page(0);
 
 const SIZE: ImageSize = ImageSize {
     max_width: 300,
@@ -71,8 +75,8 @@ async fn second_get_hits_memory() {
     serve(&mock, "aaa", b"pixels").await;
     let dir = TempDir::new().unwrap();
     let cache = cache(&mock, &dir, 1024);
-    let first = cache.get(&image("aaa", "t1"), SIZE).await.unwrap();
-    let second = cache.get(&image("aaa", "t1"), SIZE).await.unwrap();
+    let first = cache.get(&image("aaa", "t1"), SIZE, PAGE).await.unwrap();
+    let second = cache.get(&image("aaa", "t1"), SIZE, PAGE).await.unwrap();
     assert_eq!(&*first, b"pixels");
     assert_eq!(first, second);
     assert_eq!(requests(&mock).await, 1);
@@ -84,11 +88,11 @@ async fn new_cache_reads_disk() {
     serve(&mock, "aaa", b"pixels").await;
     let dir = TempDir::new().unwrap();
     cache(&mock, &dir, 1024)
-        .get(&image("aaa", "t1"), SIZE)
+        .get(&image("aaa", "t1"), SIZE, PAGE)
         .await
         .unwrap();
     let bytes = cache(&mock, &dir, 1024)
-        .get(&image("aaa", "t1"), SIZE)
+        .get(&image("aaa", "t1"), SIZE, PAGE)
         .await
         .unwrap();
     assert_eq!(&*bytes, b"pixels");
@@ -101,7 +105,7 @@ async fn empty_disk_file_is_refetched() {
     serve(&mock, "aaa", b"pixels").await;
     let dir = TempDir::new().unwrap();
     cache(&mock, &dir, 1024)
-        .get(&image("aaa", "t1"), SIZE)
+        .get(&image("aaa", "t1"), SIZE, PAGE)
         .await
         .unwrap();
     let images = Paths::under(dir.path()).cache_dir.join("images");
@@ -112,7 +116,7 @@ async fn empty_disk_file_is_refetched() {
     assert_eq!(files.len(), 1, "{files:?}");
     std::fs::write(&files[0], b"").unwrap();
     let bytes = cache(&mock, &dir, 1024)
-        .get(&image("aaa", "t1"), SIZE)
+        .get(&image("aaa", "t1"), SIZE, PAGE)
         .await
         .unwrap();
     assert_eq!(&*bytes, b"pixels");
@@ -129,13 +133,13 @@ async fn budget_evicts_oldest() {
     let dir = TempDir::new().unwrap();
     let cache = cache(&mock, &dir, 10);
     for item in ["aaa", "bbb", "ccc"] {
-        cache.get(&image(item, "t"), SIZE).await.unwrap();
+        cache.get(&image(item, "t"), SIZE, PAGE).await.unwrap();
     }
     assert_eq!(requests(&mock).await, 3);
     std::fs::remove_dir_all(Paths::under(dir.path()).cache_dir).unwrap();
-    cache.get(&image("ccc", "t"), SIZE).await.unwrap();
+    cache.get(&image("ccc", "t"), SIZE, PAGE).await.unwrap();
     assert_eq!(requests(&mock).await, 3);
-    cache.get(&image("aaa", "t"), SIZE).await.unwrap();
+    cache.get(&image("aaa", "t"), SIZE, PAGE).await.unwrap();
     assert_eq!(requests(&mock).await, 4);
 }
 
@@ -145,10 +149,10 @@ async fn oversized_entry_is_returned_but_not_kept() {
     serve(&mock, "aaa", b"0123456789").await;
     let dir = TempDir::new().unwrap();
     let cache = cache(&mock, &dir, 4);
-    let bytes = cache.get(&image("aaa", "t"), SIZE).await.unwrap();
+    let bytes = cache.get(&image("aaa", "t"), SIZE, PAGE).await.unwrap();
     assert_eq!(bytes.len(), 10);
     std::fs::remove_dir_all(Paths::under(dir.path()).cache_dir).unwrap();
-    cache.get(&image("aaa", "t"), SIZE).await.unwrap();
+    cache.get(&image("aaa", "t"), SIZE, PAGE).await.unwrap();
     assert_eq!(requests(&mock).await, 2);
 }
 
@@ -158,8 +162,8 @@ async fn different_tag_refetches() {
     serve(&mock, "aaa", b"pixels").await;
     let dir = TempDir::new().unwrap();
     let cache = cache(&mock, &dir, 1024);
-    cache.get(&image("aaa", "t1"), SIZE).await.unwrap();
-    cache.get(&image("aaa", "t2"), SIZE).await.unwrap();
+    cache.get(&image("aaa", "t1"), SIZE, PAGE).await.unwrap();
+    cache.get(&image("aaa", "t2"), SIZE, PAGE).await.unwrap();
     assert_eq!(requests(&mock).await, 2);
 }
 
@@ -170,7 +174,7 @@ async fn crafted_tag_stays_inside_the_cache_directory() {
     let dir = TempDir::new().unwrap();
     let cache = cache(&mock, &dir, 1024);
     cache
-        .get(&image("aaa", "../../escape"), SIZE)
+        .get(&image("aaa", "../../escape"), SIZE, PAGE)
         .await
         .unwrap();
     assert!(!dir.path().join("escape").exists());
@@ -193,7 +197,7 @@ async fn read_only_disk_still_returns_bytes() {
     )
     .unwrap();
     let cache = cache(&mock, &dir, 1024);
-    let bytes = cache.get(&image("aaa", "t1"), SIZE).await.unwrap();
+    let bytes = cache.get(&image("aaa", "t1"), SIZE, PAGE).await.unwrap();
     std::fs::set_permissions(
         cache_dir.join("images"),
         std::fs::Permissions::from_mode(0o700),
@@ -241,14 +245,14 @@ async fn disk_cache_is_trimmed_to_its_budget() {
     let dir = TempDir::new().unwrap();
     let cache = with_budgets(&mock, &dir, 0, 35);
     for (item, _) in &bodies[..3] {
-        cache.get(&image(item, "t"), SIZE).await.unwrap();
+        cache.get(&image(item, "t"), SIZE, PAGE).await.unwrap();
     }
     cache.trim().await;
     for (path, bytes) in files_in(&dir) {
         let rank = bodies.iter().position(|(_, b)| b[..] == bytes[..]).unwrap();
         age(&path, 1000 - rank as u64 * 100);
     }
-    cache.get(&image("ddd", "t"), SIZE).await.unwrap();
+    cache.get(&image("ddd", "t"), SIZE, PAGE).await.unwrap();
     cache.trim().await;
     let mut left: Vec<_> = files_in(&dir).into_iter().map(|(_, b)| b).collect();
     left.sort();
@@ -298,7 +302,7 @@ async fn writes_under_the_disk_budget_request_no_trim() {
     cache.trim().await;
     let requests = cache.trim_requests();
     for item in ["aaa", "bbb", "ccc"] {
-        cache.get(&image(item, "t"), SIZE).await.unwrap();
+        cache.get(&image(item, "t"), SIZE, PAGE).await.unwrap();
     }
     assert_eq!(cache.trim_requests(), requests);
 }
@@ -315,10 +319,13 @@ async fn going_over_the_disk_budget_trims_to_ninety_percent() {
     cache.trim().await;
     let requests = cache.trim_requests();
     for item in &items[..10] {
-        cache.get(&image(item, "t"), SIZE).await.unwrap();
+        cache.get(&image(item, "t"), SIZE, PAGE).await.unwrap();
     }
     assert_eq!(cache.trim_requests(), requests);
-    cache.get(&image(&items[10], "t"), SIZE).await.unwrap();
+    cache
+        .get(&image(&items[10], "t"), SIZE, PAGE)
+        .await
+        .unwrap();
     assert_eq!(cache.trim_requests(), requests + 1);
     let start = std::time::Instant::now();
     while disk_bytes(&dir) > 90 {
@@ -362,7 +369,7 @@ fn cache_built_outside_a_runtime_trims_on_first_get() {
     let stale = stale_tmp(&dir);
     let cache = cache(&mock, &dir, 1024);
     runtime.block_on(async {
-        cache.get(&image("aaa", "t"), SIZE).await.unwrap();
+        cache.get(&image("aaa", "t"), SIZE, PAGE).await.unwrap();
         wait_removed(&stale).await;
     });
 }
@@ -385,7 +392,7 @@ fn trim_cancelled_before_it_runs_does_not_block_later_ones() {
     assert!(stale.exists());
     let second = tokio::runtime::Runtime::new().unwrap();
     second.block_on(async {
-        let _ = cache.get(&image("aaa", "t"), SIZE).await;
+        let _ = cache.get(&image("aaa", "t"), SIZE, PAGE).await;
         wait_removed(&stale).await;
     });
     drop(mock);
@@ -493,46 +500,126 @@ async fn chapter_images_are_fetched_and_cached_by_index() {
         index: Some(index),
     };
     let first = cache(&mock, &dir, 1024)
-        .get(&chapter(1), SIZE)
+        .get(&chapter(1), SIZE, PAGE)
         .await
         .unwrap();
     let second = cache(&mock, &dir, 1024)
-        .get(&chapter(2), SIZE)
+        .get(&chapter(2), SIZE, PAGE)
         .await
         .unwrap();
     assert_eq!(&*first, b"chapter 1");
     assert_eq!(&*second, b"chapter 2");
     let again = cache(&mock, &dir, 1024)
-        .get(&chapter(1), SIZE)
+        .get(&chapter(1), SIZE, PAGE)
         .await
         .unwrap();
     assert_eq!(&*again, b"chapter 1");
     assert_eq!(requests(&mock).await, 2);
 }
 
+/// Answers after a while, counting the requests being answered.
+struct Counting(Arc<AtomicUsize>);
+
+impl Respond for Counting {
+    fn respond(&self, _: &Request) -> ResponseTemplate {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        ResponseTemplate::new(200)
+            .set_body_bytes(b"pixels".to_vec())
+            .set_delay(std::time::Duration::from_secs(1))
+    }
+}
+
+async fn wait_for(count: usize, answered: &AtomicUsize) {
+    while answered.load(Ordering::SeqCst) < count {
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+}
+
 #[tokio::test]
-async fn image_fetches_run_at_most_six_at_a_time() {
+async fn the_images_of_a_newer_page_and_its_artwork_are_downloaded_first() {
+    const ROWS: usize = IMAGE_FETCHES - ARTWORK_FETCHES;
     let mock = MockServer::start().await;
+    let asked = Arc::new(AtomicUsize::new(0));
     Mock::given(method("GET"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_bytes(b"pixels".to_vec())
-                .set_delay(std::time::Duration::from_millis(500)),
-        )
+        .respond_with(Counting(Arc::clone(&asked)))
         .mount(&mock)
         .await;
     let dir = TempDir::new().unwrap();
-    let cache = std::sync::Arc::new(cache(&mock, &dir, 1024 * 1024));
-    let started = std::time::Instant::now();
+    let cache = Arc::new(cache(&mock, &dir, 1024 * 1024));
     let mut gets = tokio::task::JoinSet::new();
-    for n in 0..7 {
-        let cache = std::sync::Arc::clone(&cache);
-        gets.spawn(async move { cache.get(&image(&format!("item{n}"), "t"), SIZE).await });
+    let mut ask = |name: String, priority: ImagePriority| {
+        let cache = Arc::clone(&cache);
+        gets.spawn(async move { cache.get(&image(&name, "t"), SIZE, priority).await });
+    };
+    for n in 0..ROWS {
+        ask(format!("running{n}"), ImagePriority::of_page(1));
     }
+    wait_for(ROWS, &asked).await;
+    for n in 0..ROWS {
+        ask(format!("older{n}"), ImagePriority::of_page(1));
+    }
+    for n in 0..ROWS {
+        ask(format!("newer{n}"), ImagePriority::of_page(2));
+    }
+    ask("artwork".into(), ImagePriority::of_page(2).artwork());
     while let Some(got) = gets.join_next().await {
         assert!(got.unwrap().is_ok());
     }
-    assert_eq!(requests(&mock).await, 7);
-    // Seven fetches of 500 ms take two waves: the seventh waits for a free slot.
-    assert!(started.elapsed() >= std::time::Duration::from_millis(950));
+    let paths: Vec<String> = mock
+        .received_requests()
+        .await
+        .unwrap()
+        .iter()
+        .map(|request| request.url.path().to_owned())
+        .collect();
+    assert!(paths[ROWS].contains("artwork"), "it waits for no row");
+    let waited = &paths[ROWS + 1..];
+    let newer = waited.iter().take(ROWS).collect::<Vec<_>>();
+    assert!(newer.iter().all(|path| path.contains("newer")), "{paths:?}");
+    assert!(waited[ROWS..].iter().all(|path| path.contains("older")));
+}
+
+#[tokio::test]
+async fn disk_usage_counts_the_stored_images() {
+    let mock = MockServer::start().await;
+    serve(&mock, "aaa", b"123456").await;
+    serve(&mock, "bbb", b"1234").await;
+    let dir = TempDir::new().unwrap();
+    let cache = cache(&mock, &dir, 1024);
+    assert_eq!(cache.disk_usage().await, 0);
+    cache.get(&image("aaa", "t"), SIZE, PAGE).await.unwrap();
+    cache.get(&image("bbb", "t"), SIZE, PAGE).await.unwrap();
+    let images = Paths::under(dir.path()).cache_dir.join("images");
+    std::fs::write(images.join(".partial.tmp"), b"half").unwrap();
+    assert_eq!(cache.disk_usage().await, 10);
+}
+
+#[tokio::test]
+async fn clear_empties_disk_and_memory() {
+    let mock = MockServer::start().await;
+    serve(&mock, "aaa", b"pixels").await;
+    let dir = TempDir::new().unwrap();
+    let cache = cache(&mock, &dir, 1024);
+    cache.get(&image("aaa", "t"), SIZE, PAGE).await.unwrap();
+    assert_eq!(requests(&mock).await, 1);
+
+    cache.clear().await.unwrap();
+    assert_eq!(cache.disk_usage().await, 0);
+    let images = Paths::under(dir.path()).cache_dir.join("images");
+    let left = std::fs::read_dir(&images).map_or(0, |entries| entries.count());
+    assert_eq!(left, 0);
+
+    let bytes = cache.get(&image("aaa", "t"), SIZE, PAGE).await.unwrap();
+    assert_eq!(&*bytes, b"pixels");
+    assert_eq!(requests(&mock).await, 2);
+    assert_eq!(cache.disk_usage().await, 6);
+}
+
+#[tokio::test]
+async fn clear_without_a_cache_directory_succeeds() {
+    let mock = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let cache = cache(&mock, &dir, 1024);
+    cache.clear().await.unwrap();
+    assert_eq!(cache.disk_usage().await, 0);
 }

@@ -1,13 +1,17 @@
+import { HoverCard } from "hover_card.slint";
 import { Theme, CardData } from "../theme.slint";
 import { PosterCard } from "poster_card.slint";
 import { CardStatus } from "card.slint";
+import { PosterCardBones, Skeleton } from "skeleton.slint";
 
 // Scrollable grid of posters; the columns follow the width and every card reports its own click.
 export component PosterGrid inherits Rectangle {
     in property <[CardData]> cards;
+    // True while a page of cards is on its way: bones fill the view, or follow the last card.
+    in property <bool> loading;
     in-out property <length> viewport-y <=> flick.content-y;
     callback open(card: CardData);
-    // Emitted when less than one view height is left to scroll.
+    // Emitted when less than two view heights are left to scroll.
     callback near-end();
 
     property <length> gap: Theme.space-xl;
@@ -18,6 +22,12 @@ export component PosterGrid inherits Rectangle {
     property <length> column-gap: columns < 2 ? gap : max(gap, (self.width - 2 * margin - columns * Theme.poster-width) / (columns - 1));
     property <int> rows: ceil(cards.length / columns);
     property <length> grid-height: rows == 0 ? 0px : rows * row-height + (rows - 1) * gap + margin;
+    // Bones that complete the last row of posters.
+    property <int> bones-beside: mod(columns - mod(cards.length, columns), columns);
+    // Bones stand for a view full of posters, or for the rest of the last row and one more row.
+    property <int> bone-count: cards.length == 0 ? columns * max(1, ceil(self.height / (row-height + gap))) : bones-beside + columns;
+    property <int> all-rows: ceil((cards.length + (loading ? bone-count : 0)) / columns);
+    property <length> content-height: all-rows == 0 ? 0px : all-rows * row-height + (all-rows - 1) * gap + margin;
 
     pure function status(card: CardData) -> CardStatus {
         if card.watched {
@@ -27,7 +37,7 @@ export component PosterGrid inherits Rectangle {
     }
 
     function check-end() {
-        if root.height > 0 && root.grid-height + flick.content-y - root.height < root.height {
+        if root.height > 0 && root.grid-height + flick.content-y - root.height < 2 * root.height {
             root.near-end();
         }
     }
@@ -35,10 +45,13 @@ export component PosterGrid inherits Rectangle {
     // A bound viewport-y is not clamped by the Flickable, so the grid keeps it inside the content.
     function clamp-scroll() {
         if root.height > 0 {
-            flick.content-y = max(min(flick.content-y, 0px), min(0px, root.height - root.grid-height));
+            flick.content-y = max(min(flick.content-y, 0px), min(0px, root.height - root.content-height));
         }
     }
 
+    changed content-height => {
+        root.clamp-scroll();
+    }
     changed grid-height => {
         root.clamp-scroll();
         root.check-end();
@@ -61,17 +74,21 @@ export component PosterGrid inherits Rectangle {
     }
 
     flick := Flickable {
+        mouse-drag-pan-enabled: false;
         width: parent.width;
         height: parent.height;
         content-width: self.width;
-        content-height: root.grid-height;
+        content-height: root.content-height;
 
         changed content-y => {
             root.clamp-scroll();
             root.check-end();
+            HoverCard.scrolled();
         }
 
         for card[index] in root.cards: PosterCard {
+            hover-id: card.id;
+            no-menu: card.no-menu;
             x: root.margin + mod(index, root.columns) * (Theme.poster-width + root.column-gap);
             y: floor(index / root.columns) * (root.row-height + root.gap);
             height: root.row-height;
@@ -82,6 +99,40 @@ export component PosterGrid inherits Rectangle {
             progress: card.progress;
             clicked => {
                 root.open(card);
+            }
+        }
+
+        // The bones beside the last posters, then those below: apart, so that their light never
+        // sweeps over the posters.
+        if root.loading && root.bones-beside > 0: beside := Skeleton {
+            x: root.margin + (root.columns - root.bones-beside) * (Theme.poster-width + root.column-gap);
+            y: floor(root.cards.length / root.columns) * (root.row-height + root.gap);
+            width: flick.width - self.x;
+            height: root.row-height;
+            sweep-width: flick.width;
+            sweep-offset: self.x;
+
+            Rectangle {
+                for index in root.bones-beside: PosterCardBones {
+                    x: index * (Theme.poster-width + root.column-gap);
+                    y: 0;
+                    height: root.row-height;
+                }
+            }
+        }
+
+        if root.loading: below := Skeleton {
+            x: 0;
+            y: root.rows * (root.row-height + root.gap);
+            width: flick.width;
+            height: root.content-height - self.y;
+
+            Rectangle {
+                for index in root.bone-count - root.bones-beside: PosterCardBones {
+                    x: root.margin + mod(index, root.columns) * (Theme.poster-width + root.column-gap);
+                    y: floor(index / root.columns) * (root.row-height + root.gap);
+                    height: root.row-height;
+                }
             }
         }
     }

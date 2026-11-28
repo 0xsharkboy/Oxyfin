@@ -1,0 +1,12 @@
+// The back button of the mouse. What can be clicked takes every button, so each of these elements
+// hands its pointer events over, and the button works wherever it is pressed on a page.
+export global MouseBack {
+    // It was pressed and released; the application leaves the page.
+    callback pressed();
+
+    public function handle(event: PointerEvent) {
+        if event.button == PointerEventButton.back && event.kind == PointerEventKind.up {
+            self.pressed();
+        }
+    }
+}

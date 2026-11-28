@@ -4,16 +4,16 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use oxyfin_core::{
-    AudioOption, Chapter, CoreError, Episode, HdrFormat, HdrInfo, ImageSize, ItemKind, ItemSummary,
-    Person, PersonKind, PersonTitle, PlayMethod, PlaybackError, PlaybackTitle, SeriesDetails,
-    StatsReport, SubtitleOption,
+    AudioOption, Chapter, CoreError, Episode, HdrFormat, HdrInfo, ImageSize, ItemBrief, ItemKind,
+    ItemSummary, Person, PersonKind, PersonTitle, PlayMethod, PlaybackError, PlaybackTitle,
+    SeriesDetails, StatsReport, SubtitleOption,
 };
 use slint::{ModelRc, SharedString, VecModel};
 
 use crate::state::Screen;
 use crate::{
-    CardData, ChapterRow, EpisodeData, Message, PersonCardData, PersonJob, StatRow, StatSection,
-    TrackRow,
+    BannerKind, CardData, ChapterRow, EpisodeData, HomeBanner, HoverDetails, HoverKind, Message,
+    PersonCardData, PersonJob, StatRow, StatSection, TrackRow,
 };
 
 /// Message and detail to show for a core error.
@@ -253,6 +253,110 @@ pub fn card(item: &ItemSummary) -> CardData {
         watched: item.user.played,
         image: Default::default(),
         has_image: false,
+        no_menu: item.kind == ItemKind::BoxSet,
+    }
+}
+
+/// Genres a hover card shows at most.
+const HOVER_GENRES: usize = 3;
+
+/// Hover card of an item; `progress` comes from the hovered card, fresher than the brief.
+pub fn hover_details(brief: &ItemBrief, progress: f32) -> HoverDetails {
+    let item = &brief.summary;
+    let episode = item.kind == ItemKind::Episode;
+    let series_name = item.series_name.as_deref().filter(|_| episode);
+    let minutes = |duration: Duration| i32::try_from(duration.as_secs().div_ceil(60)).unwrap_or(0);
+    let remaining = match item.duration {
+        Some(duration) if progress > 0.0 => {
+            minutes(duration.mul_f32(1.0 - progress.clamp(0.0, 1.0)))
+        }
+        _ => 0,
+    };
+    let genres: Vec<SharedString> = brief
+        .genres
+        .iter()
+        .take(HOVER_GENRES)
+        .map(SharedString::from)
+        .collect();
+    HoverDetails {
+        id: item.id.as_str().into(),
+        title: series_name.unwrap_or(&item.title).into(),
+        kind: match item.kind {
+            ItemKind::Movie | ItemKind::Video => HoverKind::Movie,
+            ItemKind::Series => HoverKind::Series,
+            ItemKind::Episode => HoverKind::Episode,
+            ItemKind::BoxSet => HoverKind::Collection,
+        },
+        episode_label: item
+            .episode_label
+            .as_deref()
+            .filter(|_| episode)
+            .unwrap_or_default()
+            .into(),
+        episode_title: if series_name.is_some() {
+            item.title.as_str().into()
+        } else {
+            SharedString::default()
+        },
+        year: if episode { 0 } else { item.year.unwrap_or(0) },
+        minutes: item.duration.map_or(0, |duration| {
+            i32::try_from(duration.as_secs() / 60).unwrap_or(0)
+        }),
+        seasons: brief
+            .season_count
+            .map_or(0, |count| i32::try_from(count).unwrap_or(0)),
+        rating: brief
+            .community_rating
+            .map(|rating| format!("{rating:.1}"))
+            .unwrap_or_default()
+            .into(),
+        genres: ModelRc::new(VecModel::from(genres)),
+        overview: item.overview.as_deref().unwrap_or_default().into(),
+        progress: if remaining > 0 { progress } else { 0.0 },
+        remaining_minutes: remaining,
+    }
+}
+
+/// Banner of the featured item of the home screen; `resuming` when it comes from Continue
+/// Watching. The image is loaded later.
+pub fn home_banner(item: &ItemSummary, resuming: bool, has_detail: bool) -> HomeBanner {
+    let episode = item.kind == ItemKind::Episode;
+    let series_name = item.series_name.as_deref().filter(|_| episode);
+    let remaining = match item.duration {
+        Some(duration) if resuming && item.user.can_resume() => {
+            let left = duration.saturating_sub(item.user.position).as_secs();
+            i32::try_from(left.div_ceil(60)).unwrap_or(0)
+        }
+        _ => 0,
+    };
+    HomeBanner {
+        has: true,
+        has_detail,
+        resuming,
+        kind: match item.kind {
+            ItemKind::Movie | ItemKind::Video => BannerKind::Movie,
+            ItemKind::Series | ItemKind::Episode => BannerKind::Series,
+            ItemKind::BoxSet => BannerKind::Collection,
+        },
+        title: series_name.unwrap_or(&item.title).into(),
+        episode_label: item
+            .episode_label
+            .as_deref()
+            .filter(|_| episode)
+            .unwrap_or_default()
+            .into(),
+        episode_title: if series_name.is_some() {
+            item.title.as_str().into()
+        } else {
+            SharedString::default()
+        },
+        year: if episode { 0 } else { item.year.unwrap_or(0) },
+        duration_minutes: item.duration.map_or(0, |duration| {
+            i32::try_from(duration.as_secs() / 60).unwrap_or(0)
+        }),
+        remaining_minutes: remaining,
+        overview: item.overview.as_deref().unwrap_or_default().into(),
+        card: card(item),
     }
 }
 
@@ -650,6 +754,7 @@ fn codec_name(codec: &str) -> String {
 mod tests {
     use super::*;
     use oxyfin_core::{Person, PersonKind, PersonTitle, Season, SeriesDetails, UserState};
+    use slint::Model;
 
     fn summary(kind: ItemKind) -> ItemSummary {
         ItemSummary {
@@ -664,6 +769,7 @@ mod tests {
             backdrop: None,
             thumb: None,
             duration: None,
+            overview: None,
             user: UserState::default(),
         }
     }
@@ -785,6 +891,77 @@ mod tests {
         );
     }
 
+    fn brief(kind: ItemKind) -> ItemBrief {
+        ItemBrief {
+            summary: summary(kind),
+            genres: Vec::new(),
+            community_rating: None,
+            season_count: None,
+        }
+    }
+
+    #[test]
+    fn hover_details_of_a_movie_tell_everything_known() {
+        let mut movie = brief(ItemKind::Movie);
+        movie.summary.duration = Some(Duration::from_secs(94 * 60));
+        movie.summary.overview = Some("Overview".into());
+        movie.genres = ["Horror", "Thriller", "Drama", "Comedy"]
+            .map(String::from)
+            .into();
+        movie.community_rating = Some(8.44);
+        let details = hover_details(&movie, 0.25);
+        assert_eq!(details.id, "abc");
+        assert_eq!(details.title, "Title");
+        assert_eq!(details.kind, HoverKind::Movie);
+        assert_eq!(details.year, 1999);
+        assert_eq!(details.minutes, 94);
+        assert_eq!(details.rating, "8.4");
+        let genres: Vec<SharedString> = details.genres.iter().collect();
+        assert_eq!(
+            genres,
+            ["Horror", "Thriller", "Drama"],
+            "three genres at most"
+        );
+        assert_eq!(details.overview, "Overview");
+        assert_eq!(details.progress, 0.25);
+        assert_eq!(details.remaining_minutes, 71, "rounded up");
+    }
+
+    #[test]
+    fn hover_details_leave_out_what_is_unknown() {
+        let mut series = brief(ItemKind::Series);
+        series.summary.year = None;
+        let details = hover_details(&series, 0.0);
+        assert_eq!(details.kind, HoverKind::Series);
+        assert_eq!(details.year, 0);
+        assert_eq!(details.minutes, 0);
+        assert_eq!(details.seasons, 0);
+        assert_eq!(details.rating, "");
+        assert_eq!(details.genres.row_count(), 0);
+        assert_eq!(details.overview, "");
+        assert_eq!(details.remaining_minutes, 0, "nothing started");
+        series.season_count = Some(3);
+        assert_eq!(hover_details(&series, 0.0).seasons, 3);
+        assert_eq!(
+            hover_details(&brief(ItemKind::Movie), 0.5).remaining_minutes,
+            0,
+            "no duration, no time left"
+        );
+    }
+
+    #[test]
+    fn hover_details_of_an_episode_lead_with_its_series() {
+        let mut episode = brief(ItemKind::Episode);
+        episode.summary.series_name = Some("Saga".into());
+        episode.summary.episode_label = Some("S01E02".into());
+        let details = hover_details(&episode, 0.0);
+        assert_eq!(details.kind, HoverKind::Episode);
+        assert_eq!(details.title, "Saga");
+        assert_eq!(details.episode_label, "S01E02");
+        assert_eq!(details.episode_title, "Title");
+        assert_eq!(details.year, 0, "the label stands for the date");
+    }
+
     #[test]
     fn card_for_a_movie_shows_the_year() {
         let mut item = summary(ItemKind::Movie);
@@ -816,6 +993,61 @@ mod tests {
         assert_eq!(card(&item).subtitle, "Show \u{b7} S01E02");
         item.series_name = None;
         assert_eq!(card(&item).subtitle, "S01E02");
+    }
+
+    #[test]
+    fn home_banner_names_the_series_of_an_episode_to_resume() {
+        let item = ItemSummary {
+            title: "Sword".into(),
+            series_name: Some("Saga".into()),
+            episode_label: Some("S01E02".into()),
+            duration: Some(Duration::from_secs(24 * 60)),
+            overview: Some("A raid.".into()),
+            user: UserState {
+                position: Duration::from_secs(11 * 60 + 30),
+                ..UserState::default()
+            },
+            ..summary(ItemKind::Episode)
+        };
+        let banner = home_banner(&item, true, true);
+        assert_eq!(banner.kind, BannerKind::Series);
+        assert_eq!(banner.title, "Saga");
+        assert_eq!(banner.episode_label, "S01E02");
+        assert_eq!(banner.episode_title, "Sword");
+        assert_eq!(banner.year, 0);
+        assert_eq!(banner.duration_minutes, 24);
+        assert_eq!(banner.remaining_minutes, 13);
+        assert_eq!(banner.overview, "A raid.");
+        assert!(banner.resuming && banner.has && banner.has_detail);
+    }
+
+    #[test]
+    fn home_banner_keeps_the_title_of_a_recent_movie() {
+        let item = ItemSummary {
+            duration: Some(Duration::from_secs(100 * 60)),
+            ..summary(ItemKind::Movie)
+        };
+        let banner = home_banner(&item, false, true);
+        assert_eq!(banner.kind, BannerKind::Movie);
+        assert_eq!(banner.title, "Title");
+        assert_eq!(banner.episode_label, "");
+        assert_eq!(banner.episode_title, "");
+        assert_eq!(banner.year, 1999);
+        assert_eq!(banner.remaining_minutes, 0);
+        assert!(!banner.resuming);
+
+        let orphan = ItemSummary {
+            episode_label: Some("S01E02".into()),
+            ..summary(ItemKind::Episode)
+        };
+        let banner = home_banner(&orphan, true, false);
+        assert_eq!(banner.title, "Title");
+        assert_eq!(banner.episode_title, "");
+        assert_eq!(banner.remaining_minutes, 0, "nothing started, nothing left");
+        assert_eq!(
+            home_banner(&summary(ItemKind::BoxSet), false, true).kind,
+            BannerKind::Collection
+        );
     }
 
     #[test]

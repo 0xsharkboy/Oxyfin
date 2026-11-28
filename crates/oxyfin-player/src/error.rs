@@ -63,15 +63,34 @@ pub(crate) fn describe(error: &libmpv2::Error) -> String {
     format!("{text} (mpv error {code})")
 }
 
+/// Whether `error` is about the audio or video output, not about the media.
+#[cfg(feature = "mpv")]
+pub(crate) fn is_output(error: &libmpv2::Error) -> bool {
+    use libmpv2::mpv_error;
+
+    matches!(
+        error,
+        libmpv2::Error::Raw(mpv_error::AoInitFailed | mpv_error::VoInitFailed)
+    )
+}
+
 #[cfg(all(test, feature = "mpv"))]
 mod tests {
-    use super::describe;
+    use super::{describe, is_output};
     use libmpv2::{Error, mpv_error};
 
     #[test]
     fn known_codes_read_as_text_with_the_code() {
         let text = describe(&Error::Raw(mpv_error::LoadingFailed));
         assert_eq!(text, "loading failed (mpv error -13)");
+    }
+
+    #[test]
+    fn output_errors_are_told_from_media_errors() {
+        assert!(is_output(&Error::Raw(mpv_error::AoInitFailed)));
+        assert!(is_output(&Error::Raw(mpv_error::VoInitFailed)));
+        assert!(!is_output(&Error::Raw(mpv_error::LoadingFailed)));
+        assert!(!is_output(&Error::Raw(mpv_error::NothingToPlay)));
     }
 
     #[test]

@@ -160,6 +160,17 @@ impl SessionManager {
         self.update(|config| config.quality = quality)
     }
 
+    /// Returns the code of the interface language the user picked; `None` follows the system.
+    pub fn language(&self) -> Option<String> {
+        self.config().language.clone()
+    }
+
+    /// Saves the interface language, `None` to follow the system. The saved choice is unchanged
+    /// on failure.
+    pub fn set_language(&self, language: Option<&str>) -> Result<()> {
+        self.update(|config| config.language = language.map(str::to_owned))
+    }
+
     /// Returns whether the window opens fullscreen, as last saved.
     pub fn start_fullscreen(&self) -> bool {
         self.config().start_fullscreen
@@ -178,6 +189,29 @@ impl SessionManager {
     /// Saves whether Discord shows what plays. The saved choice is unchanged on failure.
     pub fn set_discord(&self, on: bool) -> Result<()> {
         self.update(|config| config.discord = on)
+    }
+
+    /// Returns whether the player shows the time left, as last saved.
+    pub fn time_remaining(&self) -> bool {
+        self.config().time_remaining
+    }
+
+    /// Saves whether the player shows the time left. The saved choice is unchanged on failure.
+    pub fn set_time_remaining(&self, on: bool) -> Result<()> {
+        self.update(|config| config.time_remaining = on)
+    }
+
+    /// Returns the player volume in percent, as last saved: full volume before any change.
+    pub fn volume(&self) -> f64 {
+        f64::from(self.config().volume.unwrap_or(100).min(100))
+    }
+
+    /// Saves the player volume in percent, rounded and kept within 0 to 100. The saved volume is
+    /// unchanged on failure.
+    pub fn set_volume(&self, volume: f64) -> Result<()> {
+        // In range after the clamp, so the cast cannot truncate.
+        let percent = volume.clamp(0.0, 100.0).round() as u8;
+        self.update(|config| config.volume = Some(percent))
     }
 
     /// Returns the playback choices, as last saved.
@@ -278,6 +312,7 @@ impl SessionManager {
     /// Rebuilds the remembered session without any network request.
     pub async fn restore(&self) -> Result<Option<SignedIn>> {
         let Some(saved) = self.config().session.clone() else {
+            crate::pages::remove_saved(&self.paths);
             return Ok(None);
         };
         let server = Server::new(&saved.server_url, self.client_info())?;
@@ -285,6 +320,7 @@ impl SessionManager {
         let Some((token, token_storage)) =
             self.vault_call(move |vault| vault.load(&account)).await?
         else {
+            crate::pages::remove_saved(&self.paths);
             return Ok(None);
         };
         let session = server.restore_session(token, UserId::from(saved.user_id), saved.server_id);

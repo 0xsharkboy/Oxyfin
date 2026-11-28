@@ -36,6 +36,10 @@ pub const SUBTITLE_RETRY: Duration = Duration::from_secs(1);
 /// How many times the subtitles of the playing item are asked again after
 /// [`PlaybackCommand::ReloadSubtitles`], while the server lists no new one.
 pub const SUBTITLE_RETRIES: u32 = 10;
+/// Time the player may wait for data within [`STALL_WINDOW`] before a lower quality is advised.
+pub const STALL_LIMIT: Duration = Duration::from_secs(10);
+/// Span over which the waits of the player for data add up.
+pub const STALL_WINDOW: Duration = Duration::from_secs(60);
 
 /// Durations driving the controller's timers.
 ///
@@ -55,6 +59,11 @@ pub struct PlaybackTimings {
     /// Wait between two requests for the subtitles of the playing item after
     /// [`PlaybackCommand::ReloadSubtitles`], while the server lists none new.
     pub subtitle_retry: Duration,
+    /// Time the player may wait for data within [`PlaybackTimings::stall_window`] before
+    /// [`PlaybackEvent::LowerQualityAdvised`].
+    pub stall_limit: Duration,
+    /// Span over which the waits of the player for data add up.
+    pub stall_window: Duration,
 }
 
 impl Default for PlaybackTimings {
@@ -65,6 +74,8 @@ impl Default for PlaybackTimings {
             shutdown_timeout: SHUTDOWN_TIMEOUT,
             unload_grace: UNLOAD_GRACE,
             subtitle_retry: SUBTITLE_RETRY,
+            stall_limit: STALL_LIMIT,
+            stall_window: STALL_WINDOW,
         }
     }
 }
@@ -213,7 +224,10 @@ pub enum PlaybackCommand {
     /// and speed, as from a new [`PlaybackEvent::Loading`], and its
     /// [`PlaybackEvent::Ready`] and [`PlaybackEvent::Chapters`] are followed
     /// by its [`PlaybackEvent::Paused`] state. The quality stays for the next items.
+    /// An item that failed to load or to play is tried again.
     SetQuality(Quality),
+    /// Try the item that failed to load or to play again, at its position.
+    Retry,
     /// Change how subtitles look. Applies at once, even with nothing
     /// playing, and again before each item loads.
     SetSubtitleStyle(SubtitleStyle),
@@ -360,8 +374,21 @@ pub enum PlaybackEvent {
         /// Where the skip happened.
         from: Duration,
     },
+    /// The file itself could not be played: the server converts it instead,
+    /// at the same position. Sent after the second [`PlaybackEvent::Loading`]
+    /// of the item.
+    Converting,
+    /// The player waits for data while playing (`true`), or plays on (`false`). Never `true`
+    /// while paused or at the end.
+    Buffering(bool),
+    /// The player waited too long for data: this lower quality may stream better. Sent at most
+    /// once per item; the quality changes only on [`PlaybackCommand::SetQuality`].
+    LowerQualityAdvised(Quality),
     /// Playback stopped.
     Stopped,
+    /// The server answered the report of a stop, or no report was needed: what it lists from now
+    /// on takes the stop into account. Follows every [`PlaybackEvent::Stopped`].
+    StopReported,
     /// Playback or a command failed.
     Error(PlaybackError),
     /// The answer to [`PlaybackCommand::ReloadSubtitles`]: whether a new

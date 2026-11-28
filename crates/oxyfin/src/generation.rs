@@ -36,11 +36,12 @@ pub struct Generation {
 
 impl Generation {
     /// Creates the services of a session. Must run inside the Tokio runtime,
-    /// where the image cache starts its background trim.
+    /// where the image cache starts its background trim. The catalog starts from the answers
+    /// the last session of the account left on disk.
     pub fn new(id: GenerationId, session: Session, paths: &Paths) -> Self {
         Self {
             id,
-            catalog: Catalog::new(session.clone()),
+            catalog: Catalog::on_disk(session.clone(), paths),
             images: Arc::new(ImageCache::new(
                 session.clone(),
                 paths,
@@ -156,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    fn a_player_built_for_the_current_generation_plays_from_home_and_details_only() {
+    fn a_player_built_for_the_current_generation_plays_from_browsing_screens_only() {
         let play = |screen: Screen| built(G1, Some(G1), &screen, &screen);
         assert_eq!(play(Screen::Home), Built::Play);
         assert_eq!(play(Screen::Movie("m".into())), Built::Play);

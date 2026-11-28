@@ -1,7 +1,7 @@
-<svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-<circle cx="11" cy="11" r="11" fill="url(#logo_fill)"/>
+<svg width="22" height="22" viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M67.30 47.11A34 34 0 1 1 40.89 20.70A10 10 0 0 0 52.59 13.44A18 18 0 1 1 74.56 35.41A10 10 0 0 0 67.30 47.11ZM16 54A18 18 0 1 0 52 54A18 18 0 1 0 16 54Z" fill="url(#logo_fill)"/>
 <defs>
-<linearGradient id="logo_fill" x1="0" y1="11" x2="22" y2="11" gradientUnits="userSpaceOnUse">
+<linearGradient id="logo_fill" x1="8" y1="8" x2="80" y2="80" gradientUnits="userSpaceOnUse">
 <stop stop-color="#8CDBF5"/>
 <stop offset="1" stop-color="#21B0DE"/>
 </linearGradient>

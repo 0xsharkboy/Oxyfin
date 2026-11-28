@@ -1,3 +1,6 @@
+import { HoverCard } from "../components/hover_card.slint";
+import { MouseBack } from "../components/mouse_back.slint";
+import { ContextMenu } from "../components/context_menu.slint";
 import { Theme, CardData } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { TopBar, TopBarPage } from "../components/top_bar.slint";
@@ -6,6 +9,7 @@ import { Button, ButtonStyle } from "../components/button.slint";
 import { IconButton } from "../components/icon_button.slint";
 import { PosterRow } from "../components/poster_row.slint";
 import { CastRow, PersonCardData } from "../components/person_card.slint";
+import { Skeleton, DetailHeaderBones } from "../components/skeleton.slint";
 import { BodyText } from "../components/text.slint";
 
 // What the movie page shows about its movie; Rust fills it from the core.
@@ -58,6 +62,11 @@ export component MovieScreen inherits Rectangle {
 
     background: Theme.bg-base;
     forward-focus: keys;
+    // The element given the focus back after a menu row is gone: the page takes the keys.
+    property <int> focus-lost: ContextMenu.focus-lost;
+    changed focus-lost => {
+        keys.focus();
+    }
 
     // False once another screen is shown: the page being left must not take the focus back.
     in property <bool> active: true;
@@ -82,18 +91,20 @@ export component MovieScreen inherits Rectangle {
         }
 
         flick := Flickable {
+            mouse-drag-pan-enabled: false;
             height: parent.height;
             content-width: self.width;
             content-height: max(content.preferred-height, self.height);
+            changed viewport-y => {
+                HoverCard.scrolled();
+            }
 
             // The mouse back button, on whatever lies behind the content.
             TouchArea {
                 width: flick.content-width;
                 height: flick.content-height;
                 pointer-event(event) => {
-                    if event.button == PointerEventButton.back && event.kind == PointerEventKind.up {
-                        root.back();
-                    }
+                    MouseBack.handle(event);
                 }
             }
 
@@ -132,14 +143,14 @@ export component MovieScreen inherits Rectangle {
 
                     if root.movie.can-resume: Button {
                         label: @tr("Resume from {}", root.movie.resume-from);
-                        icon: Icons.play;
+                        icon: Icons.play-on-accent;
                         clicked => {
                             root.play(false);
                         }
                     }
                     Button {
                         label: @tr("Play");
-                        icon: Icons.play;
+                        icon: root.movie.can-resume ? Icons.play : Icons.play-on-accent;
                         style: root.movie.can-resume ? ButtonStyle.secondary : ButtonStyle.primary;
                         clicked => {
                             root.play(true);
@@ -164,6 +175,7 @@ export component MovieScreen inherits Rectangle {
                     padding-bottom: Theme.space-3xl;
 
                     PosterRow {
+                        row-key: "similar";
                         title: @tr("More like this");
                         items: root.similar;
                         clicked(id) => {
@@ -189,9 +201,8 @@ export component MovieScreen inherits Rectangle {
                             }
                         }
                     }
-                    if root.loading: BodyText {
-                        text: @tr("Loading");
-                        color: Theme.text-secondary;
+                    if root.loading: Skeleton {
+                        DetailHeaderBones { }
                     }
                     if root.error != "": BodyText {
                         text: root.error;

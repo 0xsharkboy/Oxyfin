@@ -6,10 +6,10 @@ use common::{TEST_USER_ID, fixture, session};
 use oxyfin_api::ItemId;
 use oxyfin_core::{
     BrowseQuery, BrowseSource, Catalog, CollectionLink, ContentKind, CoreError, ItemKind,
-    ItemSummary, LibraryKind, MovieDetails, PersonKind, SortField, WatchFilter,
+    ItemSummary, LibraryKind, MenuTarget, MovieDetails, Paths, PersonKind, SortField, WatchFilter,
 };
 use serde_json::{Value, json};
-use wiremock::matchers::{method, path, query_param};
+use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Match, Mock, MockServer, Request, ResponseTemplate};
 
 struct NoParam(&'static str);
@@ -119,6 +119,28 @@ async fn continue_watching_skips_unknown_kinds() {
     let items = catalog(&mock).continue_watching(12).await.unwrap();
     let kinds: Vec<_> = items.iter().map(|item| item.kind).collect();
     assert_eq!(kinds, [ItemKind::Movie, ItemKind::Series]);
+}
+
+#[tokio::test]
+async fn continue_watching_keeps_the_overview() {
+    let mock = MockServer::start().await;
+    let body = json!({
+        "Items": [
+            {"Id": "e1", "Name": "Sword", "Type": "Episode", "Overview": "  A raid.  "},
+            {"Id": "m1", "Name": "Quiet", "Type": "Movie", "Overview": " "}
+        ],
+        "TotalRecordCount": 2,
+        "StartIndex": 0
+    });
+    Mock::given(method("GET"))
+        .and(path("/UserItems/Resume"))
+        .and(query_param("fields", "Overview"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .mount(&mock)
+        .await;
+    let items = catalog(&mock).continue_watching(12).await.unwrap();
+    let overviews: Vec<_> = items.iter().map(|item| item.overview.as_deref()).collect();
+    assert_eq!(overviews, [Some("A raid."), None]);
 }
 
 #[tokio::test]
@@ -1358,4 +1380,441 @@ async fn subtitle_download_errors_are_core_errors() {
         .await
         .unwrap_err();
     assert_eq!(error, CoreError::Server { status: 500 });
+}
+
+#[tokio::test]
+async fn item_brief_of_a_movie_has_genres_rating_and_overview() {
+    let mock = MockServer::start().await;
+    let mut movie = fixture("item_movie");
+    movie["CommunityRating"] = json!(8.4);
+    Mock::given(method("GET"))
+        .and(path(format!("/Items/{MOVIE_ID}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(movie))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let brief = catalog(&mock)
+        .item_brief(&ItemId::from(MOVIE_ID))
+        .await
+        .unwrap();
+    assert_eq!(brief.summary.kind, ItemKind::Movie);
+    assert_eq!(brief.summary.year, Some(2020));
+    assert_eq!(brief.genres, ["Drama", "Comedy"]);
+    assert_eq!(brief.community_rating, Some(8.4));
+    assert!(brief.summary.overview.is_some(), "the overview is kept");
+    assert_eq!(brief.season_count, None, "a movie has no seasons");
+}
+
+#[tokio::test]
+async fn item_brief_of_a_series_counts_its_seasons() {
+    let mock = MockServer::start().await;
+    let mut series = fixture("item_series");
+    series["ChildCount"] = json!(3);
+    mount(&mock, "GET", &format!("/Items/{SERIES_ID}"), series).await;
+    let brief = catalog(&mock)
+        .item_brief(&ItemId::from(SERIES_ID))
+        .await
+        .unwrap();
+    assert_eq!(brief.summary.kind, ItemKind::Series);
+    assert_eq!(brief.season_count, Some(3));
+    assert_eq!(brief.genres, ["Animation"]);
+}
+
+#[tokio::test]
+async fn item_brief_of_an_episode_names_its_series() {
+    let mock = MockServer::start().await;
+    let id = "0366bed6b6c97d8af5be151ffc258992";
+    mount(
+        &mock,
+        "GET",
+        &format!("/Items/{id}"),
+        fixture("item_episode"),
+    )
+    .await;
+    let brief = catalog(&mock).item_brief(&ItemId::from(id)).await.unwrap();
+    assert_eq!(brief.summary.kind, ItemKind::Episode);
+    assert_eq!(brief.summary.series_name.as_deref(), Some("Test Show"));
+    assert_eq!(brief.summary.episode_label.as_deref(), Some("S01E01"));
+    assert_eq!(brief.season_count, None);
+}
+
+#[tokio::test]
+async fn item_brief_of_a_bare_item_leaves_everything_out() {
+    let mock = MockServer::start().await;
+    mount(
+        &mock,
+        "GET",
+        &format!("/Items/{MOVIE_ID}"),
+        json!({"Id": MOVIE_ID, "Name": "Bare", "Type": "Movie", "Overview": "  "}),
+    )
+    .await;
+    let brief = catalog(&mock)
+        .item_brief(&ItemId::from(MOVIE_ID))
+        .await
+        .unwrap();
+    assert_eq!(brief.summary.title, "Bare");
+    assert!(brief.genres.is_empty());
+    assert_eq!(brief.community_rating, None);
+    assert_eq!(brief.summary.overview, None);
+    assert_eq!(brief.summary.duration, None);
+}
+
+const SEASON_ID: &str = "0407e3d02b7d70abe4a2d37241b02fea";
+
+#[tokio::test]
+async fn menu_target_of_a_movie_keeps_its_user_state() {
+    let mock = MockServer::start().await;
+    mount(
+        &mock,
+        "GET",
+        &format!("/Items/{MOVIE_ID}"),
+        fixture("item_movie"),
+    )
+    .await;
+    let target = catalog(&mock)
+        .menu_target(&ItemId::from(MOVIE_ID))
+        .await
+        .unwrap();
+    let Some(MenuTarget::Movie(movie)) = target else {
+        panic!("not a movie: {target:?}");
+    };
+    assert!(movie.user.favorite);
+    assert!(movie.user.can_resume());
+}
+
+#[tokio::test]
+async fn menu_target_of_an_episode_knows_its_season() {
+    let mock = MockServer::start().await;
+    let id = "0366bed6b6c97d8af5be151ffc258992";
+    let mut episode = fixture("item_episode");
+    episode["SeasonId"] = json!(SEASON_ID);
+    mount(&mock, "GET", &format!("/Items/{id}"), episode).await;
+    let target = catalog(&mock).menu_target(&ItemId::from(id)).await.unwrap();
+    let Some(MenuTarget::Episode(episode)) = target else {
+        panic!("not an episode: {target:?}");
+    };
+    assert_eq!(episode.series_id.as_str(), SERIES_ID);
+    assert_eq!(
+        episode.season_id.as_ref().map(ItemId::as_str),
+        Some(SEASON_ID)
+    );
+    assert_eq!(episode.season_number, Some(1));
+}
+
+#[tokio::test]
+async fn menu_target_of_a_series_brings_its_next_episode() {
+    let mock = MockServer::start().await;
+    mount(
+        &mock,
+        "GET",
+        &format!("/Items/{SERIES_ID}"),
+        fixture("item_series"),
+    )
+    .await;
+    mount(&mock, "GET", "/Shows/NextUp", fixture("shows_next_up")).await;
+    let target = catalog(&mock)
+        .menu_target(&ItemId::from(SERIES_ID))
+        .await
+        .unwrap();
+    let Some(MenuTarget::Series {
+        summary,
+        next_episode,
+    }) = target
+    else {
+        panic!("not a series: {target:?}");
+    };
+    assert_eq!(summary.title, "Test Show");
+    assert_eq!(next_episode.unwrap().title, "Test Show S01E02");
+}
+
+#[tokio::test]
+async fn menu_target_of_a_season_names_its_series() {
+    let mock = MockServer::start().await;
+    mount(
+        &mock,
+        "GET",
+        &format!("/Items/{SEASON_ID}"),
+        json!({
+            "Id": SEASON_ID, "Name": "Season 1", "Type": "Season", "IndexNumber": 1,
+            "SeriesId": SERIES_ID, "SeriesName": "Test Show",
+            "UserData": {"Played": true, "IsFavorite": false, "PlaybackPositionTicks": 0, "PlayCount": 0}
+        }),
+    )
+    .await;
+    let target = catalog(&mock)
+        .menu_target(&ItemId::from(SEASON_ID))
+        .await
+        .unwrap();
+    let Some(MenuTarget::Season {
+        season,
+        series_id,
+        series_name,
+    }) = target
+    else {
+        panic!("not a season: {target:?}");
+    };
+    assert_eq!(season.number, Some(1));
+    assert!(season.user.played);
+    assert_eq!(series_id.as_str(), SERIES_ID);
+    assert_eq!(series_name.as_deref(), Some("Test Show"));
+}
+
+#[tokio::test]
+async fn menu_target_of_a_box_set_is_none() {
+    let mock = MockServer::start().await;
+    mount(
+        &mock,
+        "GET",
+        "/Items/set",
+        json!({"Id": "set", "Name": "Set", "Type": "BoxSet"}),
+    )
+    .await;
+    let target = catalog(&mock).menu_target(&ItemId::from("set")).await;
+    assert_eq!(target, Ok(None));
+}
+
+#[tokio::test]
+async fn hide_from_resume_clears_the_position() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!("/UserItems/{MOVIE_ID}/UserData")))
+        .and(body_json(json!({"PlaybackPositionTicks": 0})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Played": false, "IsFavorite": true, "PlaybackPositionTicks": 0, "PlayCount": 1
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let state = catalog(&mock)
+        .hide_from_resume(&ItemId::from(MOVIE_ID))
+        .await
+        .unwrap();
+    assert!(!state.can_resume());
+    assert!(state.favorite);
+}
+
+#[tokio::test]
+async fn season_plays_its_first_unplayed_episode() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/Shows/{SERIES_ID}/Episodes")))
+        .and(query_param("seasonId", SEASON_ID))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("shows_episodes")))
+        .mount(&mock)
+        .await;
+    let episode = catalog(&mock)
+        .season_episode_to_play(&ItemId::from(SERIES_ID), &ItemId::from(SEASON_ID))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(episode.title, "Test Show S01E02");
+}
+
+#[tokio::test]
+async fn a_watched_season_plays_from_its_first_episode() {
+    let mock = MockServer::start().await;
+    let mut episodes = fixture("shows_episodes");
+    for episode in episodes["Items"].as_array_mut().unwrap() {
+        episode["UserData"]["Played"] = json!(true);
+    }
+    mount(
+        &mock,
+        "GET",
+        &format!("/Shows/{SERIES_ID}/Episodes"),
+        episodes,
+    )
+    .await;
+    let episode = catalog(&mock)
+        .season_episode_to_play(&ItemId::from(SERIES_ID), &ItemId::from(SEASON_ID))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(episode.title, "Test Show S01E01");
+}
+
+#[tokio::test]
+async fn restore_resume_puts_the_position_back() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!("/UserItems/{MOVIE_ID}/UserData")))
+        .and(body_json(
+            json!({"PlaybackPositionTicks": 7_200_000_000_i64}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Played": false, "IsFavorite": false, "PlaybackPositionTicks": 7_200_000_000_i64,
+            "PlayCount": 1
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let state = catalog(&mock)
+        .restore_resume(&ItemId::from(MOVIE_ID), std::time::Duration::from_secs(720))
+        .await
+        .unwrap();
+    assert!(state.can_resume());
+    assert_eq!(state.position, std::time::Duration::from_secs(720));
+}
+
+async fn mount_played(mock: &MockServer) {
+    mount(
+        mock,
+        "POST",
+        &format!("/UserPlayedItems/{MOVIE_ID}"),
+        json!({"Played": true, "IsFavorite": false, "PlaybackPositionTicks": 0}),
+    )
+    .await;
+}
+
+async fn mount_movie(mock: &MockServer, delay: std::time::Duration) {
+    Mock::given(method("GET"))
+        .and(path(format!("/Items/{MOVIE_ID}")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(fixture("item_movie"))
+                .set_delay(delay),
+        )
+        .mount(mock)
+        .await;
+}
+
+#[tokio::test]
+async fn the_last_answers_are_kept_until_the_user_changes_something() {
+    let mock = MockServer::start().await;
+    mount_movie(&mock, std::time::Duration::ZERO).await;
+    mount_played(&mock).await;
+    mount(
+        &mock,
+        "GET",
+        "/Items",
+        json!({"Items": [fixture("item_movie")], "TotalRecordCount": 41, "StartIndex": 0}),
+    )
+    .await;
+    let catalog = catalog(&mock);
+    let movie = ItemId::from(MOVIE_ID);
+    let movies = query(BrowseSource::All(ContentKind::Movies));
+    assert_eq!(catalog.last_movie(&movie), None);
+    let details = catalog.movie(&movie).await.unwrap();
+    let page = catalog.browse(&movies).await.unwrap();
+    assert_eq!(catalog.last_movie(&movie), Some(details));
+    let other_page = BrowseQuery {
+        start: 20,
+        ..movies.clone()
+    };
+    let other_filter = BrowseQuery {
+        watch: WatchFilter::Played,
+        ..movies.clone()
+    };
+    assert_eq!(catalog.last_browse(&other_page), Some(page));
+    assert_eq!(catalog.last_browse(&other_filter), None);
+
+    catalog.clone().set_played(&movie, true).await.unwrap();
+    assert_eq!(catalog.last_movie(&movie), None);
+    assert_eq!(catalog.last_browse(&movies), None);
+}
+
+#[tokio::test]
+async fn an_answer_on_its_way_during_a_change_is_not_kept() {
+    let mock = MockServer::start().await;
+    mount_movie(&mock, std::time::Duration::from_millis(300)).await;
+    mount_played(&mock).await;
+    let catalog = catalog(&mock);
+    let movie = ItemId::from(MOVIE_ID);
+    let (asked, changed) = tokio::join!(catalog.movie(&movie), catalog.set_played(&movie, true));
+    assert!(asked.is_ok() && changed.is_ok());
+    assert_eq!(catalog.last_movie(&movie), None);
+}
+
+#[tokio::test]
+async fn a_refused_change_forgets_the_answers_too() {
+    let mock = MockServer::start().await;
+    mount_movie(&mock, std::time::Duration::ZERO).await;
+    let catalog = catalog(&mock);
+    let movie = ItemId::from(MOVIE_ID);
+    catalog.movie(&movie).await.unwrap();
+    // No route answers: the server may have made the change before the connection failed.
+    assert!(catalog.set_favorite(&movie, true).await.is_err());
+    assert_eq!(catalog.last_movie(&movie), None);
+}
+
+#[tokio::test]
+async fn the_brief_of_a_movie_opens_its_page() {
+    let mock = MockServer::start().await;
+    mount_movie(&mock, std::time::Duration::ZERO).await;
+    let catalog = catalog(&mock);
+    let movie = ItemId::from(MOVIE_ID);
+    catalog.item_brief(&movie).await.unwrap();
+    let opened = catalog.last_movie(&movie).unwrap();
+    assert_eq!(catalog.movie(&movie).await.unwrap(), opened);
+}
+
+#[tokio::test]
+async fn the_next_launch_of_the_account_starts_from_its_last_answers() {
+    let mock = MockServer::start().await;
+    mount(&mock, "GET", "/UserViews", fixture("user_views")).await;
+    let dir = tempfile::TempDir::new().unwrap();
+    let paths = Paths::under(dir.path());
+    let first = Catalog::on_disk(session(&mock), &paths);
+    let libraries = first.libraries().await.unwrap();
+    first.save_answers();
+
+    let other = oxyfin_api::Server::new(
+        &mock.uri(),
+        oxyfin_api::ClientInfo::new("Test Device", "test-device-id"),
+    )
+    .unwrap()
+    .restore_session("other", oxyfin_api::UserId::from("other"), None);
+    let next = Catalog::on_disk(session(&mock), &paths);
+    assert_eq!(next.last_libraries(), Some(libraries));
+    assert_eq!(Catalog::on_disk(other, &paths).last_libraries(), None);
+
+    first.save_answers();
+    next.close();
+    assert_eq!(next.last_libraries(), None);
+    assert_eq!(
+        Catalog::on_disk(session(&mock), &paths).last_libraries(),
+        None
+    );
+}
+
+#[tokio::test]
+async fn the_saved_answers_count_on_disk_until_forgotten() {
+    let mock = MockServer::start().await;
+    mount(&mock, "GET", "/UserViews", fixture("user_views")).await;
+    let dir = tempfile::TempDir::new().unwrap();
+    let catalog = Catalog::on_disk(session(&mock), &Paths::under(dir.path()));
+    assert_eq!(catalog.saved_bytes(), 0);
+    catalog.libraries().await.unwrap();
+    catalog.save_answers();
+    assert!(catalog.saved_bytes() > 0);
+    catalog.forget_answers();
+    assert_eq!(catalog.saved_bytes(), 0);
+}
+
+#[tokio::test]
+async fn the_home_is_fresh_only_once_every_list_of_it_answered() {
+    let mock = MockServer::start().await;
+    mount(&mock, "GET", "/UserViews", fixture("user_views")).await;
+    mount(
+        &mock,
+        "GET",
+        "/UserItems/Resume",
+        fixture("user_items_resume"),
+    )
+    .await;
+    mount(&mock, "GET", "/Shows/NextUp", fixture("shows_next_up")).await;
+    mount(&mock, "GET", "/Items/Latest", fixture("items_latest")).await;
+    let catalog = catalog(&mock);
+    let age = std::time::Duration::from_secs(60);
+    let fresh = |catalog: &Catalog| catalog.home_within(age, 12, 5, 8);
+    let libraries = catalog.libraries().await.unwrap();
+    catalog.continue_watching(12).await.unwrap();
+    for library in &libraries {
+        catalog.latest(&library.id, 8).await.unwrap();
+    }
+    assert!(!fresh(&catalog), "next up was not asked for");
+    catalog.next_up(5).await.unwrap();
+    assert!(fresh(&catalog));
+    catalog.forget_answers();
+    catalog.libraries().await.unwrap();
+    assert!(!fresh(&catalog), "the libraries alone");
 }

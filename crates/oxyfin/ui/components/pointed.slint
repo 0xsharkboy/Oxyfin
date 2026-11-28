@@ -1,0 +1,23 @@
+// What the pointer rests on and must not move: a card, a button. Lists asked for anew wait for it
+// to leave before they add, remove or move rows.
+export global Pointed {
+    // Number of the element pointed at, 0 for none.
+    out property <int> holder;
+    property <int> last;
+
+    public function enter() -> int {
+        self.last += 1;
+        self.holder = self.last;
+        self.last
+    }
+
+    public function leave(number: int) {
+        if number > 0 && self.holder == number {
+            self.holder = 0;
+        }
+    }
+
+    public function reset() {
+        self.holder = 0;
+    }
+}

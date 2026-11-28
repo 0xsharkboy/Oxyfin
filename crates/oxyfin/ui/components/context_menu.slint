@@ -1,0 +1,457 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { BodyText, CaptionText, LabelText } from "text.slint";
+import { HoverCard } from "hover_card.slint";
+import { Bone, LineBone, Skeleton } from "skeleton.slint";
+
+// What a row of the context menu does, mirroring the Rust `MenuAction`.
+export enum MenuAction {
+    play,
+    resume,
+    play-from-start,
+    play-next,
+    resume-next,
+    play-season,
+    mark-watched,
+    mark-unwatched,
+    mark-season-watched,
+    mark-season-unwatched,
+    add-favorite,
+    remove-favorite,
+    go-to-series,
+    go-to-season,
+    details,
+    remove-from-resume,
+}
+
+// A row of the context menu. `detail` fills the label: a resume time, an episode label or a
+// season number; `divider-before` draws a line above the row.
+export struct MenuEntry {
+    action: MenuAction,
+    detail: string,
+    divider-before: bool,
+}
+
+// Whether a key event opens the context menu: Shift+F10 or the Menu key.
+export global MenuKeys {
+    public pure function opens(event: KeyEvent) -> bool {
+        (event.text == Key.F10 && event.modifiers.shift) || event.text == Key.Menu
+    }
+}
+
+// The menu of the item a card, an episode row or a season pill was right-clicked on, shared by
+// every screen and the overlay that draws it.
+export global ContextMenu {
+    out property <bool> open;
+    // Each opening gets a new number; Rust answers with it.
+    out property <int> serial;
+    out property <string> id;
+    // True when the item was opened from Continue Watching.
+    out property <bool> from-resume;
+    // Where the menu opens, in window coordinates.
+    out property <length> anchor-x;
+    out property <length> anchor-y;
+    out property <bool> by-keyboard;
+    // Last point of the pointer over the open menu, negative when unknown.
+    out property <length> pointer-x;
+    out property <length> pointer-y;
+    // Opening whose entries are set, from Rust.
+    in property <int> ready-serial;
+    // Header of the menu: first what the opener shows, then what Rust tells with the entries.
+    in-out property <string> title;
+    in-out property <string> subtitle;
+    in-out property <[MenuEntry]> entries;
+    // Row under the pointer or picked with the arrows, -1 for none.
+    in-out property <int> highlighted: -1;
+    // Item whose element takes the focus back after a row chosen from the keyboard, also when
+    // the action rebuilds its row; empty for none.
+    in-out property <string> focus-id;
+    // Key of the row of cards it is in: the same item can show in several. Empty outside such rows.
+    in-out property <string> focus-row;
+    // Key of the row of cards of the element the menu was opened on.
+    in-out property <string> opener-row;
+    // Changes of items sent to the server that it has not answered yet.
+    out property <int> changes-pending;
+    // Checks left before the window stops watching for an element that keeps the focus.
+    property <int> checks-left;
+    // While `focus-id` is set, the window asks with `focus-check` and the element holding the
+    // focus answers with `focus-answer`; no answer means the element is gone.
+    in-out property <int> focus-check;
+    in-out property <int> focus-answer;
+    // Grows when the element to focus is gone, so the screen takes the focus back.
+    out property <int> focus-lost;
+    // Asks for the entries of item `id`.
+    callback requested(serial: int, id: string, from-resume: bool);
+    callback chosen(serial: int, action: MenuAction);
+    // A right press outside the menu closed it; Rust presses there again for what lies below.
+    callback right-pressed-outside(x: length, y: length);
+
+    // Opens the menu of `id` at a point of the window, headed with what the opener shows until
+    // the entries come; returns the number of this opening.
+    public function show(id: string, from-resume: bool, x: length, y: length, by-keyboard: bool, title: string, subtitle: string) -> int {
+        self.title = title;
+        self.subtitle = subtitle;
+        self.entries = [];
+        self.highlighted = -1;
+        self.serial += 1;
+        self.open = true;
+        self.id = id;
+        self.from-resume = from-resume;
+        self.anchor-x = x;
+        self.anchor-y = y;
+        self.by-keyboard = by-keyboard;
+        self.pointer-x = by-keyboard ? -1px : x;
+        self.pointer-y = by-keyboard ? -1px : y;
+        self.focus-id = "";
+        self.opener-row = "";
+        HoverCard.suppressed = true;
+        self.requested(self.serial, id, from-resume);
+        self.serial
+    }
+
+    public function close() {
+        if self.open {
+            self.open = false;
+            HoverCard.suppressed = false;
+            HoverCard.hold(self.pointer-x, self.pointer-y);
+        }
+    }
+
+    function step(by: int) {
+        let count = self.entries.length;
+        if count > 0 {
+            self.highlighted = self.highlighted < 0 ? (by > 0 ? 0 : count - 1) : mod(self.highlighted + by + count, count);
+        }
+    }
+
+    // Handles a key pressed while the menu is open. The window calls it before the focused
+    // element sees the key, so the focus never moves to the menu and stays usable once it closes.
+    public function key(event: KeyEvent) {
+        let count = self.entries.length;
+        if event.text == Key.Escape || MenuKeys.opens(event) {
+            self.close();
+        } else if self.ready-serial != self.serial {
+        } else if event.text == Key.DownArrow || (event.text == Key.Tab && !event.modifiers.shift) {
+            self.step(1);
+        } else if event.text == Key.UpArrow || event.text == Key.Backtab || (event.text == Key.Tab && event.modifiers.shift) {
+            self.step(-1);
+        } else if event.text == Key.Home {
+            self.highlighted = 0;
+        } else if event.text == Key.End {
+            self.highlighted = count - 1;
+        } else if (event.text == Key.Return || event.text == " ") && self.highlighted >= 0 && self.highlighted < count {
+            self.choose(self.entries[self.highlighted].action);
+        }
+    }
+
+    public function choose(action: MenuAction) {
+        let serial = self.serial;
+        if self.by-keyboard {
+            self.focus-id = self.id;
+            self.focus-row = self.opener-row;
+            self.checks-left = Theme.focus-check-limit;
+            self.focus-answer = self.focus-check;
+        }
+        self.close();
+        self.chosen(serial, action);
+    }
+
+    public function pointer-moved(x: length, y: length) {
+        self.pointer-x = x;
+        self.pointer-y = y;
+    }
+
+    // The element holding the focus answered a check: a while after the answer of the server, its
+    // row will not be rebuilt any more.
+    public function focus-held() {
+        if self.changes-pending <= 0 {
+            self.checks-left -= 1;
+        }
+        if self.checks-left <= 0 {
+            self.focus-id = "";
+        } else {
+            self.focus-check += 1;
+        }
+    }
+
+    // A change of an item was sent to the server.
+    public function change-sent() {
+        self.changes-pending += 1;
+    }
+
+    // The server answered a change: what it rebuilds comes next.
+    public function change-answered() {
+        self.changes-pending -= 1;
+        self.checks-left = Theme.focus-check-limit;
+    }
+
+    // Another control took the focus: it keeps it.
+    public function focus-taken() {
+        self.focus-id = "";
+    }
+
+    // The element to focus is gone: nothing waits for it any more.
+    public function focus-gone() {
+        self.focus-id = "";
+        self.focus-lost += 1;
+    }
+}
+
+component MenuRow inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> highlighted;
+    callback hovered();
+    callback activated();
+
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => {
+        root.activated();
+    }
+
+    // Fixed by the theme rather than measured, so every font gives the rows of the design.
+    height: 2 * Theme.space-sm + Theme.body-line-height;
+    background: root.highlighted ? Theme.bg-hover : transparent;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        moved => {
+            root.hovered();
+        }
+        changed has-hover => {
+            if self.has-hover {
+                root.hovered();
+            }
+        }
+        clicked => {
+            root.activated();
+        }
+    }
+
+    row := HorizontalLayout {
+        padding-left: Theme.space-md;
+        padding-right: Theme.space-md;
+        padding-top: Theme.space-sm;
+        padding-bottom: Theme.space-sm;
+        spacing: Theme.context-menu-icon-gap;
+
+        VerticalLayout {
+            alignment: center;
+
+            Image {
+                accessible-role: none;
+                source: root.icon;
+                width: Theme.link-icon-size;
+                height: Theme.link-icon-size;
+            }
+        }
+
+        BodyText {
+            accessible-role: none;
+            text: root.label;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+}
+
+// Covers the window while the context menu is open: a press outside the menu or a scroll closes
+// it. Keys reach the menu through `ContextMenu.key`, which the window calls.
+export component ContextMenuOverlay inherits Rectangle {
+    property <bool> ready: ContextMenu.open && ContextMenu.ready-serial == ContextMenu.serial;
+
+    pure function label(entry: MenuEntry) -> string {
+        if entry.action == MenuAction.play {
+            return @tr("Play");
+        }
+        if entry.action == MenuAction.resume {
+            return @tr("Resume from {}", entry.detail);
+        }
+        if entry.action == MenuAction.play-from-start {
+            return @tr("Play from the beginning");
+        }
+        if entry.action == MenuAction.play-next {
+            return entry.detail == "" ? @tr("Play") : @tr("Play {}", entry.detail);
+        }
+        if entry.action == MenuAction.resume-next {
+            return @tr("Resume {}", entry.detail);
+        }
+        if entry.action == MenuAction.play-season {
+            return @tr("Play season");
+        }
+        if entry.action == MenuAction.mark-watched {
+            return @tr("Mark as watched");
+        }
+        if entry.action == MenuAction.mark-unwatched {
+            return @tr("Mark as unwatched");
+        }
+        if entry.action == MenuAction.mark-season-watched {
+            return @tr("Mark season as watched");
+        }
+        if entry.action == MenuAction.mark-season-unwatched {
+            return @tr("Mark season as unwatched");
+        }
+        if entry.action == MenuAction.add-favorite {
+            return @tr("Add to favorites");
+        }
+        if entry.action == MenuAction.remove-favorite {
+            return @tr("Remove from favorites");
+        }
+        if entry.action == MenuAction.go-to-series {
+            return @tr("Go to series");
+        }
+        if entry.action == MenuAction.go-to-season {
+            return @tr("Go to season {}", entry.detail);
+        }
+        if entry.action == MenuAction.details {
+            return @tr("Details");
+        }
+        @tr("Remove from Continue Watching")
+    }
+
+    pure function icon(action: MenuAction) -> image {
+        if action == MenuAction.play-from-start {
+            return Icons.rotate-ccw;
+        }
+        if action == MenuAction.mark-watched || action == MenuAction.mark-unwatched || action == MenuAction.mark-season-watched || action == MenuAction.mark-season-unwatched {
+            return Icons.check;
+        }
+        if action == MenuAction.add-favorite {
+            return Icons.heart;
+        }
+        if action == MenuAction.remove-favorite {
+            return Icons.heart-filled;
+        }
+        if action == MenuAction.go-to-series {
+            return Icons.chevron-right;
+        }
+        if action == MenuAction.go-to-season {
+            return Icons.list;
+        }
+        if action == MenuAction.details {
+            return Icons.eye;
+        }
+        if action == MenuAction.remove-from-resume {
+            return Icons.x;
+        }
+        Icons.play
+    }
+
+    changed ready => {
+        ContextMenu.highlighted = root.ready && ContextMenu.by-keyboard ? 0 : -1;
+    }
+
+    if ContextMenu.open: Rectangle {
+        TouchArea {
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.move {
+                    ContextMenu.pointer-moved(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+                }
+                if event.kind == PointerEventKind.down {
+                    ContextMenu.close();
+                    if event.button == PointerEventButton.right {
+                        ContextMenu.right-pressed-outside(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+                    }
+                }
+            }
+            scroll-event(event) => {
+                ContextMenu.close();
+                accept
+            }
+        }
+
+        panel := Rectangle {
+            x: max(Theme.space-sm, ContextMenu.anchor-x + self.width <= root.width - Theme.space-sm ? ContextMenu.anchor-x : ContextMenu.anchor-x - self.width);
+            y: max(Theme.space-sm, ContextMenu.anchor-y + self.height <= root.height - Theme.space-sm ? ContextMenu.anchor-y : ContextMenu.anchor-y - self.height);
+            width: Theme.context-menu-width;
+            height: content.preferred-height;
+
+            accessible-role: list;
+            accessible-label: ContextMenu.title;
+
+            background: Theme.bg-elevated;
+            border-radius: Theme.radius-lg;
+            border-width: Theme.border-thin;
+            border-color: Theme.border-default;
+            drop-shadow-offset-y: 8px;
+            drop-shadow-blur: 12px;
+            drop-shadow-color: Theme.menu-shadow;
+
+            // Presses between the rows must not close the menu.
+            TouchArea { }
+
+            content := VerticalLayout {
+                padding: Theme.border-thin;
+                padding-top: Theme.border-thin + Theme.context-menu-padding-y;
+                padding-bottom: Theme.border-thin + Theme.context-menu-padding-y;
+
+                VerticalLayout {
+                    padding-left: Theme.space-md;
+                    padding-right: Theme.space-md;
+                    padding-top: Theme.space-chip-y;
+                    padding-bottom: Theme.space-sm;
+                    spacing: Theme.space-2xs;
+
+                    LabelText {
+                        text: ContextMenu.title;
+                        color: Theme.text-primary;
+                        font-weight: Theme.body-strong-weight;
+                        overflow: elide;
+                    }
+                    if ContextMenu.subtitle != "": CaptionText {
+                        text: ContextMenu.subtitle;
+                        overflow: elide;
+                    }
+                }
+
+                // Rows standing in for the entries until Rust tells them.
+                if !root.ready: Skeleton {
+                    accessible-role: none;
+
+                    for placeholder in 3: Rectangle {
+                        height: 2 * Theme.space-sm + Theme.body-line-height;
+
+                        HorizontalLayout {
+                            padding-left: Theme.space-md;
+                            padding-right: Theme.space-md;
+                            spacing: Theme.context-menu-icon-gap;
+                            alignment: start;
+
+                            VerticalLayout {
+                                alignment: center;
+
+                                Bone {
+                                    width: Theme.link-icon-size;
+                                    height: Theme.link-icon-size;
+                                }
+                            }
+                            LineBone {
+                                bone-width: Theme.context-menu-width / 2;
+                            }
+                        }
+                    }
+                }
+
+                for entry[index] in ContextMenu.entries: VerticalLayout {
+                    if entry.divider-before: Rectangle {
+                        height: Theme.border-thin;
+                        background: Theme.border-default;
+                    }
+
+                    MenuRow {
+                        icon: root.icon(entry.action);
+                        label: root.label(entry);
+                        highlighted: index == ContextMenu.highlighted;
+                        hovered => {
+                            ContextMenu.highlighted = index;
+                        }
+                        activated => {
+                            ContextMenu.choose(entry.action);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

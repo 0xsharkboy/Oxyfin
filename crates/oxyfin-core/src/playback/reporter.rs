@@ -14,6 +14,15 @@ pub(super) enum ReportKind {
     Stopped,
 }
 
+/// What the reporter tells the controller.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Reported {
+    /// The server rejected the session.
+    Expired,
+    /// A stop report was sent, whatever the server answered.
+    Stop,
+}
+
 /// A request the reporter task sends.
 enum Job {
     Report(ReportKind, PlaybackReport),
@@ -27,11 +36,11 @@ pub(super) struct Reporter {
 }
 
 impl Reporter {
-    /// Starts the task. It sends `()` on `expired` once, at the first 401, and
-    /// drops every request after it. Other failures are ignored.
-    pub(super) fn spawn(session: Session, expired: UnboundedSender<()>) -> Self {
+    /// Starts the task. It tells each stop report once the server answered it, and the first 401
+    /// once, dropping every request after it. Other failures are ignored.
+    pub(super) fn spawn(session: Session, reported: UnboundedSender<Reported>) -> Self {
         let (jobs, receiver) = unbounded_channel();
-        let task = tokio::spawn(run(session, receiver, expired));
+        let task = tokio::spawn(run(session, receiver, reported));
         Self { jobs, task }
     }
 
@@ -51,8 +60,13 @@ impl Reporter {
     }
 }
 
-async fn run(session: Session, mut jobs: UnboundedReceiver<Job>, expired: UnboundedSender<()>) {
+async fn run(
+    session: Session,
+    mut jobs: UnboundedReceiver<Job>,
+    reported: UnboundedSender<Reported>,
+) {
     while let Some(job) = jobs.recv().await {
+        let stop = matches!(job, Job::Report(ReportKind::Stopped, _));
         let result = match job {
             Job::Report(ReportKind::Start, report) => session.report_playback_start(&report).await,
             Job::Report(ReportKind::Progress, report) => {
@@ -66,8 +80,11 @@ async fn run(session: Session, mut jobs: UnboundedReceiver<Job>, expired: Unboun
         if let Err(error) = result
             && CoreError::from(error) == CoreError::SessionExpired
         {
-            let _ = expired.send(());
+            let _ = reported.send(Reported::Expired);
             break;
+        }
+        if stop {
+            let _ = reported.send(Reported::Stop);
         }
     }
 }

@@ -2491,6 +2491,7 @@ async fn trickplay_of_the_source_comes_just_before_ready() {
 
 const ENCODINGS: &str = "/Videos/ActiveEncodings";
 const PLAYBACK_INFO: &str = "/Items/76282b1c408f374beeee50519e9157a4/PlaybackInfo";
+const STREAM: &str = "/Videos/76282b1c408f374beeee50519e9157a4/stream";
 /// The 1.5 Mbps limit of [`QUALITIES`].
 const LOW: Quality = QUALITIES[4];
 
@@ -2598,18 +2599,87 @@ impl Harness {
     }
 }
 
+/// Whether a playback info request says the player draws the image subtitles of the file.
+fn embeds_image_subtitles(info: &Value) -> bool {
+    info["DeviceProfile"]["SubtitleProfiles"]
+        .as_array()
+        .is_some_and(|profiles| profiles.contains(&json!({"Format": "pgssub", "Method": "Embed"})))
+}
+
+/// The fixture answer with a French image subtitle (4) inside the file, shown by default.
+fn image_subtitle_info() -> Value {
+    let mut info = fixture("playback_info");
+    let source = &mut info["MediaSources"][0];
+    source["DefaultSubtitleStreamIndex"] = json!(4);
+    let streams = source["MediaStreams"].as_array_mut();
+    streams.unwrap_or_else(|| panic!("no streams")).push(json!({
+        "Index": 4,
+        "Type": "Subtitle",
+        "Codec": "PGSSUB",
+        "Language": "fre",
+        "IsExternal": false,
+        "IsTextSubtitleStream": false,
+        "DeliveryMethod": "Embed",
+    }));
+    info
+}
+
+fn image_subtitle_tracks() -> Vec<Track> {
+    let mut tracks = file_tracks();
+    tracks.push(track(7, TrackKind::Subtitle, 3, false));
+    tracks
+}
+
+#[tokio::test]
+async fn the_default_image_subtitle_of_the_file_is_selected_on_direct_play() {
+    let mock = MockServer::start().await;
+    mount_playback_info(&mock, image_subtitle_info()).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.play(PlayMode::FromStart).await;
+    let ready = h.loaded_with(image_subtitle_tracks()).await;
+    position_of(&h.player.calls(), &Call::SelectSubtitle(Some(TrackId(7))));
+    let PlaybackEvent::Ready { subtitles, .. } = ready else {
+        unreachable!();
+    };
+    let selected: Vec<i32> = subtitles
+        .iter()
+        .filter(|subtitle| subtitle.selected)
+        .map(|subtitle| subtitle.index)
+        .collect();
+    assert_eq!(selected, [4]);
+    let start = wait_requests(&h.mock, START, 1).await;
+    assert_eq!(start[0]["PlayMethod"], json!("DirectPlay"));
+    assert_eq!(start[0]["SubtitleStreamIndex"], json!(4));
+}
+
+#[tokio::test]
+async fn a_remembered_off_hides_the_default_image_subtitle_on_direct_play() {
+    let mock = MockServer::start().await;
+    mount_info_for(&mock, EPISODES[0], image_subtitle_info()).await;
+    let mut h = harness_in(
+        mock,
+        episode_timings(Duration::from_secs(3600)),
+        remembered_french(),
+    )
+    .await;
+    let calls = h.load_episode(EPISODES[0], image_subtitle_tracks()).await;
+    assert_eq!(selected_subtitles(&calls), [None], "{calls:?}");
+}
+
 #[tokio::test]
 async fn the_quality_limit_is_asked_of_the_server() {
     let mut h = harness(quiet()).await;
     h.play(PlayMode::Auto).await;
     let first = wait_requests(&h.mock, PLAYBACK_INFO, 1).await;
-    assert_eq!(first[0].get("MaxStreamingBitrate"), None);
+    assert_eq!(first[0]["MaxStreamingBitrate"], json!(1_000_000_000));
+    assert!(embeds_image_subtitles(&first[0]));
     assert!(first[0]["DeviceProfile"]["TranscodingProfiles"].is_array());
 
     h.handle.send(PlaybackCommand::SetQuality(LOW));
     h.play_item(OTHER_ID, PlayMode::Auto).await;
     let other = wait_requests(&h.mock, &format!("/Items/{OTHER_ID}/PlaybackInfo"), 1).await;
     assert_eq!(other[0]["MaxStreamingBitrate"], json!(1_500_000));
+    assert!(!embeds_image_subtitles(&other[0]));
 }
 
 #[tokio::test]
@@ -2705,6 +2775,60 @@ async fn stopping_a_transcode_ends_it_on_the_server() {
 }
 
 #[tokio::test]
+async fn a_stop_report_is_told_once_the_server_answered_it() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(STOPPED))
+        .respond_with(ResponseTemplate::new(204).set_delay(Duration::from_millis(200)))
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::Stop);
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::StopReported)).await;
+    let stopped = seen
+        .iter()
+        .position(|e| matches!(e, PlaybackEvent::Stopped));
+    assert!(
+        stopped.is_some_and(|stopped| stopped + 1 < seen.len()),
+        "{seen:?}"
+    );
+    assert_eq!(bodies(&h.mock, STOPPED).await.len(), 1);
+}
+
+#[tokio::test]
+async fn a_stop_report_refused_for_the_session_is_settled() {
+    let mock = MockServer::start().await;
+    mount_status(&mock, "POST", STOPPED, 401).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::Stop);
+    let seen = events_until(&mut h.events, |e| *e == PlaybackEvent::SessionExpired).await;
+    let stopped = seen.iter().position(|e| *e == PlaybackEvent::Stopped);
+    let settled = seen.iter().rposition(|e| *e == PlaybackEvent::StopReported);
+    assert!(
+        matches!((stopped, settled), (Some(stopped), Some(settled)) if stopped < settled),
+        "{seen:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_stop_without_a_report_is_settled_at_once() {
+    let mut h = harness(quiet()).await;
+    h.handle.send(PlaybackCommand::Stop);
+    let seen = events_until(&mut h.events, |e| matches!(e, PlaybackEvent::StopReported)).await;
+    assert!(
+        matches!(
+            seen.as_slice(),
+            [.., PlaybackEvent::Stopped, PlaybackEvent::StopReported]
+        ),
+        "{seen:?}"
+    );
+    assert!(bodies(&h.mock, STOPPED).await.is_empty());
+}
+
+#[tokio::test]
 async fn direct_play_ends_no_transcode() {
     let mock = MockServer::start().await;
     mount_status(&mock, "DELETE", ENCODINGS, 204).await;
@@ -2782,6 +2906,202 @@ async fn a_quality_change_reloads_at_the_position_with_the_tracks() {
         back.location
     );
     wait_requests(&h.mock, ENCODINGS, 1).await;
+}
+
+/// Answers a playback info request that refuses the file itself with a transcode, and serves
+/// the file.
+async fn mount_conversion(mock: &MockServer) {
+    Mock::given(method("GET"))
+        .and(path(STREAM))
+        .respond_with(ResponseTemplate::new(206).set_body_bytes(vec![0]))
+        .mount(mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(PLAYBACK_INFO))
+        .and(body_partial_json(json!({
+            "EnableDirectPlay": false,
+            "EnableDirectStream": false,
+            "MaxStreamingBitrate": 1_000_000_000,
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(transcode_info()))
+        .with_priority(1)
+        .mount(mock)
+        .await;
+    mount_status(mock, "DELETE", ENCODINGS, 204).await;
+}
+
+fn load_error() -> PlayerEvent {
+    PlayerEvent::Unloaded(UnloadReason::Error("loading failed".into()))
+}
+
+fn is_error(event: &PlaybackEvent) -> bool {
+    matches!(event, PlaybackEvent::Error(_))
+}
+
+#[tokio::test]
+async fn a_file_that_does_not_open_is_converted_once() {
+    let mock = MockServer::start().await;
+    mount_conversion(&mock).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.play(PlayMode::Auto).await;
+    h.sink.send(load_error());
+    let seen = events_until(&mut h.events, |e| *e == PlaybackEvent::Converting).await;
+    assert!(!seen.iter().any(is_error), "{seen:?}");
+    let load = h.wait_load(2).await;
+    assert!(load.location.contains("/master.m3u8?"), "{}", load.location);
+    assert_eq!(load.start, Some(RESUME));
+    let infos = bodies(&h.mock, PLAYBACK_INFO).await;
+    assert_eq!(infos.len(), 2);
+    assert!(
+        infos[1].get("SubtitleStreamIndex").is_none(),
+        "the default tracks are those of the server: {:?}",
+        infos[1]
+    );
+    h.loaded_with(transcode_tracks()).await;
+    let start = wait_requests(&h.mock, START, 1).await;
+    assert_eq!(start[0]["PlayMethod"], json!("Transcode"));
+
+    h.sink.send(load_error());
+    let seen = events_until(&mut h.events, is_error).await;
+    assert!(matches!(
+        seen.last(),
+        Some(PlaybackEvent::Error(PlaybackError::LoadFailed { .. }))
+    ));
+    wait_requests(&h.mock, ENCODINGS, 1).await;
+    assert_eq!(h.loads().len(), 2);
+
+    // A new choice of the user starts from the file again, once more.
+    h.handle.send(PlaybackCommand::Retry);
+    let again = h.wait_load(3).await;
+    assert!(again.location.contains("/stream?static=true"));
+    assert_eq!(again.start, Some(RESUME));
+    h.sink.send(load_error());
+    let converted = h.wait_load(4).await;
+    assert!(converted.location.contains("/master.m3u8?"));
+}
+
+#[tokio::test]
+async fn a_failure_while_paused_converts_at_the_same_place() {
+    let mock = MockServer::start().await;
+    mount_conversion(&mock).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.move_to(Duration::from_secs(5)).await;
+    h.sink.send(PlayerEvent::Paused(true));
+    wait_event(&mut h.events, |e| *e == PlaybackEvent::Paused(true)).await;
+    let started = h.player.calls().len();
+    h.sink.send(load_error());
+    let load = h.wait_load(2).await;
+    assert_eq!(load.start, Some(Duration::from_secs(5)));
+    let infos = wait_requests(&h.mock, PLAYBACK_INFO, 2).await;
+    assert_eq!(infos[1]["MediaSourceId"], json!(MOVIE_ID));
+    assert_eq!(infos[1]["AudioStreamIndex"], json!(2));
+    assert_eq!(infos[1]["SubtitleStreamIndex"], json!(0));
+    assert!(
+        !h.player.calls()[started..].contains(&Call::Stop),
+        "nothing is left to unload"
+    );
+    let stopped = wait_requests(&h.mock, STOPPED, 1).await;
+    assert_eq!(stopped[0]["PositionTicks"], json!(50_000_000));
+    h.loaded_with(transcode_tracks()).await;
+    let calls = h.player.calls()[started..].to_vec();
+    position_of(&calls, &Call::SetPaused(true));
+
+    // Another audio track stays with the conversion.
+    h.handle.send(PlaybackCommand::SelectAudio(3));
+    let reload = h.wait_load(3).await;
+    assert!(
+        reload.location.contains("/master.m3u8?"),
+        "{}",
+        reload.location
+    );
+    let infos = wait_requests(&h.mock, PLAYBACK_INFO, 3).await;
+    assert_eq!(infos[2]["AudioStreamIndex"], json!(3));
+}
+
+#[tokio::test]
+async fn an_error_a_conversion_cannot_fix_is_told() {
+    let mock = MockServer::start().await;
+    mount_conversion(&mock).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.sink.send(PlayerEvent::Unloaded(UnloadReason::Output(
+        "no sound".into(),
+    )));
+    wait_event(&mut h.events, is_error).await;
+    assert_eq!(bodies(&h.mock, PLAYBACK_INFO).await.len(), 1);
+
+    // The item is gone: the server says so before anything loads.
+    h.handle.send(PlaybackCommand::Retry);
+    h.wait_load(2).await;
+    h.file_loaded().await;
+    mount_status(&h.mock, "GET", &format!("/Items/{MOVIE_ID}"), 404).await;
+    h.sink.send(load_error());
+    let error = wait_event(&mut h.events, is_error).await;
+    assert_eq!(
+        error,
+        PlaybackEvent::Error(PlaybackError::Server { status: 404 })
+    );
+    assert_eq!(h.loads().len(), 2);
+}
+
+#[tokio::test]
+async fn a_file_the_server_cannot_serve_is_not_converted() {
+    let mock = MockServer::start().await;
+    mount_conversion(&mock).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    for status in [410, 401] {
+        Mock::given(method("GET"))
+            .and(path(STREAM))
+            .respond_with(ResponseTemplate::new(status))
+            .up_to_n_times(1)
+            .with_priority(1)
+            .mount(&h.mock)
+            .await;
+        h.sink.send(load_error());
+        let seen = events_until(&mut h.events, |e| {
+            is_error(e) || *e == PlaybackEvent::SessionExpired
+        })
+        .await;
+        assert!(!seen.contains(&PlaybackEvent::Converting), "{seen:?}");
+        let expected = match status {
+            401 => PlaybackEvent::SessionExpired,
+            _ => PlaybackEvent::Error(PlaybackError::Server { status }),
+        };
+        assert_eq!(seen.last(), Some(&expected));
+        assert!(
+            h.loads()
+                .iter()
+                .all(|load| !load.location.contains("/master.m3u8?")),
+            "{:?}",
+            h.loads()
+        );
+        if status == 410 {
+            h.handle.send(PlaybackCommand::Retry);
+            let again = h.wait_load(2).await;
+            assert!(again.location.contains("/stream?static=true"));
+            h.file_loaded().await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_chosen_quality_plays_what_failed_again() {
+    let mock = MockServer::start().await;
+    mount_conversion(&mock).await;
+    mount_transcode_for(&mock, 1_500_000).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.move_to(Duration::from_secs(5)).await;
+    h.sink.send(PlayerEvent::Unloaded(UnloadReason::Output(
+        "no sound".into(),
+    )));
+    wait_event(&mut h.events, is_error).await;
+    h.handle.send(PlaybackCommand::SetQuality(LOW));
+    let load = h.wait_load(2).await;
+    assert!(load.location.contains("/master.m3u8?"), "{}", load.location);
+    assert_eq!(load.start, Some(Duration::from_secs(5)));
 }
 
 #[tokio::test]
@@ -4485,4 +4805,72 @@ async fn a_file_downloaded_again_in_the_language_replaces_its_track() {
         .unwrap_or_else(|| panic!("the French file is not added again: {calls:?}"));
     assert!(removed < added, "{calls:?}");
     assert_eq!(calls.last(), Some(&Call::SelectSubtitle(Some(TrackId(3)))));
+}
+
+fn waits(waiting: bool) -> impl Fn(&PlaybackEvent) -> bool {
+    move |event| *event == PlaybackEvent::Buffering(waiting)
+}
+
+#[tokio::test]
+async fn waiting_for_data_is_told_only_while_playing() {
+    let mut h = harness(quiet()).await;
+    h.start_item(MOVIE_ID, TEN_MINUTES).await;
+    h.sink.send(PlayerEvent::Buffering(true));
+    wait_event(&mut h.events, waits(true)).await;
+    h.sink.send(PlayerEvent::Paused(true));
+    let seen = events_until(&mut h.events, waits(false)).await;
+    assert!(seen.contains(&PlaybackEvent::Paused(true)), "{seen:?}");
+    h.sink.send(PlayerEvent::Paused(false));
+    wait_event(&mut h.events, waits(true)).await;
+    h.sink.send(PlayerEvent::Buffering(false));
+    wait_event(&mut h.events, waits(false)).await;
+
+    // Paused by the user, then waiting: nothing to tell until playback goes on.
+    h.sink.send(PlayerEvent::Paused(true));
+    h.sink.send(PlayerEvent::Buffering(true));
+    h.sink.send(PlayerEvent::Speed(1.25));
+    let seen = events_until(&mut h.events, |e| *e == PlaybackEvent::Speed(1.25)).await;
+    assert!(!seen.iter().any(waits(true)), "{seen:?}");
+    h.sink.send(PlayerEvent::Paused(false));
+    wait_event(&mut h.events, waits(true)).await;
+
+    // At the end, the player waits for nothing.
+    h.end_at(Duration::from_secs(595));
+    wait_event(&mut h.events, waits(false)).await;
+}
+
+#[tokio::test]
+async fn a_stream_that_keeps_waiting_offers_a_lower_quality() {
+    let mock = MockServer::start().await;
+    let mut info = fixture("playback_info");
+    info["MediaSources"][0]["Bitrate"] = json!(6_000_000);
+    Mock::given(method("POST"))
+        .and(path(PLAYBACK_INFO))
+        .respond_with(ResponseTemplate::new(200).set_body_json(info))
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    let mut h = harness_on(
+        mock,
+        PlaybackTimings {
+            stall_limit: Duration::from_millis(40),
+            ..quiet()
+        },
+    )
+    .await;
+    h.start().await;
+    let loads = h.loads().len();
+    h.sink.send(PlayerEvent::Buffering(true));
+    let seen = events_until(&mut h.events, |e| {
+        matches!(e, PlaybackEvent::LowerQualityAdvised(_))
+    })
+    .await;
+    assert_eq!(
+        seen.last(),
+        Some(&PlaybackEvent::LowerQualityAdvised(QUALITIES[3])),
+        "the highest quality below the file's 6 Mb/s"
+    );
+    h.sink.send(PlayerEvent::Buffering(false));
+    wait_event(&mut h.events, waits(false)).await;
+    assert_eq!(h.loads().len(), loads, "the quality changes only on demand");
 }

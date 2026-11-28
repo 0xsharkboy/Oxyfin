@@ -44,5 +44,5 @@ body:
     id: logs
     attributes:
       label: Logs
-      description: Terminal output, if any.
+      description: In Oxyfin, open Settings > Diagnostics and click Copy logs, then paste here. If the copy fails, click Open folder and attach oxyfin.log.
       render: text

@@ -2,7 +2,7 @@
 
 use crate::client_info::{ClientInfo, authorization_header};
 use crate::{Error, Result, json};
-use reqwest::header::{ACCEPT, AUTHORIZATION};
+use reqwest::header::{ACCEPT, AUTHORIZATION, RANGE};
 use reqwest::{Client, Method};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -136,6 +136,31 @@ impl Http {
             .send(Method::DELETE, token, route, query, None::<&()>)
             .await?;
         decode(route, &bytes)
+    }
+
+    /// `GET route` for its first byte only, without reading the body.
+    pub(crate) async fn probe(
+        &self,
+        token: Option<&str>,
+        route: &str,
+        query: &[(&str, String)],
+    ) -> Result<()> {
+        let response = self
+            .client
+            .get(self.url(route, query))
+            .header(RANGE, "bytes=0-0")
+            .header(AUTHORIZATION, self.authorization(token))
+            .send()
+            .await
+            .map_err(|source| Error::Transport {
+                route: route.to_owned(),
+                source: source.without_url(),
+            })?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(Error::status(route, status.as_u16(), ""));
+        }
+        Ok(())
     }
 
     async fn send<B: Serialize + ?Sized>(

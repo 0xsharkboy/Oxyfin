@@ -62,6 +62,7 @@ fn card(index: usize) -> PageCard {
         watched: index.is_multiple_of(3),
         image: Default::default(),
         has_image: false,
+        no_menu: false,
     }
 }
 

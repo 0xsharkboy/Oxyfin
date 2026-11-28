@@ -57,3 +57,8 @@ This file is the single source of truth for planned work. An item is checked onl
 - [ ] Music, then other media types
 - [ ] Offline downloads
 - [ ] SyncPlay
+
+## Known limits
+
+- External image subtitles (`.sup`, `.idx`/`.sub` files beside the video) do not show; image subtitles inside the video file show when the file plays as is, not in a conversion.
+- A video stream mpv cannot decode while its audio plays is not detected: the sound plays over a black picture and no conversion is offered. Choosing a quality below the bitrate of the file makes the server convert it.

@@ -8,15 +8,21 @@ mod generated {
 pub mod app;
 mod back_cache;
 pub mod discord;
+pub mod fonts;
 pub mod generation;
+mod hover;
 pub mod images;
 #[cfg(target_os = "linux")]
 pub mod inhibit;
 pub mod launch;
 pub mod locale;
+pub mod logs;
+mod menu;
 #[cfg(target_os = "linux")]
 pub mod mpris;
+pub mod prefetch;
 pub mod present;
+mod rows;
 pub mod screens;
 pub mod state;
 #[cfg(feature = "mpv")]

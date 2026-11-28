@@ -29,6 +29,8 @@ pub enum VideoOutput {
 pub struct PlayerOptions {
     /// Where mpv sends decoded video.
     pub video_output: VideoOutput,
+    /// Volume to start at, in percent; mpv starts at full volume without one.
+    pub volume: Option<f64>,
 }
 
 /// A libmpv player instance.
@@ -40,6 +42,22 @@ pub struct Player {
     video_output: VideoOutput,
     shared: Arc<Shared>,
     event_thread: Option<JoinHandle<()>>,
+}
+
+/// The version of the libmpv in use, such as `mpv 0.40.0`, read from an instance that never
+/// plays anything.
+pub fn mpv_version() -> Result<String, PlayerError> {
+    let mpv = Mpv::with_initializer(|init| {
+        init.set_option("vo", "null")?;
+        init.set_option("ao", "null")?;
+        Ok(())
+    })
+    .map_err(|e| PlayerError::Create(describe(&e)))?;
+    mpv.get_property::<String>("mpv-version")
+        .map_err(|e| PlayerError::Property {
+            name: "mpv-version".to_owned(),
+            message: describe(&e),
+        })
 }
 
 impl Player {
@@ -63,6 +81,11 @@ impl Player {
                 }
             }
             init.set_option("hwdec", "auto-safe")?;
+            // Otherwise rendering blocks the interface thread until each frame's display time.
+            init.set_option("video-timing-offset", "0")?;
+            if let Some(volume) = options.volume {
+                init.set_option("volume", volume.clamp(0.0, 100.0))?;
+            }
             init.set_option("keep-open", "yes")?;
             init.set_option("keep-open-pause", "no")?;
             Ok(())
@@ -587,6 +610,7 @@ mod tests {
     fn headless() -> Player {
         let options = PlayerOptions {
             video_output: VideoOutput::None,
+            ..PlayerOptions::default()
         };
         Player::new(options, |_| {}).unwrap()
     }
@@ -597,6 +621,29 @@ mod tests {
 
     fn number(player: &Player, name: &str) -> f64 {
         read(player, name).unwrap().parse().unwrap()
+    }
+
+    #[test]
+    fn frames_are_handed_to_the_renderer_at_their_display_time() {
+        assert_eq!(number(&headless(), "video-timing-offset"), 0.0);
+    }
+
+    #[test]
+    fn the_mpv_version_names_the_library() {
+        let version = mpv_version().unwrap();
+        assert!(version.starts_with("mpv "), "{version}");
+        assert!(version.chars().any(|c| c.is_ascii_digit()), "{version}");
+    }
+
+    #[test]
+    fn the_player_starts_at_the_given_volume() {
+        let options = PlayerOptions {
+            video_output: VideoOutput::None,
+            volume: Some(40.0),
+        };
+        let player = Player::new(options, |_| {}).unwrap();
+        assert_eq!(number(&player, "volume"), 40.0);
+        assert_eq!(number(&headless(), "volume"), 100.0);
     }
 
     #[test]

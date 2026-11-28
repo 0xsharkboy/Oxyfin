@@ -4,7 +4,6 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use oxyfin::launch;
-use oxyfin::locale::select_language;
 use oxyfin::{App, AppWindow};
 use oxyfin_core::{Paths, TokenVault};
 use slint::platform::WindowEvent;
@@ -14,6 +13,8 @@ use slint::{BackendSelector, ComponentHandle, LogicalSize, PhysicalSize};
 const EXIT_GRACE: Duration = Duration::from_secs(3);
 /// How long the exit waits for the Discord activity to clear.
 const DISCORD_GRACE: Duration = Duration::from_secs(1);
+/// How long the window waits for the fallback fonts to be looked at.
+const FONTS_GRACE: Duration = Duration::from_millis(300);
 
 #[allow(clippy::print_stdout)]
 fn main() -> ExitCode {
@@ -21,8 +22,10 @@ fn main() -> ExitCode {
         println!("{}", launch::version_line());
         return ExitCode::SUCCESS;
     }
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-    match run() {
+    let paths = Paths::from_system();
+    oxyfin::logs::init(paths.as_ref().ok().map(oxyfin::logs::log_dir).as_deref());
+    log::info!("{} on {}", launch::version_line(), oxyfin::logs::system());
+    match paths.map_err(Into::into).and_then(run) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             log::error!("oxyfin failed to start: {error}");
@@ -31,7 +34,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
+fn run(paths: Paths) -> Result<(), Box<dyn std::error::Error>> {
     // An explicit SLINT_BACKEND (headless agent runs) picks its own backend and renderer.
     if std::env::var("SLINT_BACKEND").map_or(true, |value| value.trim().is_empty()) {
         BackendSelector::new()
@@ -45,7 +48,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .enable_all()
         .build()?;
 
-    let paths = Paths::from_system()?;
     let vault = if launch::enabled(std::env::var(launch::MEMORY_TOKENS_VAR).ok().as_deref()) {
         log::info!("tokens are kept in memory only");
         TokenVault::memory()
@@ -53,6 +55,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         TokenVault::system(&paths)
     };
     let window = AppWindow::new()?;
+    let fonts = oxyfin::fonts::prefer_drawn_in_background();
     // Needs the platform set up by AppWindow::new(); it applies when the window is first shown.
     slint::set_xdg_app_id(oxyfin::APP_ID)?;
     let scale = std::env::var(launch::SCALE_FACTOR_VAR)
@@ -82,8 +85,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             (None, _) => log::warn!("ignoring {}={value:?}", launch::WINDOW_SIZE_VAR),
         }
     }
-    select_language();
     let app = App::new(&window, runtime.handle().clone(), paths, vault)?;
+    app.apply_language();
+    app.read_mpv_version();
     #[cfg(feature = "mpv")]
     {
         let weak = std::rc::Rc::downgrade(&app);
@@ -111,6 +115,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let fullscreen =
         launch::fullscreen_requested(std::env::args_os().skip(1)) || app.start_fullscreen();
     window.window().set_fullscreen(fullscreen);
+    if let Some(fonts) = fonts
+        && !fonts.wait(FONTS_GRACE)
+    {
+        log::warn!("the window shows before the fallback fonts are all looked at");
+    }
     window.show()?;
     if fullscreen {
         // Asked again once the event loop runs: the first configure of a Wayland window can undo it.

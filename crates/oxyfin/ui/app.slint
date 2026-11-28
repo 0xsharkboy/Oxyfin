@@ -9,7 +9,7 @@ import { SignInScreen, FoundServer, ServerState, ServerStatus } from "screens/si
 import { QuickConnectScreen } from "screens/quick_connect.slint";
 import { HomeScreen, HomeBanner, HomeRow, HomeRowKind, HomeTitles } from "screens/home.slint";
 import { PlayerScreen } from "screens/player.slint";
-import { AuthorizeState, PlaybackChoice, SettingsScreen, SubtitleChoice, TokenStore } from "screens/settings.slint";
+import { AuthorizeState, PlaybackChoice, SettingsScreen, SettingsTitles, SubtitleChoice, TokenStore } from "screens/settings.slint";
 import { LibraryScreen, LibraryTitles } from "screens/library.slint";
 import { SearchScreen, SearchTitles } from "screens/search.slint";
 import { MovieScreen, MovieData } from "screens/movie.slint";
@@ -18,14 +18,25 @@ import { PersonScreen, PersonData, PersonFilter } from "screens/person.slint";
 import { PersonCardData, PersonJob } from "components/person_card.slint";
 import { CollectionScreen, CollectionData } from "screens/collection.slint";
 import { TopBarPage } from "components/top_bar.slint";
-import { NoticeBanner, NoticeData } from "components/notice_banner.slint";
+import { NoticeBanner, NoticeData, NoticeAction } from "components/notice_banner.slint";
+import { HoverCard, HoverCardOverlay, HoverDetails, HoverKind } from "components/hover_card.slint";
+import { Pointed } from "components/pointed.slint";
+import { ContextMenu, ContextMenuOverlay, MenuAction, MenuEntry } from "components/context_menu.slint";
+import { MouseBack } from "components/mouse_back.slint";
+import { Shortcut, ShortcutKey, Shortcuts, ShortcutsOverlay } from "components/shortcuts_overlay.slint";
 
 export { CardData, ChapterRow, Message, Messages, NextUp, QualityRow, SeekPreview, SkipKind, Skipped, StatRow, StatSection, TrackRow, TrickplayGrid } from "theme.slint";
 export { StatsTitles }
 export { SubtitleResult, SubtitleRowState, SubtitleSearch } from "components/subtitle_search.slint";
 export { FoundServer, ServerState, ServerStatus }
 export { HomeBanner, HomeRow, HomeRowKind, HomeTitles }
-export { NoticeData }
+export { BannerKind } from "components/banner.slint";
+export { NoticeData, NoticeAction }
+export { HoverCard, HoverDetails, HoverKind }
+export { ContextMenu, MenuAction, MenuEntry }
+export { MouseBack }
+export { Pointed }
+export { Shortcut, ShortcutKey, Shortcuts }
 export { LibraryTitles }
 export { SearchTitles }
 export { MovieData }
@@ -33,7 +44,7 @@ export { SeriesData, SeriesPlayKind, EpisodeData }
 export { PersonData, PersonFilter, PersonCardData, PersonJob }
 export { CollectionData }
 export { TopBarPage }
-export { AuthorizeState, PlaybackChoice, SubtitleChoice, TokenStore }
+export { AuthorizeState, PlaybackChoice, SettingsTitles, SubtitleChoice, TokenStore }
 
 // Mirrors the Rust `state::Screen` one to one.
 export enum Screen { starting, sign-in, quick-connect, home, library, search, movie, series, person, collection, player, settings }
@@ -63,6 +74,8 @@ export component AppWindow inherits Window {
     in property <HomeBanner> home-banner;
     in property <[HomeRow]> home-rows;
     in property <bool> home-settled;
+    // True during the first load of the home screen.
+    in property <bool> home-loading;
     callback play(id: string);
     callback open-item(id: string);
     callback open-settings();
@@ -139,6 +152,7 @@ export component AppWindow inherits Window {
     in property <image> series-backdrop;
     in property <bool> series-busy;
     in property <[string]> series-seasons;
+    in property <[string]> series-season-ids;
     in property <int> series-season: -1;
     in property <[EpisodeData]> series-episodes;
     in property <bool> series-episodes-loading;
@@ -188,6 +202,7 @@ export component AppWindow inherits Window {
     in property <string> player-title;
     in property <string> player-subtitle;
     in property <bool> player-loading;
+    in property <bool> player-buffering;
     in property <bool> player-has-error;
     in property <Message> player-error;
     in property <bool> player-video-active;
@@ -195,6 +210,10 @@ export component AppWindow inherits Window {
     in property <float> player-duration;
     in property <string> player-elapsed;
     in property <string> player-total;
+    // The time left, shown instead of the total when `player-time-remaining` is set.
+    in property <string> player-remaining;
+    in-out property <bool> player-time-remaining;
+    callback player-time-remaining-changed(remaining: bool);
     in property <bool> player-paused;
     in property <float> player-volume: 100;
     in property <bool> player-muted;
@@ -229,6 +248,7 @@ export component AppWindow inherits Window {
     callback toggle-fullscreen();
     callback player-cursor-hidden(x: length, y: length);
     callback player-command-stop();
+    callback player-command-retry();
     callback player-command-set-paused(paused: bool);
     callback player-command-seek(seconds: float);
     callback player-command-skip(direction: int);
@@ -273,12 +293,33 @@ export component AppWindow inherits Window {
     in-out property <AuthorizeState> settings-authorize-state;
     pure callback settings-code-ready(code: string) -> bool;
     callback settings-authorize(code: string);
+    in property <int> settings-image-cache-kb: -1;
+    callback settings-clear-image-cache();
+    in property <bool> settings-logs-copied;
+    // The last "Copy logs" could not reach the clipboard.
+    in property <bool> settings-logs-copy-failed;
+    callback settings-copy-logs();
+    callback settings-open-logs();
+    // Interface languages of the settings: the system one first, then each bundled one.
+    in property <[string]> settings-languages;
+    in property <int> settings-language;
+    callback settings-language-changed(index: int);
     in property <string> app-version;
     callback close-settings();
     callback sign-out();
 
     in property <NoticeData> notice;
     callback dismiss-notice();
+    callback notice-action();
+
+    // True while the pointer rests on something that must not move, or a menu is open over it.
+    out property <bool> content-held: Pointed.holder != 0 || ContextMenu.open;
+    callback content-released();
+    changed content-held => {
+        if !root.content-held {
+            root.content-released();
+        }
+    }
 
     title: "Oxyfin";
     background: transparent;
@@ -289,6 +330,11 @@ export component AppWindow inherits Window {
     forward-focus: keys;
     // The screens that take no focus of their own leave it here, where F11 works.
     changed screen => {
+        HoverCard.hide();
+        Pointed.reset();
+        ContextMenu.close();
+        ContextMenu.focus-id = "";
+        Shortcuts.close();
         if root.screen == Screen.starting || root.screen == Screen.sign-in || root.screen == Screen.quick-connect || root.screen == Screen.home || root.screen == Screen.library {
             keys.focus();
         }
@@ -302,7 +348,42 @@ export component AppWindow inherits Window {
                 root.toggle-fullscreen();
                 return accept;
             }
+            // The shortcuts dialog keeps the keys, and the focus stays where it was below it.
+            if Shortcuts.open {
+                if event.text == Key.Escape || event.text == "?" {
+                    Shortcuts.close();
+                }
+                return accept;
+            }
+            // The menu never takes the focus, so the focused element keeps it once the menu closes.
+            if ContextMenu.open {
+                ContextMenu.key(event);
+                return accept;
+            }
             reject
+        }
+        // Not captured: a text field keeps the `?` typed in it.
+        key-pressed(event) => {
+            if event.text == "?" && !event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta {
+                Shortcuts.show();
+                return accept;
+            }
+            reject
+        }
+
+        // Once the element given the focus back after a menu row is gone, such as a card taken
+        // out of its row, the focus comes back here and to the screen: keys keep working.
+        Timer {
+            interval: Theme.focus-check-interval;
+            running: ContextMenu.focus-id != "";
+            triggered => {
+                if ContextMenu.focus-answer != ContextMenu.focus-check {
+                    keys.focus();
+                    ContextMenu.focus-gone();
+                } else {
+                    ContextMenu.focus-held();
+                }
+            }
         }
 
         // The video is drawn under the interface, so the player screen leaves the window transparent.
@@ -353,6 +434,7 @@ export component AppWindow inherits Window {
             banner: root.home-banner;
             rows: root.home-rows;
             settled: root.home-settled;
+            loading: root.home-loading;
             open-tab(page) => {
                 root.open-tab(page);
             }
@@ -509,6 +591,7 @@ export component AppWindow inherits Window {
             backdrop: root.series-backdrop;
             busy: root.series-busy;
             seasons: root.series-seasons;
+            season-ids: root.series-season-ids;
             season: root.series-season;
             episodes: root.series-episodes;
             episodes-loading: root.series-episodes-loading;
@@ -628,6 +711,7 @@ export component AppWindow inherits Window {
             title: root.player-title;
             subtitle: root.player-subtitle;
             loading: root.player-loading;
+            buffering: root.player-buffering;
             has-error: root.player-has-error;
             error: root.player-error;
             video-active: root.player-video-active;
@@ -635,6 +719,11 @@ export component AppWindow inherits Window {
             duration: root.player-duration;
             elapsed: root.player-elapsed;
             total: root.player-total;
+            remaining: root.player-remaining;
+            time-remaining <=> root.player-time-remaining;
+            time-remaining-changed(remaining) => {
+                root.player-time-remaining-changed(remaining);
+            }
             paused: root.player-paused;
             volume: root.player-volume;
             muted: root.player-muted;
@@ -672,6 +761,9 @@ export component AppWindow inherits Window {
             }
             cursor-hidden(x, y) => {
                 root.player-cursor-hidden(x, y);
+            }
+            command-retry => {
+                root.player-command-retry();
             }
             command-set-paused(paused) => {
                 root.player-command-set-paused(paused);
@@ -776,6 +868,23 @@ export component AppWindow inherits Window {
             authorize(code) => {
                 root.settings-authorize(code);
             }
+            image-cache-kb: root.settings-image-cache-kb;
+            clear-image-cache => {
+                root.settings-clear-image-cache();
+            }
+            logs-copied: root.settings-logs-copied;
+            logs-copy-failed: root.settings-logs-copy-failed;
+            copy-logs => {
+                root.settings-copy-logs();
+            }
+            open-logs => {
+                root.settings-open-logs();
+            }
+            languages: root.settings-languages;
+            language: root.settings-language;
+            language-changed(index) => {
+                root.settings-language-changed(index);
+            }
             version: root.app-version;
             back => {
                 root.close-settings();
@@ -784,6 +893,10 @@ export component AppWindow inherits Window {
                 root.sign-out();
             }
         }
+
+        HoverCardOverlay { }
+
+        ContextMenuOverlay { }
 
         // Below the top bar of the screens that have one.
         if root.notice.visible: NoticeBanner {
@@ -794,6 +907,34 @@ export component AppWindow inherits Window {
             dismiss => {
                 root.dismiss-notice();
             }
+            act => {
+                root.notice-action();
+            }
         }
+
+        ShortcutsOverlay { }
+    }
+
+    // Hands text to the system clipboard, which Slint reaches only through a text input.
+    clipboard := TextInput {
+        visible: false;
+        enabled: false;
+        read-only: true;
+        single-line: false;
+        width: 0;
+        height: 0;
+    }
+
+    // Puts `text` on the clipboard and tells whether it got there: the platform reports no
+    // failure, so the clipboard is read back.
+    public function copy-to-clipboard(text: string) -> bool {
+        clipboard.text = text;
+        clipboard.select-all();
+        clipboard.copy();
+        clipboard.text = "";
+        clipboard.paste();
+        let copied = clipboard.text == text;
+        clipboard.text = "";
+        copied
     }
 }

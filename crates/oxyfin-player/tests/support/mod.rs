@@ -141,6 +141,7 @@ pub fn headless(on_event: impl Fn(PlayerEvent) + Send + 'static) -> Player {
     Player::new(
         PlayerOptions {
             video_output: VideoOutput::None,
+            ..PlayerOptions::default()
         },
         on_event,
     )

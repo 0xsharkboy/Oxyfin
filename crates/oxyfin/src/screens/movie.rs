@@ -9,7 +9,7 @@ use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 
 use crate::app::App;
 use crate::back_cache::Parked;
-use crate::images::{PageLoads, load_into};
+use crate::images::{PageLoads, load_artwork};
 use crate::present::{clock, core_error_message, image_size};
 use crate::screens::cast::{cast_cards, load_photos};
 use crate::screens::home::{banner_artwork, banner_box};
@@ -198,6 +198,11 @@ impl MovieController {
         window.set_movie_viewport_y(page.viewport_y);
     }
 
+    /// The interface language changed: the page drops its text, and loads again once shown.
+    pub(crate) fn forget(&self, app: &App) {
+        self.clear(app);
+    }
+
     fn clear(&self, app: &App) {
         self.loads.abort();
         self.instance.set(self.instance.get() + 1);
@@ -229,13 +234,21 @@ impl MovieController {
         };
         self.load.set(self.load.get() + 1);
         let load = self.load.get();
+        let last = match &*self.details.borrow() {
+            Some(_) => None,
+            None => catalog.last_movie(&ItemId::from(movie.as_str())),
+        };
+        let behind = last.is_some();
         if let Some(window) = app.window() {
             window.set_movie_error(SharedString::default());
+            if let Some(details) = last {
+                self.show(app, id, &window, details);
+            }
             window.set_movie_loading(self.details.borrow().is_none());
         }
         app.spawn(
             async move { catalog.movie(&ItemId::from(movie.as_str())).await },
-            move |app, result| app.movie.answered(app, load, id, result),
+            move |app, result| app.movie.answered(app, load, id, behind, result),
         );
     }
 
@@ -244,6 +257,7 @@ impl MovieController {
         app: &Rc<App>,
         load: u64,
         id: GenerationId,
+        behind: bool,
         result: Result<MovieDetails, CoreError>,
     ) {
         if self.load.get() != load || app.services().is_none_or(|(current, ..)| current != id) {
@@ -253,12 +267,8 @@ impl MovieController {
         window.set_movie_loading(false);
         match result {
             Ok(details) => {
-                *self.details.borrow_mut() = Some(details);
-                self.publish(app, id, &window);
-                if let Some(movie) = self.current.borrow().clone() {
-                    self.similar
-                        .request(app, &movie, AppWindow::set_movie_similar);
-                }
+                self.show(app, id, &window, details);
+                app.prefetch.idle(app);
             }
             Err(CoreError::SessionExpired) => app.dispatch(Msg::Expired(id)),
             Err(error) => {
@@ -269,8 +279,22 @@ impl MovieController {
                         .global::<Messages>()
                         .invoke_message_text(message, detail);
                     window.set_movie_error(text);
+                } else if behind {
+                    app.notify(core_error_message(&error).0);
                 }
             }
+        }
+    }
+
+    /// Shows `details` unless the page shows them already, and asks for similar titles.
+    fn show(&self, app: &Rc<App>, id: GenerationId, window: &AppWindow, details: MovieDetails) {
+        if self.details.borrow().as_ref() != Some(&details) {
+            *self.details.borrow_mut() = Some(details);
+            self.publish(app, id, window);
+        }
+        if let Some(movie) = self.current.borrow().clone() {
+            self.similar
+                .request(app, &movie, AppWindow::set_movie_similar);
         }
     }
 
@@ -315,7 +339,7 @@ impl MovieController {
             let size = image_size(POSTER_ARTWORK.0, POSTER_ARTWORK.1, scale);
             let (target, current) = (window.as_weak(), Rc::clone(&self.instance));
             self.loads
-                .track(load_into(app, id, &images, image, size, move |image| {
+                .track(load_artwork(app, id, &images, image, size, move |image| {
                     if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
                         window.set_movie_poster(image);
                     }
@@ -327,7 +351,7 @@ impl MovieController {
             let size = image_size(width, height, scale);
             let (target, current) = (window.as_weak(), Rc::clone(&self.instance));
             self.loads
-                .track(load_into(app, id, &images, image, size, move |image| {
+                .track(load_artwork(app, id, &images, image, size, move |image| {
                     if let (Some(window), true) = (target.upgrade(), current.get() == instance) {
                         window.set_movie_backdrop(image);
                     }

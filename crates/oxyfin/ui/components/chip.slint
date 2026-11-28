@@ -1,4 +1,6 @@
 import { Theme } from "../theme.slint";
+import { MouseBack } from "mouse_back.slint";
+import { ContextMenu, MenuKeys } from "context_menu.slint";
 import { LabelText } from "text.slint";
 
 // Filter, sort or genre pill; selected chips are filled with the accent.
@@ -6,7 +8,25 @@ export component Chip inherits Rectangle {
     in property <string> label;
     in property <bool> selected;
     in property <bool> enabled: true;
+    // Item whose context menu a right click or the menu keys open; empty for none.
+    in property <string> menu-id;
     callback clicked();
+
+    // Takes the focus back after a row of its menu chosen from the keyboard, also once rebuilt.
+    property <bool> focus-return: root.menu-id != "" && ContextMenu.focus-id == root.menu-id && ContextMenu.focus-row == "";
+    // Answers the window while it holds that focus.
+    property <int> focus-check: focus.has-focus && root.focus-return ? ContextMenu.focus-check : -1;
+
+    changed focus-check => {
+        if root.focus-check >= 0 {
+            ContextMenu.focus-answer = root.focus-check;
+        }
+    }
+    init => {
+        if root.focus-return {
+            focus.focus();
+        }
+    }
 
     accessible-role: button;
     accessible-label: label;
@@ -33,6 +53,12 @@ export component Chip inherits Rectangle {
     touch := TouchArea {
         enabled: root.enabled;
         mouse-cursor: pointer;
+        pointer-event(event) => {
+            MouseBack.handle(event);
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down && root.menu-id != "" {
+                ContextMenu.show(root.menu-id, false, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y, false, root.label, "");
+            }
+        }
         clicked => {
             focus.focus();
             root.activate();
@@ -43,9 +69,23 @@ export component Chip inherits Rectangle {
         enabled: root.enabled;
         // Clicks go to the TouchArea: a focusing FocusScope on top would swallow the first one.
         focus-on-click: false;
+        focus-gained => {
+            if !root.focus-return {
+                ContextMenu.focus-id = "";
+            }
+        }
+        focus-lost => {
+            if root.focus-return {
+                ContextMenu.focus-id = "";
+            }
+        }
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " {
                 root.activate();
+                return accept;
+            }
+            if MenuKeys.opens(event) && root.menu-id != "" {
+                ContextMenu.show(root.menu-id, false, root.absolute-position.x + Theme.space-lg, root.absolute-position.y + Theme.space-lg, true, root.label, "");
                 return accept;
             }
             reject

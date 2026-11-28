@@ -128,6 +128,8 @@ export component PlayerControls inherits Rectangle {
     in property <float> duration;
     in property <string> elapsed;
     in property <string> total;
+    in property <string> remaining;
+    in property <bool> time-remaining;
     in property <bool> paused;
     in property <bool> has-next;
     in property <float> volume;
@@ -138,12 +140,15 @@ export component PlayerControls inherits Rectangle {
     // Where the chapters start, as fractions of the seek bar.
     in property <[float]> chapter-marks;
     in property <bool> speed-open;
+    in property <bool> stats-open;
     in property <bool> fullscreen;
     in-out property <bool> scrubbing;
     // Where the pointer hovers or drags the seek bar, for the preview above it.
     out property <bool> seek-hovering: seek-bar.hovering;
     out property <length> seek-hover-x: layout.x + seek-bar.x + seek-bar.hover-x;
     out property <length> seek-top: layout.y + seek-bar.y;
+    // Speaker of the volume button, crossed out while muted.
+    out property <image> volume-icon: root.muted ? Icons.volume-muted : Icons.volume;
     callback toggle-pause();
     callback seek(seconds: float);
     callback skip(direction: int);
@@ -155,6 +160,8 @@ export component PlayerControls inherits Rectangle {
     callback toggle-tracks();
     callback toggle-chapters();
     callback toggle-speed();
+    callback toggle-stats();
+    callback toggle-time();
     callback toggle-fullscreen();
     callback seek-hovered(seconds: float);
 
@@ -244,9 +251,28 @@ export component PlayerControls inherits Rectangle {
                 }
             }
 
-            LabelText {
-                text: @tr("{} / {}", root.elapsed, root.total);
-                vertical-alignment: center;
+            time := Rectangle {
+                accessible-role: button;
+                accessible-label: @tr("Time display");
+                accessible-value: time-text.text;
+                accessible-action-default => {
+                    root.toggle-time();
+                }
+                width: time-text.preferred-width;
+
+                time-text := LabelText {
+                    accessible-role: none;
+                    height: parent.height;
+                    text: root.time-remaining ? @tr("{} / −{}", root.elapsed, root.remaining) : @tr("{} / {}", root.elapsed, root.total);
+                    vertical-alignment: center;
+                }
+
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.toggle-time();
+                    }
+                }
             }
 
             Rectangle {
@@ -260,9 +286,8 @@ export component PlayerControls inherits Rectangle {
                 IconButton {
 
                     focus-on-click: false;
-                    icon: Icons.volume;
+                    icon: root.volume-icon;
                     label: root.muted ? @tr("Unmute") : @tr("Mute");
-                    icon-color: root.muted ? Theme.text-muted : Theme.text-primary;
                     clicked => {
                         root.toggle-mute();
                     }
@@ -307,6 +332,16 @@ export component PlayerControls inherits Rectangle {
                 active: root.tracks-open;
                 clicked => {
                     root.toggle-tracks();
+                }
+            }
+
+            IconButton {
+                focus-on-click: false;
+                icon: Icons.activity;
+                label: @tr("Playback statistics");
+                active: root.stats-open;
+                clicked => {
+                    root.toggle-stats();
                 }
             }
 

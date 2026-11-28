@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { ContextMenu } from "context_menu.slint";
 import { BodyText, LabelText } from "text.slint";
 
 // Labelled single-line input of the sign-in screen.
@@ -64,6 +65,11 @@ export component TextField {
                         selection-background-color: Theme.accent;
                         selection-foreground-color: Theme.text-on-accent;
                         vertical-alignment: center;
+                        changed has-focus => {
+                            if self.has-focus {
+                                ContextMenu.focus-taken();
+                            }
+                        }
                         edited => {
                             root.edited(self.text);
                         }

@@ -1,3 +1,6 @@
+import { HoverCard } from "../components/hover_card.slint";
+import { MouseBack } from "../components/mouse_back.slint";
+import { ContextMenu } from "../components/context_menu.slint";
 import { Theme, CardData } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { TopBar, TopBarPage } from "../components/top_bar.slint";
@@ -9,6 +12,7 @@ import { CardStatus } from "../components/card.slint";
 import { EpisodeRow } from "../components/episode_row.slint";
 import { PosterRow } from "../components/poster_row.slint";
 import { CastRow, PersonCardData } from "../components/person_card.slint";
+import { Skeleton, DetailHeaderBones, PillBones, EpisodeRowBones } from "../components/skeleton.slint";
 import { BodyText } from "../components/text.slint";
 
 // What the main button of the series page does.
@@ -54,6 +58,8 @@ export component SeriesScreen inherits Rectangle {
     in property <image> backdrop;
     in property <bool> busy;
     in property <[string]> seasons;
+    // Identifier of each season, in the order of `seasons`.
+    in property <[string]> season-ids;
     // Index of the chosen season, -1 when the series has none.
     in property <int> season: -1;
     in property <[EpisodeData]> episodes;
@@ -83,11 +89,29 @@ export component SeriesScreen inherits Rectangle {
 
     background: Theme.bg-base;
     forward-focus: keys;
+    // The element given the focus back after a menu row is gone: the page takes the keys.
+    property <int> focus-lost: ContextMenu.focus-lost;
+    changed focus-lost => {
+        keys.focus();
+    }
 
     // False once another screen is shown: the page being left must not take the focus back.
     in property <bool> active: true;
     // Scroll offset, kept by the window while another screen shows; Rust puts it back to the top.
     in-out property <length> viewport-y <=> flick.content-y;
+
+    // Whether the header bones of this load showed: the episode bones then take over at once.
+    property <bool> header-bones-shown;
+    changed loading => {
+        if self.loading {
+            self.header-bones-shown = false;
+        }
+    }
+    changed episodes-loading => {
+        if !self.episodes-loading {
+            self.header-bones-shown = false;
+        }
+    }
 
     // Another series may replace this one without a new page, and the clicked card took the focus.
     changed loaded => {
@@ -107,18 +131,20 @@ export component SeriesScreen inherits Rectangle {
         }
 
         flick := Flickable {
+            mouse-drag-pan-enabled: false;
             height: parent.height;
             content-width: self.width;
             content-height: max(content.preferred-height, self.height);
+            changed viewport-y => {
+                HoverCard.scrolled();
+            }
 
             // The mouse back button, on whatever lies behind the content.
             TouchArea {
                 width: flick.content-width;
                 height: flick.content-height;
                 pointer-event(event) => {
-                    if event.button == PointerEventButton.back && event.kind == PointerEventKind.up {
-                        root.back();
-                    }
+                    MouseBack.handle(event);
                 }
             }
 
@@ -153,7 +179,7 @@ export component SeriesScreen inherits Rectangle {
 
                     Button {
                         label: root.series.play-kind == SeriesPlayKind.resume-episode ? @tr("Resume {}", root.series.play-label) : (root.series.play-kind == SeriesPlayKind.play-episode ? @tr("Play {}", root.series.play-label) : @tr("Play"));
-                        icon: Icons.play;
+                        icon: Icons.play-on-accent;
                         clicked => {
                             root.play();
                         }
@@ -176,6 +202,7 @@ export component SeriesScreen inherits Rectangle {
 
                             for name[index] in root.seasons: Chip {
                                 label: name;
+                                menu-id: index < root.season-ids.length ? root.season-ids[index] : "";
                                 selected: index == root.season;
                                 clicked => {
                                     root.select-season(index);
@@ -187,6 +214,7 @@ export component SeriesScreen inherits Rectangle {
                             spacing: Theme.space-sm;
 
                             for episode in root.episodes: EpisodeRow {
+                                menu-id: episode.id;
                                 number: episode.number;
                                 title: episode.title;
                                 overview: episode.overview;
@@ -199,12 +227,20 @@ export component SeriesScreen inherits Rectangle {
                                 }
                             }
                         }
+
+                        if root.episodes-loading: Skeleton {
+                            delayed: !root.header-bones-shown;
+
+                            VerticalLayout {
+                                spacing: Theme.space-sm;
+
+                                EpisodeRowBones { }
+                                EpisodeRowBones { }
+                                EpisodeRowBones { }
+                            }
+                        }
                     }
 
-                    if root.episodes-loading: BodyText {
-                        text: @tr("Loading");
-                        color: Theme.text-secondary;
-                    }
                     if root.episodes-error != "": BodyText {
                         text: root.episodes-error;
                         color: Theme.text-secondary;
@@ -238,6 +274,7 @@ export component SeriesScreen inherits Rectangle {
                     padding-bottom: Theme.space-3xl;
 
                     PosterRow {
+                        row-key: "similar";
                         title: @tr("More like this");
                         items: root.similar;
                         clicked(id) => {
@@ -263,9 +300,22 @@ export component SeriesScreen inherits Rectangle {
                             }
                         }
                     }
-                    if root.loading: BodyText {
-                        text: @tr("Loading");
-                        color: Theme.text-secondary;
+                    if root.loading: Skeleton {
+                        appeared => {
+                            root.header-bones-shown = true;
+                        }
+
+                        VerticalLayout {
+                            DetailHeaderBones { }
+                            VerticalLayout {
+                                padding-top: Theme.space-3xl + Theme.space-lg;
+                                spacing: Theme.space-sm;
+
+                                PillBones { }
+                                EpisodeRowBones { }
+                                EpisodeRowBones { }
+                            }
+                        }
                     }
                     if root.error != "": BodyText {
                         text: root.error;

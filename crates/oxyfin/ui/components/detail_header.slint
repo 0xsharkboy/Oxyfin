@@ -1,4 +1,5 @@
-import { Theme } from "../theme.slint";
+import { Messages, Theme } from "../theme.slint";
+import { MouseBack } from "mouse_back.slint";
 import { Icons } from "../icons.slint";
 import { BodyText, DisplayText, LabelText } from "text.slint";
 import { Button, ButtonStyle } from "button.slint";
@@ -47,7 +48,6 @@ component CollectionLink inherits Rectangle {
                 source: Icons.layers;
                 width: Theme.link-icon-size;
                 height: Theme.link-icon-size;
-                colorize: Theme.text-primary;
             }
         }
         LabelText {
@@ -62,13 +62,15 @@ component CollectionLink inherits Rectangle {
                 source: Icons.chevron-right;
                 width: Theme.link-icon-size;
                 height: Theme.link-icon-size;
-                colorize: Theme.text-primary;
             }
         }
     }
 
     TouchArea {
         mouse-cursor: pointer;
+        pointer-event(event) => {
+            MouseBack.handle(event);
+        }
         clicked => {
             root.clicked();
         }
@@ -104,10 +106,6 @@ export component DetailHeader inherits Rectangle {
     callback toggle-watched();
     callback toggle-favorite();
     callback open-collection(index: int);
-
-    pure function duration(total: int) -> string {
-        total >= 60 ? @tr("{}h {}m", floor(total / 60), mod(total, 60)) : @tr("{}m", total)
-    }
 
     accessible-role: groupbox;
     accessible-label: root.title;
@@ -187,7 +185,7 @@ export component DetailHeader inherits Rectangle {
                         text: root.year;
                     }
                     if root.minutes > 0: LabelText {
-                        text: root.duration(root.minutes);
+                        text: Messages.duration(root.minutes);
                     }
                     if root.season-count > 0: LabelText {
                         text: @tr("{n} season" | "{n} seasons" % root.season-count);
@@ -199,10 +197,9 @@ export component DetailHeader inherits Rectangle {
                             alignment: center;
 
                             Image {
-                                source: Icons.star;
+                                source: Icons.star-accent;
                                 width: 16px;
                                 height: 16px;
-                                colorize: Theme.accent;
                             }
                         }
                         LabelText {
@@ -276,8 +273,7 @@ export component DetailHeader inherits Rectangle {
                         }
                     }
                     IconButton {
-                        icon: root.favorite ? Icons.heart-filled : Icons.heart;
-                        icon-color: root.favorite ? Theme.accent : Theme.text-primary;
+                        icon: root.favorite ? Icons.heart-filled-accent : Icons.heart;
                         label: root.favorite ? @tr("Remove from favorites") : @tr("Add to favorites");
                         enabled: !root.busy;
                         clicked => {

@@ -4,14 +4,17 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use oxyfin_api::ItemId;
 use oxyfin_core::{
-    BrowseQuery, BrowseSource, ContentKind, CoreError, ItemSummary, Page, SortField, WatchFilter,
+    BrowseQuery, BrowseSource, ContentKind, CoreError, ItemSummary, Page, SortField, UserState,
+    WatchFilter,
 };
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::app::App;
 use crate::images::{PageLoads, load_into};
 use crate::present::{card, core_error_message, detail_target, image_size};
+use crate::rows;
 use crate::state::{GenerationId, LibraryTab, Msg, Screen};
 use crate::{AppWindow, CardData, LibraryTitles, Messages};
 
@@ -77,6 +80,23 @@ fn source_of(tab: LibraryTab) -> BrowseSource {
     }
 }
 
+/// The first page of `tab` with the settings it opens with.
+pub(crate) fn first_page(tab: LibraryTab) -> BrowseQuery {
+    query(tab, LibrarySettings::default(), 0, PAGE_SIZE)
+}
+
+fn query(tab: LibraryTab, settings: LibrarySettings, start: u32, limit: u32) -> BrowseQuery {
+    BrowseQuery {
+        source: source_of(tab),
+        sort: settings.sort,
+        descending: settings.descending,
+        genre: settings.genre,
+        watch: settings.watch,
+        start,
+        limit,
+    }
+}
+
 /// Whether the next page must be requested now.
 pub(crate) fn should_load_more(loaded: usize, total: u32, in_flight: bool, ready: bool) -> bool {
     ready && !in_flight && loaded < total as usize
@@ -117,6 +137,12 @@ pub(crate) struct LibraryController {
     genre_names: Rc<VecModel<SharedString>>,
     total: Cell<u32>,
     in_flight: Cell<bool>,
+    // An answer waits until nothing points at what it moves.
+    held_back: Cell<bool>,
+    // The end of the grid came near while a request was on its way.
+    more_wanted: Cell<bool>,
+    // First item and number of items of the last request.
+    asked: Cell<(u32, u32)>,
     ready: Cell<bool>,
     more_failed: Cell<bool>,
     loads: PageLoads,
@@ -134,6 +160,9 @@ impl LibraryController {
         };
         if self.tab.get() == Some(*tab) {
             self.load_missing_posters(app);
+            if self.ready.get() {
+                app.prefetch.idle(app);
+            }
             return;
         }
         self.clear(app);
@@ -144,7 +173,24 @@ impl LibraryController {
             self.publish(&window);
         }
         self.load_genres(app);
-        self.request(app, 0, true);
+        self.open_first_page(app);
+    }
+
+    /// Shows the first page of the settings as the server last answered it, if it did, and asks
+    /// for it anew.
+    fn open_first_page(&self, app: &Rc<App>) {
+        let (Some(tab), Some((id, catalog, _)), Some(window)) =
+            (self.tab.get(), app.services(), app.window())
+        else {
+            return;
+        };
+        let last = catalog.last_browse(&self.query(tab, 0, PAGE_SIZE));
+        let Some(page) = last else {
+            return self.request(app, 0, PAGE_SIZE, Ask::First);
+        };
+        self.loads.abort();
+        self.show_page(app, id, &window, 0, page);
+        self.request(app, 0, PAGE_SIZE, Ask::Behind);
     }
 
     /// Loads again the posters of the cards still without one, after their loads were aborted.
@@ -167,10 +213,34 @@ impl LibraryController {
         load_posters(app, id, &window, &self.cards, &missing, &self.loads);
     }
 
-    /// The page came back from the player.
+    /// The page came back from the player or holds stale data: every page loaded is asked again
+    /// in one request, and the grid keeps its place; an answer that moves cards waits for the
+    /// pointer, and a failure keeps the grid.
     pub(crate) fn refresh(&self, app: &Rc<App>) {
+        let shown = !self.items.borrow().is_empty();
+        self.ask_loaded(app, if shown { Ask::Behind } else { Ask::Again });
+    }
+
+    /// Asks again for every page loaded, in one request.
+    fn ask_loaded(&self, app: &Rc<App>, ask: Ask) {
         if self.tab.get().is_some() {
-            self.request(app, 0, false);
+            let loaded = u32::try_from(self.items.borrow().len()).unwrap_or(u32::MAX);
+            self.request(app, 0, loaded.max(PAGE_SIZE), ask);
+        }
+    }
+
+    /// Item `id` changed to `user`: its card shows it at once, and the pages are asked again only
+    /// when the change can take the card out of the grid.
+    pub(crate) fn patch(&self, app: &Rc<App>, id: &ItemId, user: &UserState) {
+        let Some(tab) = self.tab.get() else { return };
+        patch_card(&self.items, &self.cards, id, user);
+        if self.settings(tab).watch != WatchFilter::All || tab == LibraryTab::Favorites {
+            // The user's own change: the card leaves at once.
+            self.ask_loaded(app, Ask::Again);
+        } else if self.in_flight.get() {
+            // The answer on its way may hold the item as it was: it is asked for again.
+            let (start, limit) = self.asked.get();
+            self.request(app, start, limit, Ask::Again);
         }
     }
 
@@ -239,6 +309,12 @@ impl LibraryController {
     /// The end of the grid is near: asks for the next page when there is one.
     pub(crate) fn near_end(&self, app: &Rc<App>) {
         let loaded = self.items.borrow().len();
+        if self.held_back.get() && loaded < self.total.get() as usize {
+            // Scrolling moves the cards anyway, and the next page follows that answer.
+            self.more_wanted.set(true);
+            return app.run_waiting();
+        }
+        self.more_wanted.set(self.in_flight.get());
         if self.tab.get().is_some()
             && !self.more_failed.get()
             && should_load_more(
@@ -248,7 +324,7 @@ impl LibraryController {
                 self.ready.get(),
             )
         {
-            self.request(app, loaded as u32, false);
+            self.request(app, loaded as u32, PAGE_SIZE, Ask::Again);
         }
     }
 
@@ -256,14 +332,15 @@ impl LibraryController {
     pub(crate) fn retry(&self, app: &Rc<App>) {
         if self.tab.get().is_some() {
             self.load_genres(app);
-            self.request(app, 0, true);
+            self.request(app, 0, PAGE_SIZE, Ask::First);
         }
     }
 
     /// Asks again for the page after the last one loaded, which failed.
     pub(crate) fn retry_more(&self, app: &Rc<App>) {
         if self.tab.get().is_some() {
-            self.request(app, self.items.borrow().len() as u32, false);
+            let loaded = self.items.borrow().len() as u32;
+            self.request(app, loaded, PAGE_SIZE, Ask::Again);
         }
     }
 
@@ -284,7 +361,7 @@ impl LibraryController {
         if let Some(window) = app.window() {
             self.publish(&window);
         }
-        self.request(app, 0, true);
+        self.open_first_page(app);
     }
 
     fn publish(&self, window: &AppWindow) {
@@ -314,11 +391,18 @@ impl LibraryController {
         window.set_library_genre(genre.unwrap_or(0));
     }
 
+    /// The interface language changed: the page drops its text, and loads again once shown.
+    pub(crate) fn forget(&self, app: &App) {
+        self.clear(app);
+    }
+
     fn clear(&self, app: &App) {
         self.load.set(self.load.get() + 1);
         self.epoch.set(self.epoch.get() + 1);
         self.tab.set(None);
         self.in_flight.set(false);
+        self.more_wanted.set(false);
+        self.held_back.set(false);
         self.more_failed.set(false);
         self.ready.set(false);
         self.total.set(0);
@@ -344,6 +428,9 @@ impl LibraryController {
         };
         let epoch = self.epoch.get();
         let source = source_of(tab);
+        if let Some(names) = catalog.last_genres(&source) {
+            self.genres_loaded(app, names);
+        }
         app.spawn(
             async move { catalog.genres(&source).await },
             move |app, result| {
@@ -362,21 +449,29 @@ impl LibraryController {
 
     fn genres_loaded(&self, app: &App, names: Vec<String>) {
         let Some(window) = app.window() else { return };
+        if *self.genres.borrow() == names {
+            return;
+        }
         *self.genres.borrow_mut() = names;
         self.publish(&window);
     }
 
-    /// Requests the page starting at `start`. A first page replaces the content;
-    /// `clear` empties the grid at once instead of when the answer arrives.
-    fn request(&self, app: &Rc<App>, start: u32, clear: bool) {
+    fn query(&self, tab: LibraryTab, start: u32, limit: u32) -> BrowseQuery {
+        query(tab, self.settings(tab), start, limit)
+    }
+
+    /// Requests `limit` items starting at `start`. A first page replaces the content.
+    fn request(&self, app: &Rc<App>, start: u32, limit: u32, ask: Ask) {
         let (Some(tab), Some((id, catalog, _))) = (self.tab.get(), app.services()) else {
             return;
         };
         self.load.set(self.load.get() + 1);
         let load = self.load.get();
         self.in_flight.set(true);
+        self.held_back.set(false);
+        self.asked.set((start, limit));
         self.more_failed.set(false);
-        if start == 0 && clear {
+        if start == 0 && ask == Ask::First {
             self.ready.set(false);
             self.total.set(0);
             self.loads.abort();
@@ -392,19 +487,10 @@ impl LibraryController {
                 window.set_library_loading_more(true);
             }
         }
-        let settings = self.settings(tab);
-        let query = BrowseQuery {
-            source: source_of(tab),
-            sort: settings.sort,
-            descending: settings.descending,
-            genre: settings.genre,
-            watch: settings.watch,
-            start,
-            limit: PAGE_SIZE,
-        };
+        let query = self.query(tab, start, limit);
         app.spawn(
             async move { catalog.browse(&query).await },
-            move |app, result| app.library.answered(app, load, id, start, result),
+            move |app, result| app.library.answered(app, load, id, start, ask, result),
         );
     }
 
@@ -414,13 +500,33 @@ impl LibraryController {
         load: u64,
         id: GenerationId,
         start: u32,
+        ask: Ask,
         result: Result<Page<ItemSummary>, CoreError>,
     ) {
-        if self.load.get() != load || app.services().is_none_or(|(current, ..)| current != id) {
+        if !self.current(app, load, id) {
             return;
         }
-        self.in_flight.set(false);
         let Some(window) = app.window() else { return };
+        if let Ok(page) = &result
+            && ask == Ask::Behind
+            && !self.holds_items(&page.items)
+        {
+            let page = page.clone();
+            self.held_back.set(true);
+            // Still in flight: a change made meanwhile asks for it again.
+            return app.when_free(move |app| {
+                let controller = &app.library;
+                if let Some(window) = app.window()
+                    && controller.current(app, load, id)
+                {
+                    controller.held_back.set(false);
+                    controller.in_flight.set(false);
+                    controller.show_page(app, id, &window, start, page);
+                    controller.resume_more(app);
+                }
+            });
+        }
+        self.in_flight.set(false);
         window.set_library_loading(false);
         window.set_library_loading_more(false);
         let page = match result {
@@ -428,7 +534,10 @@ impl LibraryController {
             Err(CoreError::SessionExpired) => return app.dispatch(Msg::Expired(id)),
             Err(error) => {
                 log::warn!("cannot load the library page: {error}");
-                if start == 0 {
+                if ask == Ask::Behind {
+                    app.notify(core_error_message(&error).0);
+                    self.resume_more(app);
+                } else if start == 0 {
                     let (message, detail) = core_error_message(&error);
                     let text = window
                         .global::<Messages>()
@@ -441,24 +550,98 @@ impl LibraryController {
                 return;
             }
         };
-        let previous: Vec<CardData> = if start == 0 {
-            self.cards.iter().collect()
-        } else {
-            Vec::new()
-        };
-        if start == 0 {
-            self.items.borrow_mut().clear();
-            self.cards.set_vec(Vec::new());
-        }
+        self.show_page(app, id, &window, start, page);
+        self.resume_more(app);
+    }
+
+    fn current(&self, app: &App, load: u64, id: GenerationId) -> bool {
+        self.load.get() == load && app.services().is_some_and(|(current, ..)| current == id)
+    }
+
+    /// Whether the grid shows `items`, in that order.
+    fn holds_items(&self, items: &[ItemSummary]) -> bool {
+        let shown = self.items.borrow();
+        shown.len() == items.len() && shown.iter().zip(items).all(|(old, new)| old.id == new.id)
+    }
+
+    fn show_page(
+        &self,
+        app: &Rc<App>,
+        id: GenerationId,
+        window: &AppWindow,
+        start: u32,
+        page: Page<ItemSummary>,
+    ) {
         self.ready.set(true);
         self.total.set(page.total);
         window.set_library_total(i32::try_from(page.total).unwrap_or(i32::MAX));
-        let (new_cards, missing) = cards_with_posters(&page.items, &previous);
-        self.items.borrow_mut().extend(page.items.iter().cloned());
-        for data in new_cards {
-            self.cards.push(data);
+        let missing = add_page(&self.items, &self.cards, start, page.items);
+        load_posters(app, id, window, &self.cards, &missing, &self.loads);
+    }
+
+    /// Asks for the next page when the end of the grid came near during a request.
+    fn resume_more(&self, app: &Rc<App>) {
+        app.prefetch.idle(app);
+        if self.more_wanted.take() {
+            self.near_end(app);
         }
-        load_posters(app, id, &window, &self.cards, &missing, &self.loads);
+    }
+}
+
+/// How a page of a library is asked for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Ask {
+    /// The grid is emptied at once.
+    First,
+    /// The grid stays until the answer comes.
+    Again,
+    /// The grid shows the last answer; a new one waits until nothing points at what it moves.
+    Behind,
+}
+
+/// Adds the items of a page starting at `start` to a grid; a first page replaces the grid,
+/// keeping the cards that stay the same. Returns the items whose poster has to be loaded.
+pub(crate) fn add_page(
+    items: &RefCell<Vec<ItemSummary>>,
+    cards: &VecModel<CardData>,
+    start: u32,
+    page: Vec<ItemSummary>,
+) -> Vec<ItemSummary> {
+    if start != 0 {
+        let (new_cards, missing) = cards_with_posters(&page, &[]);
+        items.borrow_mut().extend(page);
+        for data in new_cards {
+            cards.push(data);
+        }
+        return missing;
+    }
+    let previous: Vec<CardData> = cards.iter().collect();
+    let (new_cards, missing) = cards_with_posters(&page, &previous);
+    *items.borrow_mut() = page;
+    rows::update(cards, new_cards);
+    missing
+}
+
+/// Shows `user` on the card of item `id`, keeping its poster.
+pub(crate) fn patch_card(
+    items: &RefCell<Vec<ItemSummary>>,
+    cards: &VecModel<CardData>,
+    id: &ItemId,
+    user: &UserState,
+) {
+    let mut items = items.borrow_mut();
+    let Some(item) = items.iter_mut().find(|item| item.id == *id) else {
+        return;
+    };
+    item.user = user.clone();
+    let Some(index) = cards.iter().position(|card| card.id == item.id.as_str()) else {
+        return;
+    };
+    if let Some(old) = cards.row_data(index) {
+        let mut data = card(item);
+        data.image = old.image;
+        data.has_image = old.has_image;
+        cards.set_row_data(index, data);
     }
 }
 
@@ -527,16 +710,18 @@ pub(crate) fn load_posters(
         };
         let cards = Rc::clone(cards);
         let item_id: SharedString = item.id.as_str().into();
-        loads.track(load_into(app, id, &images, poster, size, move |image| {
-            let Some(index) = cards.iter().position(|card| card.id == item_id) else {
-                return;
-            };
-            if let Some(mut data) = cards.row_data(index) {
-                data.image = image;
-                data.has_image = true;
-                cards.set_row_data(index, data);
-            }
-        }));
+        loads.once(format!("{item_id} {}", poster.tag), || {
+            load_into(app, id, &images, poster, size, move |image| {
+                let Some(index) = cards.iter().position(|card| card.id == item_id) else {
+                    return;
+                };
+                if let Some(mut data) = cards.row_data(index) {
+                    data.image = image;
+                    data.has_image = true;
+                    cards.set_row_data(index, data);
+                }
+            })
+        });
     }
 }
 
@@ -558,6 +743,7 @@ mod tests {
             backdrop: None,
             thumb: None,
             duration: None,
+            overview: None,
             user: UserState::default(),
         }
     }

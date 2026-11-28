@@ -1,10 +1,11 @@
 //! Domain models displayed by the UI, converted from API DTOs.
 
 use oxyfin_api::{BaseItemDto, BaseItemKind, BaseItemPerson, ImageType, ItemId, UserItemDataDto};
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 /// Kind of item the UI can display.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ItemKind {
     /// A movie.
     Movie,
@@ -19,7 +20,7 @@ pub enum ItemKind {
 }
 
 /// Reference to an image of an item.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ImageRef {
     /// Item owning the image.
     pub item_id: ItemId,
@@ -32,7 +33,7 @@ pub struct ImageRef {
 }
 
 /// State of an item for the signed-in user.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct UserState {
     /// Whether the item was played.
     pub played: bool,
@@ -129,7 +130,7 @@ fn duration(dto: &BaseItemDto) -> Option<Duration> {
 }
 
 /// Compact description of a movie, video, series, episode or box set, for lists and cards.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ItemSummary {
     /// Identifier of the item.
     pub id: ItemId,
@@ -153,6 +154,8 @@ pub struct ItemSummary {
     pub thumb: Option<ImageRef>,
     /// Duration.
     pub duration: Option<Duration>,
+    /// Synopsis, when the list asked for it.
+    pub overview: Option<String>,
     /// State for the signed-in user.
     pub user: UserState,
 }
@@ -191,6 +194,7 @@ impl ItemSummary {
             backdrop: backdrop(dto),
             thumb,
             duration: duration(dto),
+            overview: non_empty(dto.overview.as_deref()),
             user: UserState::from_dto(dto.user_data.as_ref()),
         })
     }
@@ -247,7 +251,7 @@ impl Person {
     fn from_dto(dto: &BaseItemPerson) -> Self {
         Self {
             id: dto.id.clone(),
-            name: dto.name.clone(),
+            name: dto.name.trim().to_owned(),
             role: non_empty(dto.role.as_deref()),
             kind: PersonKind::from_type(dto.r#type.as_deref()),
             also: None,
@@ -383,6 +387,35 @@ impl PersonTitle {
             .filter(|credit| credit.id.as_ref() == Some(person))
             .find_map(|credit| non_empty(credit.role.as_deref()));
         Some(Self { summary, role })
+    }
+}
+
+/// What a card shows about an item when it is hovered.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ItemBrief {
+    /// Summary, with the overview.
+    pub summary: ItemSummary,
+    /// Genre names.
+    pub genres: Vec<String>,
+    /// Average community rating, out of 10.
+    pub community_rating: Option<f32>,
+    /// Number of seasons of a series, when the server counted any.
+    pub season_count: Option<u32>,
+}
+
+impl ItemBrief {
+    /// Converts a DTO; returns `None` for kinds the UI does not display.
+    pub fn from_dto(dto: &BaseItemDto) -> Option<Self> {
+        let summary = ItemSummary::from_dto(dto)?;
+        let season_count = dto
+            .child_count
+            .filter(|count| summary.kind == ItemKind::Series && *count > 0);
+        Some(Self {
+            summary,
+            genres: dto.genres.clone(),
+            community_rating: dto.community_rating,
+            season_count,
+        })
     }
 }
 
@@ -553,6 +586,31 @@ impl SeriesDetails {
     }
 }
 
+/// An item a context menu acts on, with the state its actions depend on.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MenuTarget {
+    /// A movie or a standalone video.
+    Movie(ItemSummary),
+    /// An episode.
+    Episode(Episode),
+    /// A series.
+    Series {
+        /// The series.
+        summary: ItemSummary,
+        /// Episode its play action starts, if any is left.
+        next_episode: Option<Box<Episode>>,
+    },
+    /// A season of a series.
+    Season {
+        /// The season.
+        season: Season,
+        /// Series the season belongs to.
+        series_id: ItemId,
+        /// Name of that series, when the server reports it.
+        series_name: Option<String>,
+    },
+}
+
 /// A box set an item belongs to.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CollectionLink {
@@ -605,7 +663,7 @@ impl CollectionDetails {
 }
 
 /// Kind of content a library holds.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum LibraryKind {
     /// Movies.
     Movies,
@@ -618,7 +676,7 @@ pub enum LibraryKind {
 }
 
 /// A library of the server.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Library {
     /// Identifier of the library.
     pub id: ItemId,
@@ -646,7 +704,7 @@ impl Library {
 }
 
 /// A page of results.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Page<T> {
     /// Items of this page.
     pub items: Vec<T>,

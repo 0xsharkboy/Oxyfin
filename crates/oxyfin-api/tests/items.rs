@@ -187,6 +187,7 @@ async fn resume_contains_the_started_movie() {
             .and(authorization_is(Some(TEST_TOKEN)))
             .and(query_param("userId", TEST_USER_ID))
             .and(query_param("limit", "12"))
+            .and(query_param("fields", "Overview"))
             .respond_with(ResponseTemplate::new(200).set_body_json(&body))
             .expect(1)
             .mount(&mock)

@@ -19,6 +19,9 @@ use crate::{AppWindow, Message, SubtitleResult, SubtitleRowState, SubtitleSearch
 /// Gives the catalog of the signed-in session, if any.
 pub type CatalogSource = Rc<dyn Fn() -> Option<Catalog>>;
 
+/// Gives the ISO 639-1 code of the language the interface shows.
+pub type LanguageSource = Rc<dyn Fn() -> String>;
+
 /// What the search keeps between its callbacks.
 #[derive(Default)]
 struct State {
@@ -31,7 +34,7 @@ struct State {
 struct Search {
     window: slint::Weak<AppWindow>,
     runtime: Handle,
-    interface_language: String,
+    interface_language: LanguageSource,
     catalog: CatalogSource,
     send: Rc<dyn Fn(PlaybackCommand)>,
     state: RefCell<State>,
@@ -39,21 +42,21 @@ struct Search {
 
 /// Wires the subtitle search of `window`.
 ///
-/// `interface_language` is the ISO 639-1 code of the language the interface
-/// shows, offered first. Searches and downloads go through the catalog that
+/// `interface_language` gives the language the interface shows when the search
+/// opens, offered first. Searches and downloads go through the catalog that
 /// `catalog` gives at that time on `runtime`; once a download ends,
 /// [`PlaybackCommand::ReloadSubtitles`] goes to `send`.
 pub fn bind(
     window: &AppWindow,
     runtime: Handle,
-    interface_language: &str,
+    interface_language: LanguageSource,
     catalog: CatalogSource,
     send: Rc<dyn Fn(PlaybackCommand)>,
 ) {
     let search = Rc::new(Search {
         window: window.as_weak(),
         runtime,
-        interface_language: interface_language.to_owned(),
+        interface_language,
         catalog,
         send,
         state: RefCell::default(),
@@ -187,8 +190,9 @@ impl Search {
         };
         let global = window.global::<SubtitleSearch>();
         let audio = global.get_audio_language();
+        let interface_language = (self.interface_language)();
         let chips = language_chips(
-            &self.interface_language,
+            &interface_language,
             Some(audio.as_str()).filter(|audio| !audio.is_empty()),
         );
         global.set_languages(strings(&chips));

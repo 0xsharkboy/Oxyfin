@@ -11,6 +11,7 @@ mod queue;
 mod refresh;
 mod reporter;
 mod segments;
+mod stalls;
 mod track_memory;
 mod tracks;
 mod types;

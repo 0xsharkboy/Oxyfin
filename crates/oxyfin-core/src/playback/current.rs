@@ -5,8 +5,9 @@ use std::time::Duration;
 use oxyfin_api::{ItemId, MediaSourceInfo, PlayMethod, PlaySessionId, PlaybackReport, Ticks};
 use oxyfin_player::{Track, TrackId, TrackKind};
 
-use super::loader::Resume;
+use super::loader::{LoadRequest, Resume};
 use super::segments::{SkippableSegment, active};
+use super::stalls::Stalls;
 use super::tracks::{Delivery, TrackMap};
 use super::{AudioOption, Chapter, SubtitleOption};
 use crate::models::Episode;
@@ -34,6 +35,8 @@ pub(super) struct Current {
     pub(super) delivery: Delivery,
     /// State to restore once the media is loaded, when it loads again.
     pub(super) resume: Option<Resume>,
+    /// The request that loaded the item.
+    pub(super) request: Option<LoadRequest>,
     pub(super) loaded: bool,
     pub(super) map: Option<TrackMap>,
     pub(super) externals: Vec<(i32, TrackId)>,
@@ -46,6 +49,11 @@ pub(super) struct Current {
     pub(super) start: Duration,
     pub(super) paused: bool,
     pub(super) seek_pending: bool,
+    /// mpv waits for data.
+    pub(super) waiting: bool,
+    /// The wait for data, as last emitted.
+    pub(super) buffering: bool,
+    pub(super) stalls: Stalls,
     pub(super) duration: Option<Duration>,
     /// The media reached its real end; reset by each load since a load makes a new `Current`.
     pub(super) ended: bool,
@@ -81,6 +89,7 @@ impl Current {
             play_session_id,
             delivery: Delivery::Direct,
             resume: None,
+            request: None,
             loaded: false,
             map: None,
             externals: Vec::new(),
@@ -92,6 +101,9 @@ impl Current {
             start: position,
             paused: false,
             seek_pending: false,
+            waiting: false,
+            buffering: false,
+            stalls: Stalls::default(),
             duration: None,
             ended: false,
             siblings,

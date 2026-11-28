@@ -3,8 +3,8 @@ import { MediaCard } from "card.slint";
 
 // 16:9 card of the "Continue Watching" and "Next Up" rows.
 export component LandscapeCard inherits MediaCard {
-    width: 288px;
-    artwork-height: 162px;
+    width: Theme.landscape-width;
+    artwork-height: Theme.landscape-height;
     placeholder: Theme.landscape-placeholder;
     subtitle-color: Theme.text-secondary;
 }

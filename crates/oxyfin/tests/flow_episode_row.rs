@@ -12,8 +12,9 @@ mod page {
 
         export component EpisodesPage inherits Window {
             out property <length> line-height: Theme.body-line-height;
+            in property <int> first-minutes: 24;
             VerticalLayout {
-                EpisodeRow { number: "1"; title: "Short"; minutes: 24; }
+                EpisodeRow { number: "1"; title: "Short"; minutes: root.first-minutes; }
                 EpisodeRow { number: "2"; title: "A somewhat longer episode title"; overview: "A short overview."; minutes: 25; }
                 EpisodeRow {
                     number: "3";
@@ -100,5 +101,18 @@ fn a_long_overview_is_cut_after_two_lines() {
         long.size().height <= 2. * line + 0.5,
         "the long overview is {} high, more than two lines of {line}",
         long.size().height
+    );
+}
+
+#[test]
+fn a_long_episode_tells_its_hours() {
+    i_slint_backend_testing::init_no_event_loop();
+    let page = EpisodesPage::new().unwrap();
+    page.set_first_minutes(94);
+    page.show().unwrap();
+    assert!(
+        ElementHandle::find_by_accessible_label(&page, "1 h 34 min")
+            .next()
+            .is_some()
     );
 }

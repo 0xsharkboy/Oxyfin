@@ -50,8 +50,8 @@ fn the_volume_sits_right_before_the_buttons() {
             find(&page, "Audio and subtitles", AccessibleRole::Button)
         };
         let settings = find(&page, "Playback settings", AccessibleRole::Button);
-        let tracks = find(&page, "Audio and subtitles", AccessibleRole::Button);
-        let spacing = left(&settings) - right(&tracks);
+        let stats = find(&page, "Playback statistics", AccessibleRole::Button);
+        let spacing = left(&settings) - right(&stats);
 
         let gap = left(&next) - right(&slider);
         assert!(

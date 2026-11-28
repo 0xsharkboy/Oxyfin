@@ -93,6 +93,9 @@ pub struct MediaSourceInfo {
     /// Streaming protocol of the transcoded stream, such as `hls`.
     #[serde(default)]
     pub transcoding_sub_protocol: Option<String>,
+    /// Total bitrate of the file, in bits per second.
+    #[serde(default)]
+    pub bitrate: Option<u64>,
     /// Tracks of the file.
     #[serde(default)]
     pub media_streams: Vec<MediaStream>,
