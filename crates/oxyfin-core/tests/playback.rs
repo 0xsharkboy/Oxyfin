@@ -2798,6 +2798,22 @@ async fn a_stop_report_is_told_once_the_server_answered_it() {
 }
 
 #[tokio::test]
+async fn a_stop_report_refused_for_the_session_is_settled() {
+    let mock = MockServer::start().await;
+    mount_status(&mock, "POST", STOPPED, 401).await;
+    let mut h = harness_on(mock, quiet()).await;
+    h.start().await;
+    h.handle.send(PlaybackCommand::Stop);
+    let seen = events_until(&mut h.events, |e| *e == PlaybackEvent::SessionExpired).await;
+    let stopped = seen.iter().position(|e| *e == PlaybackEvent::Stopped);
+    let settled = seen.iter().rposition(|e| *e == PlaybackEvent::StopReported);
+    assert!(
+        matches!((stopped, settled), (Some(stopped), Some(settled)) if stopped < settled),
+        "{seen:?}"
+    );
+}
+
+#[tokio::test]
 async fn a_stop_without_a_report_is_settled_at_once() {
     let mut h = harness(quiet()).await;
     h.handle.send(PlaybackCommand::Stop);

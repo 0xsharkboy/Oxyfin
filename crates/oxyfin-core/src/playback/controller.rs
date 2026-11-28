@@ -273,7 +273,14 @@ impl PlaybackController {
                 Some(message) = loads.recv() => self.on_load(message),
                 Some(refreshed) = refreshed.recv() => self.on_refreshed(refreshed),
                 Some(reported) = reported.recv() => match reported {
-                    Reported::Expired => self.expire(),
+                    Reported::Expired => {
+                        // The reporter drops every report after a 401: no stop is answered.
+                        if self.stop_reports > 0 {
+                            self.stop_reports = 0;
+                            self.emit(PlaybackEvent::StopReported);
+                        }
+                        self.expire();
+                    }
                     Reported::Stop => {
                         self.stop_reports = self.stop_reports.saturating_sub(1);
                         self.emit(PlaybackEvent::StopReported);
