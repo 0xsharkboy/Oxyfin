@@ -41,6 +41,9 @@ fn text(page: &LayoutPage, label: &str) -> ElementHandle {
         .unwrap_or_else(|| panic!("no text {label}"))
 }
 
+/// One physical pixel at the scale factor of the tests.
+const PIXEL: f32 = 1.;
+
 /// The keycap drawing `label`, whose edges come from the layout and not from font metrics.
 fn keycap(page: &LayoutPage, label: &str) -> ElementHandle {
     let at = text(page, label).absolute_position();
@@ -53,18 +56,19 @@ fn keycap(page: &LayoutPage, label: &str) -> ElementHandle {
         .unwrap_or_else(|| panic!("no keycap {label}"))
 }
 
-/// Checks that the keycap of `label` ends at `end` and insets its legend by the keycap padding.
+/// Checks that the keycap of `label` ends at `end` and insets its legend by the keycap padding,
+/// within the physical pixel that layout rounding moves a keycap sized by its legend.
 fn assert_keycap_ends_at(page: &LayoutPage, label: &str, end: f32) {
     let keycap = keycap(page, label);
     let (origin, size) = (keycap.absolute_position(), keycap.size());
     assert!(
-        (origin.x + size.width - end).abs() < 0.5,
+        (origin.x + size.width - end).abs() <= PIXEL,
         "the {label} keycap ends at {}, not {end}",
         origin.x + size.width
     );
     let legend = text(page, label).absolute_position().x;
     assert!(
-        (legend - (origin.x + page.get_keycap_inset())).abs() < 0.5,
+        (legend - (origin.x + page.get_keycap_inset())).abs() <= PIXEL,
         "the {label} legend starts at {legend}, its keycap at {}",
         origin.x
     );
@@ -86,7 +90,7 @@ fn assert_columns(page: &LayoutPage) {
 
     let everywhere = text(page, "EVERYWHERE");
     assert!(
-        (everywhere.absolute_position().x - (left + column + page.get_column_gap())).abs() < 0.5
+        (everywhere.absolute_position().x - (left + column + page.get_column_gap())).abs() <= PIXEL
     );
     assert_keycap_ends_at(page, "?", left + inner);
     assert_keycap_ends_at(page, "N", left + column);
