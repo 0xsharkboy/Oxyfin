@@ -1,10 +1,14 @@
 <svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
 <defs>
-<linearGradient id="disc" x1="8" y1="64" x2="120" y2="64" gradientUnits="userSpaceOnUse">
+<linearGradient id="mark" x1="8" y1="8" x2="80" y2="80" gradientUnits="userSpaceOnUse">
 <stop stop-color="#8CDBF5"/>
 <stop offset="1" stop-color="#21B0DE"/>
 </linearGradient>
+<linearGradient id="tile" x1="64" y1="4" x2="64" y2="124" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0B0D12"/>
+<stop offset="1" stop-color="#1F2430"/>
+</linearGradient>
 </defs>
-<circle cx="64" cy="64" r="56" fill="url(#disc)"/>
-<path d="M54 44 L88 64 L54 84 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="8" stroke-linejoin="round"/>
+<rect x="4.5" y="4.5" width="119" height="119" rx="26.5" fill="url(#tile)" stroke="#2B3242"/>
+<path transform="translate(26 26) scale(0.863636)" fill-rule="evenodd" clip-rule="evenodd" d="M67.30 47.11A34 34 0 1 1 40.89 20.70A10 10 0 0 0 52.59 13.44A18 18 0 1 1 74.56 35.41A10 10 0 0 0 67.30 47.11ZM16 54A18 18 0 1 0 52 54A18 18 0 1 0 16 54Z" fill="url(#mark)"/>
 </svg>
