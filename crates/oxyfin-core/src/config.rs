@@ -66,6 +66,10 @@ pub struct Config {
     /// content counts as no change.
     #[serde(default, deserialize_with = "lenient")]
     pub volume: Option<u8>,
+    /// Code of the interface language the user picked, such as `fr`; `None` follows the
+    /// system. Unreadable content follows the system.
+    #[serde(default, deserialize_with = "lenient")]
+    pub language: Option<String>,
 }
 
 fn storage<E: std::fmt::Display>(error: E) -> CoreError {
@@ -86,6 +90,7 @@ impl Config {
             discord: false,
             time_remaining: false,
             volume: None,
+            language: None,
         }
     }
 
@@ -294,6 +299,29 @@ mod tests {
         )
         .unwrap();
         assert!(!Config::load_or_create(&paths).unwrap().start_fullscreen);
+    }
+
+    #[test]
+    fn language_round_trips_and_defaults_to_the_system_one() {
+        let (_dir, paths) = temp();
+        let mut config = Config::load_or_create(&paths).unwrap();
+        assert_eq!(config.language, None);
+        config.language = Some("fr".into());
+        config.save(&paths).unwrap();
+        assert_eq!(
+            Config::load_or_create(&paths).unwrap().language.as_deref(),
+            Some("fr")
+        );
+
+        for older in [
+            r#"{"device_id":"abc"}"#,
+            r#"{"device_id":"abc","language":7}"#,
+        ] {
+            fs::write(paths.config_dir.join("config.json"), older).unwrap();
+            let config = Config::load_or_create(&paths).unwrap();
+            assert_eq!(config.device_id, "abc", "with {older}");
+            assert_eq!(config.language, None, "with {older}");
+        }
     }
 
     #[test]

@@ -160,6 +160,17 @@ impl SessionManager {
         self.update(|config| config.quality = quality)
     }
 
+    /// Returns the code of the interface language the user picked; `None` follows the system.
+    pub fn language(&self) -> Option<String> {
+        self.config().language.clone()
+    }
+
+    /// Saves the interface language, `None` to follow the system. The saved choice is unchanged
+    /// on failure.
+    pub fn set_language(&self, language: Option<&str>) -> Result<()> {
+        self.update(|config| config.language = language.map(str::to_owned))
+    }
+
     /// Returns whether the window opens fullscreen, as last saved.
     pub fn start_fullscreen(&self) -> bool {
         self.config().start_fullscreen

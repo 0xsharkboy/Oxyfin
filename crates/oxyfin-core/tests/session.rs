@@ -584,6 +584,21 @@ async fn start_fullscreen_is_saved_across_launches() {
 }
 
 #[tokio::test]
+async fn the_interface_language_is_saved_across_launches() {
+    let mock = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let first = manager(&mock, &dir, memory_vault());
+    assert_eq!(first.language(), None);
+    first.set_language(Some("fr")).unwrap();
+    assert_eq!(first.language().as_deref(), Some("fr"));
+
+    let next = manager(&mock, &dir, memory_vault());
+    assert_eq!(next.language().as_deref(), Some("fr"));
+    next.set_language(None).unwrap();
+    assert_eq!(manager(&mock, &dir, memory_vault()).language(), None);
+}
+
+#[tokio::test]
 async fn playback_prefs_persist() {
     let mock = MockServer::start().await;
     let dir = TempDir::new().unwrap();
