@@ -12,7 +12,9 @@ use oxyfin_core::{
     TokenVault,
 };
 use oxyfin_core::{PlayMode, PlaybackCommand, Quality, UserState};
-use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode};
+use slint::{
+    CloseRequestResponse, ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel,
+};
 use tokio::runtime::Handle;
 use tokio::task::{AbortHandle, JoinHandle};
 
@@ -35,7 +37,9 @@ use crate::screens::sign_in::SignInController;
 use crate::state::{
     AppState, Effect, GenerationId, LibraryTab, Msg, Notice, Screen, SessionEnd, SessionInfo, Tab,
 };
-use crate::{AppWindow, Message, MouseBack, NoticeAction, NoticeData, Shortcuts, TopBarPage};
+use crate::{
+    AppWindow, Message, MouseBack, NoticeAction, NoticeData, SettingsTitles, Shortcuts, TopBarPage,
+};
 
 /// Logical size of the next episode thumbnail, as laid out by the toast.
 #[cfg(feature = "mpv")]
@@ -114,6 +118,8 @@ pub struct App {
     discord: RefCell<Option<crate::discord::Discord>>,
     folder_opener: RefCell<Rc<FolderOpener>>,
     clipboard: RefCell<Rc<Clipboard>>,
+    /// Gives the language the system asks for.
+    system_language: RefCell<Rc<dyn Fn() -> Option<String>>>,
     /// Hosts of the servers met, hidden from copied logs.
     known_hosts: RefCell<std::collections::BTreeSet<String>>,
     /// Host of the address the user last typed at the sign-in, hidden from copied logs too.
@@ -180,6 +186,7 @@ impl App {
             clipboard: RefCell::new(Rc::new(|window: &AppWindow, text: &str| {
                 window.invoke_copy_to_clipboard(text.into())
             })),
+            system_language: RefCell::new(Rc::new(crate::locale::system_language)),
             known_hosts: RefCell::default(),
             typed_host: RefCell::default(),
             mpv_version: Default::default(),
@@ -993,6 +1000,74 @@ impl App {
         }
     }
 
+    /// Shows the interface in the language saved, or else in the system one.
+    ///
+    /// Must be called after the first window is created.
+    pub fn apply_language(&self) {
+        let system = (self.system_language.borrow())();
+        let language = crate::locale::resolve(
+            self.manager.language().as_deref(),
+            system.as_deref(),
+            &crate::locale::bundled_languages(),
+        );
+        crate::locale::select_language(&language);
+    }
+
+    /// Drops the pages built in the previous language, parked ones included.
+    fn forget_pages(&self) {
+        self.back_cache.borrow_mut().clear();
+        self.home.forget(self);
+        self.library.forget(self);
+        self.movie.forget(self);
+        self.series.forget(self);
+        self.person.forget(self);
+        self.collection.forget(self);
+    }
+
+    /// Replaces what tells the language the system asks for, for tests.
+    #[doc(hidden)]
+    pub fn set_system_language(&self, language: impl Fn() -> Option<String> + 'static) {
+        *self.system_language.borrow_mut() = Rc::new(language);
+    }
+
+    /// Fills the language list of the settings, in the language the interface shows.
+    fn show_languages(&self, window: &AppWindow) {
+        let bundled = crate::locale::bundled_languages();
+        let system = (self.system_language.borrow())();
+        let system = crate::locale::resolve(None, system.as_deref(), &bundled);
+        let titles = window.global::<SettingsTitles>();
+        let mut options =
+            vec![titles.invoke_system_language(crate::locale::language_name(&system).into())];
+        options.extend(
+            bundled
+                .iter()
+                .map(|code| SharedString::from(crate::locale::language_name(code))),
+        );
+        window.set_settings_languages(ModelRc::new(VecModel::from(options)));
+        window.set_settings_language(settings::language_index(
+            self.manager.language().as_deref(),
+            &bundled,
+        ));
+    }
+
+    /// Saves the language picked at `index` of the settings list and shows the interface in it
+    /// at once; the pages below the settings load again when they show.
+    fn set_language(&self, index: i32) {
+        let choice = settings::language_choice(index, &crate::locale::bundled_languages());
+        if let Err(error) = self.manager.set_language(choice.as_deref()) {
+            log::error!("cannot save the interface language: {error}");
+            self.notify(Message::StorageError);
+        }
+        let before = crate::locale::interface_language();
+        self.apply_language();
+        if crate::locale::interface_language() != before {
+            self.forget_pages();
+        }
+        if let Some(window) = self.window() {
+            self.show_languages(&window);
+        }
+    }
+
     /// Saves whether Discord shows what plays and applies it at once; the
     /// settings then show what is saved.
     fn set_discord(&self, on: bool) {
@@ -1400,6 +1475,12 @@ impl App {
             }
         });
         let this = self.this.clone();
+        window.on_settings_language_changed(move |index| {
+            if let Some(app) = this.upgrade() {
+                app.set_language(index);
+            }
+        });
+        let this = self.this.clone();
         window.on_settings_playback_changed(move |choice| {
             if let Some(app) = this.upgrade() {
                 app.set_playback_prefs(&choice);
@@ -1643,7 +1724,7 @@ impl App {
         crate::screens::subtitle_search::bind(
             window,
             self.runtime.clone(),
-            &crate::locale::interface_language(),
+            Rc::new(crate::locale::interface_language),
             Rc::new(move || {
                 catalog
                     .upgrade()
@@ -1778,6 +1859,7 @@ impl App {
                         window.set_settings_playback(settings::playback_choice(
                             self.manager.playback_prefs(),
                         ));
+                        self.show_languages(&window);
                     }
                     // A page of the same kind keeps the screen, not the card pointed at.
                     window.global::<crate::Pointed>().invoke_reset();

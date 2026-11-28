@@ -355,7 +355,7 @@ fn subtitle_search_from_the_player() {
     subtitle_search::bind(
         &window,
         runtime.handle().clone(),
-        "fr",
+        Rc::new(|| "fr".to_owned()),
         Rc::new(move || Some(catalog.clone())),
         send,
     );

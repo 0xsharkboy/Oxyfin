@@ -12,6 +12,7 @@ export component MenuPanel inherits Rectangle {
     // Height the options are shown in.
     out property <length> visible-height: self.height - 2 * Theme.space-sm;
     out property <length> content-height: content.preferred-height;
+    out property <length> content-width: content.preferred-width;
 
     width: max(Theme.menu-width, min(content.preferred-width, root.widest));
     height: min(content.preferred-height + 2 * Theme.space-sm, root.limit);

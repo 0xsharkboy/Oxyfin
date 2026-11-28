@@ -4,7 +4,6 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use oxyfin::launch;
-use oxyfin::locale::select_language;
 use oxyfin::{App, AppWindow};
 use oxyfin_core::{Paths, TokenVault};
 use slint::platform::WindowEvent;
@@ -86,8 +85,8 @@ fn run(paths: Paths) -> Result<(), Box<dyn std::error::Error>> {
             (None, _) => log::warn!("ignoring {}={value:?}", launch::WINDOW_SIZE_VAR),
         }
     }
-    select_language();
     let app = App::new(&window, runtime.handle().clone(), paths, vault)?;
+    app.apply_language();
     app.read_mpv_version();
     #[cfg(feature = "mpv")]
     {

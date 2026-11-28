@@ -132,9 +132,38 @@ fn pick<T: Copy + Default>(all: &[T], index: i32) -> T {
         .unwrap_or_default()
 }
 
+/// Index of `chosen` in the language list of the settings: 0 follows the system, then one per
+/// code of `bundled`. A choice no longer bundled follows the system.
+pub fn language_index(chosen: Option<&str>, bundled: &[String]) -> i32 {
+    chosen
+        .and_then(|code| bundled.iter().position(|known| known == code))
+        .and_then(|index| i32::try_from(index + 1).ok())
+        .unwrap_or(0)
+}
+
+/// The language picked at `index` of the language list; `None` follows the system.
+pub fn language_choice(index: i32, bundled: &[String]) -> Option<String> {
+    let index = usize::try_from(index).ok()?.checked_sub(1)?;
+    bundled.get(index).cloned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_language_list_starts_with_the_system_one() {
+        let bundled = vec!["en".to_owned(), "fr".to_owned()];
+        assert_eq!(language_index(None, &bundled), 0);
+        assert_eq!(language_index(Some("en"), &bundled), 1);
+        assert_eq!(language_index(Some("fr"), &bundled), 2);
+        assert_eq!(language_index(Some("de"), &bundled), 0);
+        assert_eq!(language_choice(0, &bundled), None);
+        assert_eq!(language_choice(1, &bundled).as_deref(), Some("en"));
+        assert_eq!(language_choice(2, &bundled).as_deref(), Some("fr"));
+        assert_eq!(language_choice(3, &bundled), None);
+        assert_eq!(language_choice(-1, &bundled), None);
+    }
 
     fn info(server_name: Option<&str>) -> SessionInfo {
         SessionInfo {

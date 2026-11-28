@@ -197,6 +197,11 @@ impl PersonController {
         }
     }
 
+    /// The interface language changed: the page drops its text, and loads again once shown.
+    pub(crate) fn forget(&self, app: &App) {
+        self.clear(app);
+    }
+
     fn clear(&self, app: &App) {
         self.loads.abort();
         self.instance.set(self.instance.get() + 1);

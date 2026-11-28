@@ -1,4 +1,5 @@
-//! Language selection: maps the system locale to one of the bundled translations.
+//! Language selection: maps the saved choice or the system locale to one of the bundled
+//! translations.
 
 use std::sync::Mutex;
 
@@ -52,16 +53,63 @@ pub fn interface_language() -> String {
         .unwrap_or_else(|| "en".to_owned())
 }
 
-/// Selects the bundled translation for the system language; English when there is none.
+/// Names of the languages the interface can show, each in its own language.
+const NAMES: &[(&str, &str)] = &[("en", "English"), ("fr", "Français")];
+
+/// Name of language `code` in that language; the code itself when unknown.
+pub fn language_name(code: &str) -> String {
+    NAMES
+        .iter()
+        .find(|(known, _)| *known == code)
+        .map_or_else(|| code.to_owned(), |(_, name)| (*name).to_owned())
+}
+
+/// Codes of the languages the interface can show: English, the source language, then each
+/// bundled translation.
 ///
 /// Must be called after the first window is created.
-pub fn select_language() {
-    let language = detect(|name| std::env::var(name).ok(), sys_locale::get_locale);
-    let wanted = language.as_deref().unwrap_or("en");
-    let selected = match slint::select_bundled_translation(wanted) {
-        Ok(()) => wanted,
+pub fn bundled_languages() -> Vec<String> {
+    let mut codes = vec!["en".to_owned()];
+    // No translation has this code: Slint lists the bundled ones, the source as an empty code,
+    // and selects nothing.
+    if let Err(slint::SelectBundledTranslationError::LanguageNotFound {
+        available_languages,
+    }) = slint::select_bundled_translation("*")
+    {
+        for code in available_languages.iter() {
+            if !code.is_empty() && !codes.iter().any(|known| known == code.as_str()) {
+                codes.push(code.to_string());
+            }
+        }
+    }
+    codes
+}
+
+/// The language the interface shows: `choice` when bundled, else `system` when bundled, else
+/// English.
+pub fn resolve(choice: Option<&str>, system: Option<&str>, bundled: &[String]) -> String {
+    [choice, system]
+        .into_iter()
+        .flatten()
+        .find(|code| bundled.iter().any(|known| known == code))
+        .unwrap_or("en")
+        .to_owned()
+}
+
+/// Language the environment asks for, as an ISO 639-1 code; `None` when nothing is set.
+pub fn system_language() -> Option<String> {
+    detect(|name| std::env::var(name).ok(), sys_locale::get_locale)
+}
+
+/// Shows the interface in `language`, one of [`bundled_languages`]; English when it has no
+/// translation.
+///
+/// Must be called after the first window is created.
+pub fn select_language(language: &str) {
+    let selected = match slint::select_bundled_translation(language) {
+        Ok(()) => language,
         Err(error) => {
-            log::debug!("no translation for {wanted}, using English: {error}");
+            log::debug!("no translation for {language}, using English: {error}");
             if let Err(error) = slint::select_bundled_translation("en") {
                 log::debug!("cannot select English: {error}");
             }
@@ -152,5 +200,55 @@ mod tests {
     fn language_still_wins_over_a_real_locale() {
         let all = [("LANGUAGE", "it:en"), ("LC_ALL", "de_DE")];
         assert_eq!(detect(env(&all), || None).as_deref(), Some("it"));
+    }
+
+    fn bundled() -> Vec<String> {
+        vec!["en".to_owned(), "fr".to_owned()]
+    }
+
+    #[test]
+    fn the_system_language_shows_when_it_is_bundled() {
+        assert_eq!(resolve(None, Some("fr"), &bundled()), "fr");
+        assert_eq!(resolve(None, Some("en"), &bundled()), "en");
+    }
+
+    #[test]
+    fn english_shows_when_the_system_language_is_not_bundled() {
+        assert_eq!(resolve(None, Some("de"), &bundled()), "en");
+        assert_eq!(resolve(None, None, &bundled()), "en");
+    }
+
+    #[test]
+    fn a_chosen_language_wins_over_the_system_one() {
+        assert_eq!(resolve(Some("en"), Some("fr"), &bundled()), "en");
+        assert_eq!(resolve(Some("fr"), Some("de"), &bundled()), "fr");
+    }
+
+    #[test]
+    fn a_chosen_language_no_longer_bundled_follows_the_system() {
+        assert_eq!(resolve(Some("de"), Some("fr"), &bundled()), "fr");
+        assert_eq!(resolve(Some("de"), None, &bundled()), "en");
+    }
+
+    #[test]
+    fn every_bundled_translation_has_a_name() {
+        let po = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("po");
+        let entries = std::fs::read_dir(&po).unwrap();
+        let mut codes: Vec<String> = entries
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.path().is_dir())
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect();
+        codes.push("en".to_owned());
+        assert!(codes.len() > 1);
+        for code in codes {
+            assert!(
+                NAMES.iter().any(|(known, _)| *known == code),
+                "{code} has no name"
+            );
+        }
+        assert_eq!(language_name("en"), "English");
+        assert_eq!(language_name("fr"), "Français");
+        assert_eq!(language_name("xx"), "xx");
     }
 }

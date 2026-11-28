@@ -6,6 +6,14 @@ import { BodyText, CaptionText, DisplayText, HeadingText, LabelText } from "../c
 import { Chip } from "../components/chip.slint";
 import { TextField } from "../components/text_field.slint";
 import { Shortcuts } from "../components/shortcuts_overlay.slint";
+import { Dropdown } from "../components/dropdown.slint";
+
+// Texts of the settings that Rust puts together, translated here.
+export global SettingsTitles {
+    public pure function system-language(language: string) -> string {
+        @tr("System default ({})", language)
+    }
+}
 
 // Where the sign-in token is kept; mirrors the core `TokenStorage`.
 export enum TokenStore { keyring, file, memory }
@@ -198,8 +206,8 @@ component SettingSection inherits Rectangle {
     }
 }
 
-// Settings: the signed-in account, playback, the subtitle style, the Quick Connect code entry,
-// diagnostics, the application version and the sign-out action.
+// Settings: the signed-in account, the interface language, playback, the subtitle style, the
+// Quick Connect code entry, diagnostics, the application version and the sign-out action.
 export component SettingsScreen inherits Rectangle {
     in property <string> server-name;
     in property <string> server-address;
@@ -234,6 +242,11 @@ export component SettingsScreen inherits Rectangle {
     in property <bool> logs-copy-failed;
     callback copy-logs();
     callback open-logs();
+    // The interface languages offered: the system one first, then each bundled one by its own name.
+    in property <[string]> languages;
+    // Index in `languages` of the one chosen.
+    in property <int> language;
+    callback language-changed(index: int);
 
     property <length> copy-width;
     // Another language starts from its own width.
@@ -323,6 +336,37 @@ export component SettingsScreen inherits Rectangle {
                                 style: ButtonStyle.secondary;
                                 clicked => {
                                     root.sign-out();
+                                }
+                            }
+                        }
+                    }
+
+                    SettingSection {
+                        title: @tr("Interface");
+                        // Above the sections below it, which the open language list covers.
+                        z: 1;
+
+                        HorizontalLayout {
+                            spacing: Theme.space-lg;
+
+                            LabelText {
+                                width: 160px;
+                                text: @tr("Language");
+                                vertical-alignment: center;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                horizontal-stretch: 1;
+                                alignment: start;
+
+                                Dropdown {
+                                    label: @tr("Language");
+                                    label-shown: false;
+                                    options: root.languages;
+                                    selected: root.language;
+                                    chosen(index) => {
+                                        root.language-changed(index);
+                                    }
                                 }
                             }
                         }

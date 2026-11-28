@@ -391,6 +391,11 @@ impl LibraryController {
         window.set_library_genre(genre.unwrap_or(0));
     }
 
+    /// The interface language changed: the page drops its text, and loads again once shown.
+    pub(crate) fn forget(&self, app: &App) {
+        self.clear(app);
+    }
+
     fn clear(&self, app: &App) {
         self.load.set(self.load.get() + 1);
         self.epoch.set(self.epoch.get() + 1);
