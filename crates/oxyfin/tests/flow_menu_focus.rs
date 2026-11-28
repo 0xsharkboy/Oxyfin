@@ -190,9 +190,14 @@ fn a_keyboard_menu_row_keeps_the_focus_through_a_rebuilt_row() {
             return Err("the rebuilt card lost the focus".into());
         }
 
+        let lost = menu.get_focus_lost();
         choose_with_keys(&window, "Remove from Continue Watching").await?;
         wait_until("the card to leave", || resume_cards(&window) == 0).await?;
-        pause(Duration::from_millis(600)).await;
+        // The window finds the card gone at its next checks, every focus-check-interval.
+        wait_until("the focus back to the window", || {
+            menu.get_focus_lost() > lost
+        })
+        .await?;
         press(&window, "?");
         if !window.global::<Shortcuts>().get_open() {
             return Err("the keys are dead once the focused card left".into());
